@@ -69,6 +69,8 @@ moddownload:
 
 build:
 	$(GOBUILD) $(FLAGS) -o $(BINARY_NAME) -v
+	-rm -f border0
+	cp $(BINARY_NAME) border0
 
 build-linux:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GOBUILD) $(FLAGS) -o $(BINARY_NAME) -v

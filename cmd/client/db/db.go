@@ -20,6 +20,8 @@ func AddCommandsTo(client *cobra.Command) {
 	addOneCommandTo(mycliCmd, client)
 	addOneCommandTo(mysqlWorkbenchCmd, client)
 	addOneCommandTo(dbeaverCmd, client)
+	addOneCommandTo(psqlCmd, client)
+	addOneCommandTo(pgcliCmd, client)
 }
 
 func addOneCommandTo(cmdToAdd, cmdAddedTo *cobra.Command) {
@@ -67,13 +69,30 @@ var dbCmd = &cobra.Command{
 			return err
 		}
 
-		var dbClient string
+		var (
+			dbClient            string
+			dbClients           []string
+			dbClientsMySQL      = []string{"mysql", "mysqlworkbench", "mycli", "dbeaver"}
+			dbClientsPostgreSQL = []string{"psql", "pgcli"}
+		)
+		switch pickedHost.DatabaseType {
+		case "mysql":
+			dbClients = []string{"mysql", "mysqlworkbench", "mycli", "dbeaver"}
+		case "postgres":
+			dbClients = []string{"psql", "pgcli"}
+		default:
+			dbClients = append(dbClientsMySQL, dbClientsPostgreSQL...)
+		}
 		prompt := &survey.Select{
 			Message: "choose a client:",
-			Options: []string{"mysql", "mysqlworkbench", "mycli", "dbeaver"},
+			Options: dbClients,
 		}
 		if suggestedDBClient != "" {
-			prompt.Default = suggestedDBClient
+			for _, oneDBClient := range dbClients {
+				if oneDBClient == suggestedDBClient {
+					prompt.Default = suggestedDBClient
+				}
+			}
 		}
 		if err := survey.AskOne(prompt, &dbClient); err != nil {
 			return err

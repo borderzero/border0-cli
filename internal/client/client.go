@@ -7,6 +7,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/binary"
@@ -14,6 +15,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -677,6 +679,77 @@ func Zeroing(buf []byte) {
 	for i := range buf {
 		buf[i] = 0
 	}
+}
+
+func DownloadCertificateChain(hostname string) (certChainPath string, cleanup func(), err error) {
+	var cleanupFuncs []func() error
+	cleanup = func() {
+		for _, fn := range cleanupFuncs {
+			fn()
+		}
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		err = fmt.Errorf("failed to get home dir: %w", err)
+		return
+	}
+	certChainPath = filepath.Join(home, ".border0", fmt.Sprintf("%s.chain.crt", hostname))
+	_ = os.Remove(certChainPath)
+
+	file, err := os.OpenFile(certChainPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		err = fmt.Errorf("failed to open file [%s]: %w", certChainPath, err)
+		return
+	}
+	cleanupFuncs = append(cleanupFuncs, file.Close)
+
+	addr := fmt.Sprintf("%s:443", hostname)
+	conn, err := tls.Dial("tcp", addr, &tls.Config{})
+	if err != nil {
+		err = fmt.Errorf("failed to connect to tcp address [%s]: %w", addr, err)
+		return
+	}
+	cleanupFuncs = append(cleanupFuncs, conn.Close)
+
+	// should have 3 certs
+	// - cert for *.border0.io
+	// - intermediate cert issued by "ISRG Root X1" for "Let's Encrypt"
+	// - cross-signed root cert issued by "DST Root CA X3" for "ISRG Root X1"
+	certs := conn.ConnectionState().PeerCertificates
+	for _, cert := range certs {
+		if cert.IsCA && cert.MaxPathLen == -1 {
+			// need to skip the root CA cert, because it's cross-signed
+			// and we need to the self-signed root CA cert in the chain
+			continue
+		}
+		pem.Encode(file, &pem.Block{
+			Type:  "CERTIFICATE",
+			Bytes: cert.Raw,
+		})
+	}
+
+	// now let's download the self-signed root CA cert from letsencrypt.org
+	httpClient := http.Client{
+		CheckRedirect: func(r *http.Request, via []*http.Request) error {
+			r.URL.Opaque = r.URL.Path
+			return nil
+		},
+		Timeout: 10 * time.Second,
+	}
+	resp, err := httpClient.Get("https://letsencrypt.org/certs/isrgrootx1.pem")
+	if err != nil {
+		err = fmt.Errorf("failed to download root CA cert: %w", err)
+		return
+	}
+	cleanupFuncs = append(cleanupFuncs, resp.Body.Close)
+
+	_, err = io.Copy(file, resp.Body)
+	if err != nil {
+		err = fmt.Errorf("failed to append root CA cert to the certificate chain file: %w", err)
+		return
+	}
+	return
 }
 
 // TermSize gets the current window size and returns it in a window-change friendly format.

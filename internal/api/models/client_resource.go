@@ -16,6 +16,7 @@ type ClientResource struct {
 	Description   string   `json:"description,omitempty"`
 	SocketPorts   []int    `json:"socket_ports,omitempty"`
 	Domains       []string `json:"domains,omitempty"`
+	DatabaseType  string   `json:"database_type,omitempty"`
 }
 
 func (c ClientResource) Hostname() string {
