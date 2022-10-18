@@ -113,9 +113,10 @@ func (s *DockerFinder) Find(ctx context.Context, cfg config.Config, state Discov
 							s.Logger.Error("Could not determine container IP... ignoring instance: ", zap.String("instanceName", instanceName))
 							continue
 						}
+						connector := cfg.Connector
 
 						s.Logger.Info("add instance as socket", zap.String("instanceName", instanceName))
-						sockets = append(sockets, s.buildSocket(cfg.Connector.Name, group, metadata, container, instanceName, ip, port))
+						sockets = append(sockets, s.buildSocket(cfg.Connector.Name, group, connector, metadata, container, instanceName, ip, port))
 					} else {
 						s.Logger.Debug("group not mached", zap.String("containerID", container.ID), zap.String("group", group.Group))
 					}
@@ -127,7 +128,7 @@ func (s *DockerFinder) Find(ctx context.Context, cfg config.Config, state Discov
 	return sockets, nil
 }
 
-func (s *DockerFinder) buildSocket(connectorName string, group config.ConnectorGroups, socketData SocketDataTag, instance types.Container, instanceName, ipAddress string, port uint16) models.Socket {
+func (s *DockerFinder) buildSocket(connectorName string, group config.ConnectorGroups, connector config.Connector, socketData SocketDataTag, instance types.Container, instanceName, ipAddress string, port uint16) models.Socket {
 	socket := models.Socket{}
 	socket.TargetPort = int(port)
 	socket.PolicyGroup = group.Group
@@ -148,7 +149,7 @@ func (s *DockerFinder) buildSocket(connectorName string, group config.ConnectorG
 		socket.TargetHostname = ipAddress
 	}
 
-	socket.Name = buildSocketName(instanceName, connectorName, socket.SocketType, socketData.Name)
+	socket.Name = buildSocketName(instanceName, connectorName, socket.SocketType, socketData.Name, connector.SuffixConnectorName)
 	if socket.PrivateSocket {
 		socket.Dnsname = socket.Name
 	}

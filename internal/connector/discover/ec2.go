@@ -108,7 +108,7 @@ func (s *Ec2Discover) buildSocket(connectorName string, group config.ConnectorGr
 	socket.PolicyNames = group.Policies
 	socket.CloudAuthEnabled = true
 
-	socket.Name = buildSocketName(instanceName, connectorName, socket.SocketType, socketData.Name)
+	socket.Name = buildSocketName(instanceName, connectorName, socket.SocketType, socketData.Name, true)
 	if socket.PrivateSocket {
 		socket.Dnsname = socket.Name
 	}
@@ -119,25 +119,35 @@ func (s *Ec2Discover) Name() string {
 	return reflect.TypeOf(s).Elem().Name()
 }
 
-func buildSocketName(instanceName, connectorName, socketType, supplyLabelName string) string {
-	var s string
+func buildSocketName(instanceName, connectorName, socketType, supplyLabelName string, SuffixConnectorName bool) string {
+	var tempName string
+	var constructedName string
 	if supplyLabelName != "" {
-		s = supplyLabelName
+		tempName = supplyLabelName
 	} else {
-		s = instanceName
+		tempName = instanceName
 	}
 
-	s = strings.Replace(s, "_", "-", -1)
-	s = strings.Replace(s, ".", "-", -1)
-	s = strings.Replace(s, " ", "-", -1)
+	tempName = strings.Replace(tempName, "_", "-", -1)
+	tempName = strings.Replace(tempName, ".", "-", -1)
+	tempName = strings.Replace(tempName, " ", "-", -1)
 
 	if socketType == "" {
 		// In case Type is empty
 		// Ideally we do the guessing before this, dont want to duplicate code. for now just ignore.
-		return fmt.Sprintf("%v-%v", s, connectorName)
+		if SuffixConnectorName {
+			constructedName = fmt.Sprintf("%v-%v", tempName, connectorName)
+		} else {
+			constructedName = fmt.Sprintf("%v", tempName)
+		}
 	} else {
-		return fmt.Sprintf("%v-%v-%v", socketType, s, connectorName)
+		if SuffixConnectorName {
+			constructedName = fmt.Sprintf("%v-%v-%v", socketType, tempName, connectorName)
+		} else {
+			constructedName = fmt.Sprintf("%v-%v", socketType, tempName)
+		}
 	}
+	return constructedName
 }
 
 func (s *Ec2Discover) WaitSeconds() int64 {

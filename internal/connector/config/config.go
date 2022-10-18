@@ -88,10 +88,11 @@ type NetworkPluginNetwork struct {
 }
 
 type Connector struct {
-	Name         string
-	AwsRegion    string `mapstructure:"aws-region"`
-	SSMAwsRegion string `mapstructure:"ssm-aws-region"`
-	AwsProfile   string `mapstructure:"aws-profile"`
+	Name                string
+	SuffixConnectorName bool   `mapstructure:"suffix_connector_name"`
+	AwsRegion           string `mapstructure:"aws-region"`
+	SSMAwsRegion        string `mapstructure:"ssm-aws-region"`
+	AwsProfile          string `mapstructure:"aws-profile"`
 }
 
 type SocketParams []map[string]SocketConfig
