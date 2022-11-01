@@ -542,6 +542,37 @@ func init() {
 
 }
 
+const defaultPolicyDataTemplate = `{
+	"version": "v1",
+	"action": [
+		"database",
+		"ssh",
+		"http",
+		"tls"
+	],
+	"condition": {
+		"who": {
+		"email": [
+			"%s"
+		],
+		"domain": [
+			"example.com"
+		]
+		},
+		"where": {
+			"allowed_ip": ["0.0.0.0/0", "::/0"],
+			"country": [],
+			"country_not": []
+		},
+		"when": {
+			"after": "%s",
+			"before": null,
+			"time_of_day_after": "00:00:00 UTC",
+			"time_of_day_before": "23:59:59 UTC"
+		}
+	}
+}`
+
 func policyTemplate() string {
 	// Lets create a template for the policy
 	// start with getting the admin email
@@ -566,33 +597,5 @@ func policyTemplate() string {
 	// Also let's get yesterday's date
 	yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 
-	return fmt.Sprintf(`{
-	"version": "v1",
-	"action": [
-		"database",
-		"ssh",
-		"http"
-	],
-	"condition": {
-		"who": {
-		"email": [
-			"%s"
-		],
-		"domain": [
-			"example.com"
-		]
-		},
-		"where": {
-			"allowed_ip": ["0.0.0.0/0", "::/0"],
-			"country": [],
-			"country_not": []
-		},
-		"when": {
-			"after": "%s",
-			"before": null,
-			"time_of_day_after": "00:00:00 UTC",
-			"time_of_day_before": "23:59:59 UTC"
-		}
-	}
-}`, adminEmail, yesterday)
+	return fmt.Sprintf(defaultPolicyDataTemplate, adminEmail, yesterday)
 }

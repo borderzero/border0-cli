@@ -29,14 +29,14 @@ import (
 	"github.com/borderzero/border0-cli/internal/http"
 	"github.com/borderzero/border0-cli/internal/ssh"
 	"github.com/prometheus/procfs"
-	"github.com/shirou/gopsutil/cpu"
-	"github.com/shirou/gopsutil/disk"
-	"github.com/shirou/gopsutil/host"
-	"github.com/shirou/gopsutil/mem"
-	"github.com/shirou/gopsutil/net"
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/shirou/gopsutil/v3/host"
+	"github.com/shirou/gopsutil/v3/mem"
+	"github.com/shirou/gopsutil/v3/net"
 
 	backoff "github.com/cenkalti/backoff/v4"
-	pprocess "github.com/shirou/gopsutil/process"
+	pprocess "github.com/shirou/gopsutil/v3/process"
 	"github.com/spf13/cobra"
 )
 
@@ -383,13 +383,13 @@ func processStats(process exec.Cmd) {
 				color: white;
 				font-family: "Source Code Pro", Menlo, Monaco, fixed-width;
 			}
-			
+
 			h1 {
 				color: #C26356;
 				font-size: 30px;
 				font-family: Menlo, Monaco, fixed-width;
 			}
-			
+
 			p {
 				color: white;
 				font-family: "Source Code Pro", Menlo, Monaco, fixed-width;
@@ -407,7 +407,7 @@ func processStats(process exec.Cmd) {
 
 		<h1>🚀 Border0 Process data</h1>
 
-		
+
 		`)
 
 		//fmt.Fprintf(w, "command:  %s<br>", stat.Comm)
