@@ -104,7 +104,8 @@ func newServer(ca string) *ssh.Server {
 			}
 
 			if !bytes.Equal(cert.SignatureKey.Marshal(), pubCert.Marshal()) {
-				log.Println("can not validate certificate")
+				// not logging error here because multiple public certs could be given to
+				// ssh server, and some pub certs may not be valid
 				return false
 			}
 
