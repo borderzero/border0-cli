@@ -64,3 +64,36 @@ jobs:
         run: |
           ls -la bin
           pwd
+
+      # cross repo workflow trigger
+      # it tells mysocketio/client repo to run build_and_release.yml workflow, which re-download cli and
+      # packs the latest cli into the desktop app installer bundles, this trigger does not bump the version,
+      # so it only ensures new desktop app downloads include the updated cli binary
+      - name: Trigger client repo to rebuild
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.CLIENT_REPO_ACTIONS_TOKEN }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: 'mysocketio',
+              repo: 'client',
+              workflow_id: 'build_and_release.yml',
+              ref: 'main'
+            })
+
+      # cross repo workflow trigger
+      # it tells mysocketio/client repo to run bump_version_and_create_pr.yml workflow, which automatically
+      # bump the version in wails.json, and create a PR, this trigger bumps version in desktop app repo, once
+      # the PR is merged, a new build and release will be triggered, existing users will be notified for the
+      # new version, and new downloads will also include the updated cli binary
+      - name: Trigger client repo to create PR
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.CLIENT_REPO_ACTIONS_TOKEN }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: 'mysocketio',
+              repo: 'client',
+              workflow_id: 'bump_version_and_create_pr.yml',
+              ref: 'main'
+            })
