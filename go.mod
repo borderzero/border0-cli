@@ -1,6 +1,6 @@
 module github.com/borderzero/border0-cli
 
-go 1.18
+go 1.19
 
 require (
 	github.com/ActiveState/termtest/conpty v0.5.0

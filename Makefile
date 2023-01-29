@@ -74,6 +74,7 @@ build:
 
 build-linux:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GOBUILD) $(FLAGS) -o $(BINARY_NAME) -v
+	cp $(BINARY_NAME) border0
 
 build-all:
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build $(FLAGS) -o $(BINARY_NAME)_windows_amd64
@@ -88,8 +89,7 @@ lint:
 	$(GOFMT) -w .
 
 test:
-	$(GOTEST) -v ./...
-	$(GOCMD) run ./main.go version check
+	$(GOTEST) -cover ./...
 
 clean:
 	$(GOCLEAN)

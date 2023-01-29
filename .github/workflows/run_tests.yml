@@ -1,0 +1,34 @@
+name: Run tests
+on: [push]
+
+jobs:
+  test:
+    name: unit tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go_version: ["1.19.5"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Set up Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ matrix.go_version }}
+      - name: Print version info
+        run: |
+          which go
+          go version
+      - name: Run go unit tests
+        run: make test
+      - name: Send slack notification
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          fields: repo,message,author,ref,job,took # (default: repo,message)
+          author_name: ''
+          job_name: unit tests
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }} # required
+          MATRIX_CONTEXT: ${{ toJson(matrix) }} # required
+        if: always() # pick up events even if the job failed or canceled.

@@ -53,20 +53,44 @@ func Write(data *Data) error {
 	return nil
 }
 
+var (
+	osUserConfigDir = os.UserConfigDir
+	osUserHomeDir   = os.UserHomeDir
+	osMkdir         = os.Mkdir
+)
+
 func filePath() (string, error) {
-	prefix, err := os.UserConfigDir()
+	// if $HOME/.config/border0 already exists, for backward compatibility, return $HOME/.config/border0/preference.json
+	// otherwise, return $HOME/.border0/preference.json, so it's consistent with other border0 token and cert files
+
+	userConfigDir, err := osUserConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get user config dir: %w", err)
 	}
 
-	configDir := filepath.Join(prefix, "border0")
-	if _, err := os.Stat(configDir); os.IsNotExist(err) {
-		if err := os.Mkdir(configDir, 0755); err != nil {
-			return "", fmt.Errorf("failed to create config dir: %w", err)
+	border0ConfigDir := filepath.Join(userConfigDir, "border0")
+	if fileOrPathExists(border0ConfigDir) {
+		return filepath.Join(border0ConfigDir, "preference.json"), nil
+	}
+
+	home, err := osUserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home dir: %w", err)
+	}
+
+	dotBorder0Dir := filepath.Join(home, ".border0")
+	if !fileOrPathExists(dotBorder0Dir) {
+		if err := osMkdir(dotBorder0Dir, 0700); err != nil {
+			return "", fmt.Errorf("failed to create directory %s: %w", dotBorder0Dir, err)
 		}
 	}
 
-	return filepath.Join(prefix, "border0", "preference.json"), nil
+	return filepath.Join(dotBorder0Dir, "preference.json"), nil
+}
+
+func fileOrPathExists(fileOrPath string) bool {
+	_, err := os.Stat(fileOrPath)
+	return os.IsNotExist(err) == false
 }
 
 func CreateOrUpdate(orgID, orgSubdomain string) error {
