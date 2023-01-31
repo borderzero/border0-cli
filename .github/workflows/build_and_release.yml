@@ -21,17 +21,17 @@ jobs:
       CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
 
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v3
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v1-node16
         with:
           aws-region: us-east-2
           role-to-assume: ${{ secrets.PROD_BUILD_AND_DEPLOY_ROLE }}
           role-session-name: BuildAndDeploy4border0cli
           role-duration-seconds: 1200
 
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
           go-version: '1.19.5' # The Go version to download (if necessary) and use.
       - run: go version
