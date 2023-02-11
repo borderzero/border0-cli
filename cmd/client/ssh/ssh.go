@@ -183,6 +183,9 @@ var sshCmd = &cobra.Command{
 		fmt.Printf("\nConnecting to Server: %s:%d as %s \n", hostname, info.Port, sshLoginName)
 		serverConn, chans, reqs, err := ssh.NewClientConn(conn, hostname, sshConfig)
 		if err != nil {
+			if err.Error() == "ssh: handshake failed: EOF" {
+				return fmt.Errorf("ssh handshake failed (EOF): you might not be authorized for this server\n")
+			}
 			return fmt.Errorf("dial into remote server error: %s", err)
 		}
 		defer serverConn.Close()
