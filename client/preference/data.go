@@ -78,6 +78,10 @@ func (d *Data) Org(orgID string) *Org {
 }
 
 func (d *Data) SetOrg(input *Org) {
+	if input == nil || input.ID == "<nil>" || input.Subdomain == "<nil>" {
+		return
+	}
+
 	id := input.ID
 
 	if foundOrg, exists := d.Orgs[id]; exists {
@@ -88,22 +92,22 @@ func (d *Data) SetOrg(input *Org) {
 	d.Orgs[id] = *input
 }
 
-func (d *Data) RecentlyUsedOrgs(howMany int) Orgs {
+func (d *Data) RecentlyUsedOrgs(numOfOrgs int) Orgs {
 	var orgs []Org
 	for _, org := range d.Orgs {
-		if org.Subdomain != "" {
+		if org.Subdomain != "" && org.Subdomain != "<nil>" {
 			orgs = append(orgs, org)
 		}
 	}
-	// descending sort orgs list by last used time
+	// descending sort orgs list by the last used time
 	// most recently used orgs are at the top
 	sort.Slice(orgs, func(i, j int) bool {
 		return orgs[i].LastUsed.After(orgs[j].LastUsed)
 	})
-	if len(orgs) > howMany {
-		return orgs[:howMany]
+	if numOfOrgs <= 0 || numOfOrgs >= len(orgs) {
+		return orgs
 	}
-	return orgs
+	return orgs[:numOfOrgs]
 }
 
 func (d *Data) GetOrSuggestSocket(dnsName string, socketType string) *Socket {
