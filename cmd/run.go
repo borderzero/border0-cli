@@ -227,8 +227,8 @@ func createSocketStartTunnel(cmd *cobra.Command, quitChannelSsh chan bool, clean
 					}
 				}
 			}
-
-			ssh.SshConnect(userIDStr, c.SocketID, c.Tunnels[0].TunnelID, port, hostname, identityFile, proxyHost, version, false, localsshServer, org.Certificates["ssh_public_key"], "", httpserver_dir, c.ConnectorAuthenticationEnabled, caCertPool)
+			webttyString := ""
+			ssh.SshConnect(userIDStr, c.SocketID, c.Tunnels[0].TunnelID, port, hostname, identityFile, proxyHost, version, false, localsshServer, webttyString, org.Certificates["ssh_public_key"], "", httpserver_dir, c.ConnectorAuthenticationEnabled, caCertPool)
 			if err != nil {
 				//fmt.Println(err)
 				//continue
@@ -343,8 +343,8 @@ func createHTTPSocketStartTunnel(cmd *cobra.Command, quitChannelHttp chan bool, 
 					}
 				}
 			}
-
-			ssh.SshConnect(userIDStr, c.SocketID, c.Tunnels[0].TunnelID, port, hostname, identityFile, proxyHost, version, httpserver, false, org.Certificates["ssh_public_key"], "", httpserver_dir, c.ConnectorAuthenticationEnabled, caCertPool)
+			webttyString := ""
+			ssh.SshConnect(userIDStr, c.SocketID, c.Tunnels[0].TunnelID, port, hostname, identityFile, proxyHost, version, httpserver, false, webttyString, org.Certificates["ssh_public_key"], "", httpserver_dir, c.ConnectorAuthenticationEnabled, caCertPool)
 			if err != nil {
 				//fmt.Println(err)
 				//continue

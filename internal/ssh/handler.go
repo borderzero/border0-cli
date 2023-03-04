@@ -168,7 +168,7 @@ func getSshCert(userId string, socketID string, accessToken string, numOfRetry i
 	return certSigner, nil
 }
 
-func SshConnect(userID string, socketID string, tunnelID string, port int, targethost string, identityFile string, proxyHost string, version string, localhttp, localssh bool, sshCa string, accessToken, httpdir string, connectorAuthRequired bool, caCertPool *x509.CertPool) error {
+func SshConnect(userID string, socketID string, tunnelID string, port int, targethost string, identityFile string, proxyHost string, version string, localhttp, localssh bool, webttyString string, sshCa string, accessToken, httpdir string, connectorAuthRequired bool, caCertPool *x509.CertPool) error {
 	var tunnel *models.Tunnel
 	var err error
 
@@ -260,13 +260,12 @@ func SshConnect(userID string, socketID string, tunnelID string, port int, targe
 		fmt.Println("\nConnecting to Server: " + sshServer() + "\n")
 		time.Sleep(1 * time.Second)
 
-		sshConnect(proxyDialer, sshConfig, tunnel, port, targethost, localhttp, localssh, sshCa, httpdir, connectorAuthRequired, caCertPool, socketID)
+		sshConnect(proxyDialer, sshConfig, tunnel, port, targethost, localhttp, localssh, webttyString, sshCa, httpdir, connectorAuthRequired, caCertPool, socketID)
 	}
 }
 
-func sshConnect(proxyDialer proxy.Dialer, sshConfig *ssh.ClientConfig, tunnel *models.Tunnel, port int, targethost string, localhttp, localssh bool, sshCa, httpDir string, connectorAuthRequired bool, caCertPool *x509.CertPool, socketID string) {
+func sshConnect(proxyDialer proxy.Dialer, sshConfig *ssh.ClientConfig, tunnel *models.Tunnel, port int, targethost string, localhttp, localssh bool, webttyString string, sshCa, httpDir string, connectorAuthRequired bool, caCertPool *x509.CertPool, socketID string) {
 	remoteHost := net.JoinHostPort(sshServer(), "22")
-
 	conn, err := proxyDialer.Dial("tcp", remoteHost)
 	if err != nil {
 		log.Printf("Dial INTO remote server error: %s", err)
@@ -378,6 +377,20 @@ func sshConnect(proxyDialer proxy.Dialer, sshConfig *ssh.ClientConfig, tunnel *m
 	var sshServer *gssh.Server
 	if localssh {
 		sshServer = newServer(sshCa)
+	}
+
+	// Check if we need to start a gotty server
+	if webttyString != "" {
+
+		// For now we'll find a free port on the local machine
+		// todo, pass the listener to the gotty server
+		port, err = border0_http.FindFreePort()
+		if err != nil {
+			fmt.Println("Error: Could not find free port for gotty server")
+			return
+		}
+		go border0_http.StartGoTtyServer(listener, port, webttyString)
+
 	}
 
 	if localhttp {

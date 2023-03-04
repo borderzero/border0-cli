@@ -25,6 +25,7 @@ require (
 	github.com/satori/go.uuid v1.2.0
 	github.com/shirou/gopsutil/v3 v3.22.10
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
+	github.com/sorenisanerd/gotty v1.5.0
 	github.com/spf13/cobra v1.6.0
 	github.com/spf13/viper v1.7.0
 	github.com/stretchr/testify v1.8.1
@@ -42,7 +43,9 @@ require (
 )
 
 require (
+	github.com/NYTimes/gziphandler v1.1.1 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
+	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/tklauser/go-sysconf v0.3.10 // indirect

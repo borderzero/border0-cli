@@ -204,8 +204,8 @@ var tunnelConnectCmd = &cobra.Command{
 				}
 			}
 		}
-
-		err = ssh.SshConnect(userIDStr, socketID, tunnelID, port, hostname, identityFile, proxyHost, version, httpserver, localssh, org.Certificates["ssh_public_key"], "", httpserver_dir, socket.ConnectorAuthenticationEnabled, caCertPool)
+		webttyString := ""
+		err = ssh.SshConnect(userIDStr, socketID, tunnelID, port, hostname, identityFile, proxyHost, version, httpserver, localssh, webttyString, org.Certificates["ssh_public_key"], "", httpserver_dir, socket.ConnectorAuthenticationEnabled, caCertPool)
 		if err != nil {
 			fmt.Println(err)
 		}

@@ -73,6 +73,7 @@ var (
 	upstream_cert_file     string
 	upstream_key_file      string
 	upstream_ca_file       string
+	webttyString           string
 )
 
 // rootCmd represents the base command when called without any subcommands

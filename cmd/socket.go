@@ -319,9 +319,11 @@ var socketConnectCmd = &cobra.Command{
 
 		if port < 1 {
 			if socket.SocketType == "http" {
-				if !httpserver {
+
+				if !httpserver && webttyString == "" {
 					return fmt.Errorf("error: port not specified")
 				}
+
 			} else if socket.SocketType == "ssh" {
 				if !localssh {
 					return fmt.Errorf("error: port not specified")
@@ -377,7 +379,7 @@ var socketConnectCmd = &cobra.Command{
 			localssh = false
 		}
 
-		err = ssh.SshConnect(userIDStr, socketID, "", port, hostname, identityFile, proxyHost, version, httpserver, localssh, org.Certificates["ssh_public_key"], "", httpserver_dir, socket.ConnectorAuthenticationEnabled, caCertPool)
+		err = ssh.SshConnect(userIDStr, socketID, "", port, hostname, identityFile, proxyHost, version, httpserver, localssh, webttyString, org.Certificates["ssh_public_key"], "", httpserver_dir, socket.ConnectorAuthenticationEnabled, caCertPool)
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -532,6 +534,7 @@ func init() {
 	socketConnectCmd.Flags().MarkDeprecated("localssh", "use --sshserver instead")
 	socketConnectCmd.Flags().BoolVarP(&httpserver, "httpserver", "", false, "Start a local http server to accept http connections on this host")
 	socketConnectCmd.Flags().StringVarP(&httpserver_dir, "httpserver_dir", "", "", "Directory to serve http connections on this host")
+	socketConnectCmd.Flags().StringVarP(&webttyString, "webtty", "", "", "Start webtty server with the command to execute")
 
 	socketConnectCmd.RegisterFlagCompletionFunc("socket_id", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return getSockets(toComplete), cobra.ShellCompDirectiveNoFileComp

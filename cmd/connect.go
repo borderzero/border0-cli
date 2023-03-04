@@ -197,7 +197,9 @@ var connectCmd = &cobra.Command{
 			httpserver = false
 		}
 
-		ssh.SshConnect(userIDStr, c.SocketID, c.Tunnels[0].TunnelID, port, hostname, identityFile, proxyHost, version, httpserver, localssh, org.Certificates["ssh_public_key"], "", httpserver_dir, c.ConnectorAuthenticationEnabled, caCertPool)
+		webttyString := ""
+
+		ssh.SshConnect(userIDStr, c.SocketID, c.Tunnels[0].TunnelID, port, hostname, identityFile, proxyHost, version, httpserver, localssh, webttyString, org.Certificates["ssh_public_key"], "", httpserver_dir, c.ConnectorAuthenticationEnabled, caCertPool)
 		if err != nil {
 			fmt.Println(err)
 		}
