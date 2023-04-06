@@ -15,7 +15,7 @@ require (
 	github.com/brianvoe/gofakeit v3.18.0+incompatible
 	github.com/cenkalti/backoff/v4 v4.2.0
 	github.com/creack/pty v1.1.18
-	github.com/docker/docker v23.0.1+incompatible
+	github.com/docker/docker v23.0.3+incompatible
 	github.com/fatih/color v1.15.0
 	github.com/gliderlabs/ssh v0.3.5
 	github.com/go-mysql-org/go-mysql v1.7.0
