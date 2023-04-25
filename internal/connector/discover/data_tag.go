@@ -28,8 +28,12 @@ type SocketDataTag struct {
 // - "border0_81=type=http,port=81,group=my_super_ops_team,name=ngx-srv0-p81"
 
 func parseLabels(tag string) SocketDataTag {
+	return parseLabelsWithDelimeter(tag, ",")
+}
+
+func parseLabelsWithDelimeter(tag string, delimeter string) SocketDataTag {
 	labels := map[string]string{}
-	for _, label := range strings.Split(tag, ",") {
+	for _, label := range strings.Split(tag, delimeter) {
 		label = strings.TrimSpace(label)
 		if strings.Contains(label, "=") {
 			kv := strings.Split(label, "=")

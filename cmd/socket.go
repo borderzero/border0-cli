@@ -36,7 +36,6 @@ import (
 	"github.com/borderzero/border0-cli/internal/util"
 	"github.com/jedib0t/go-pretty/table"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 )
 
 // socketCmd represents the socket command
@@ -391,10 +390,10 @@ var socketConnectCmd = &cobra.Command{
 				AWSRegion:    awsRegion,
 				AWSProfile:   awsProfile,
 				ECSSSMProxy: &ssh.ECSSSMProxy{
-					Cluster:   awsECSCluster,
-					Service:   awsECSService,
-					Task:      awsECSTask,
-					Container: awsECSContainer,
+					Cluster:    awsECSCluster,
+					Services:   awsECSServices,
+					Tasks:      awsECSTasks,
+					Containers: awsECSContainers,
 				},
 			}
 			sshAuthProxy = true
@@ -511,25 +510,6 @@ func AutocompleteSocket(cmd *cobra.Command, args []string, toComplete string) ([
 	return socketNames, cobra.ShellCompDirectiveNoFileComp
 }
 
-// CustomFlagFormatter is a custom flag formatter to group flags in the help output.
-type CustomFlagFormatter struct {
-	flagSets map[string]*pflag.FlagSet
-}
-
-// FormatFlags formats the flags for the given flag set.
-func (cff *CustomFlagFormatter) FormatFlags(flags *pflag.FlagSet) string {
-	result := ""
-	for groupName, groupFlags := range cff.flagSets {
-		result += fmt.Sprintf("%s:\n", groupName)
-		groupFlags.VisitAll(func(flag *pflag.Flag) {
-			result += fmt.Sprintf("  --%s=%s\n", flag.Name, flag.DefValue)
-		})
-		result += "\n"
-	}
-
-	return result
-}
-
 func init() {
 	rootCmd.AddCommand(socketCmd)
 	socketCmd.AddCommand(socketsListCmd)
@@ -637,9 +617,9 @@ func init() {
 	socketConnectCmd.Flags().StringVarP(&awsRegion, "region", "", "", "AWS region to use")
 	socketConnectCmd.Flags().StringVarP(&awsProfile, "profile", "", "", "AWS profile to use")
 	socketConnectCmd.Flags().StringVarP(&awsECSCluster, "cluster", "", "", "The aws cluster to connect to, Required if upstream type is asw-ssm")
-	socketConnectCmd.Flags().StringVarP(&awsECSService, "service", "", "", "If specified, the list will only show service that contains the specified service name")
-	socketConnectCmd.Flags().StringVarP(&awsECSTask, "task", "", "", "If specified, the list will only show tasks that contains the specified task name")
-	socketConnectCmd.Flags().StringVarP(&awsECSContainer, "container", "", "", "If specified, the list will only show containers that contains the specified container name")
+	socketConnectCmd.Flags().StringSliceVarP(&awsECSServices, "service", "", []string{}, "If specified, the list will only show service that has the specified service names")
+	socketConnectCmd.Flags().StringSliceVarP(&awsECSTasks, "task", "", []string{}, "If specified, the list will only show tasks that starts with the specified task names")
+	socketConnectCmd.Flags().StringSliceVarP(&awsECSContainers, "container", "", []string{}, "If specified, the list will only show containers that has the specified container names")
 
 	socketConnectCmd.RegisterFlagCompletionFunc("socket_id", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return getSockets(toComplete), cobra.ShellCompDirectiveNoFileComp

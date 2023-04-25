@@ -76,14 +76,14 @@ var (
 	cloudSqlConnector       bool
 	rdsIAM                  bool
 	awsRegion               string
+	awsProfile              string
 	upstream_tls            bool
 	upstream_identify_file  string
 	awsEC2Target            string
 	awsECSCluster           string
-	awsECSService           string
-	awsECSTask              string
-	awsProfile              string
-	awsECSContainer         string
+	awsECSServices          []string
+	awsECSTasks             []string
+	awsECSContainers        []string
 )
 
 // rootCmd represents the base command when called without any subcommands

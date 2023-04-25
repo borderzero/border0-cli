@@ -52,17 +52,21 @@ type ProxyConfig struct {
 }
 
 type ECSSSMProxy struct {
-	Cluster   string
-	Service   string
-	Task      string
-	Container string
+	Cluster    string
+	Services   []string
+	Tasks      []string
+	Containers []string
 }
 
-func BuildProxyConfig(socket models.Socket, AWSRegion, AWSProfile string) *ProxyConfig {
+func BuildProxyConfig(socket models.Socket, AWSRegion, AWSProfile string) (*ProxyConfig, error) {
 	if socket.ConnectorLocalData.UpstreamUsername == "" && socket.ConnectorLocalData.UpstreamPassword == "" &&
 		socket.ConnectorLocalData.UpstreamIdentifyFile == "" && socket.ConnectorLocalData.AWSEC2Target == "" &&
-		!socket.ConnectorLocalData.AWSECSSSM {
-		return nil
+		socket.UpstreamType != "aws-ssm" {
+		return nil, nil
+	}
+
+	if socket.UpstreamType == "aws-ssm" && socket.ConnectorLocalData.AWSECSCluster == "" {
+		return nil, fmt.Errorf("ecs_cluster is required for aws-ssm upstream type")
 	}
 
 	proxyConfig := &ProxyConfig{
@@ -76,16 +80,16 @@ func BuildProxyConfig(socket models.Socket, AWSRegion, AWSProfile string) *Proxy
 		AWSProfile:   AWSProfile,
 	}
 
-	if socket.ConnectorLocalData.AWSECSSSM {
+	if socket.UpstreamType == "aws-ssm" {
 		proxyConfig.ECSSSMProxy = &ECSSSMProxy{
-			Cluster:   socket.ConnectorLocalData.AWSECSCluster,
-			Service:   socket.ConnectorLocalData.AWSECSService,
-			Task:      socket.ConnectorLocalData.AWSECSTask,
-			Container: socket.ConnectorLocalData.AWSECSContainer,
+			Cluster:    socket.ConnectorLocalData.AWSECSCluster,
+			Services:   socket.ConnectorLocalData.AWSECSServices,
+			Tasks:      socket.ConnectorLocalData.AWSECSTasks,
+			Containers: socket.ConnectorLocalData.AWSECSContainers,
 		}
 	}
 
-	return proxyConfig
+	return proxyConfig, nil
 }
 
 func Proxy(l net.Listener, c ProxyConfig) error {
@@ -393,17 +397,35 @@ func pickAWSECSTarget(channel ssh.Channel, proxyConfig *ProxyConfig) error {
 		if len(taskParts) != 2 {
 			return fmt.Errorf("invalid task definition arn: %s", taskDefinitionArn)
 		}
+
 		taskName := taskParts[1]
-		if proxyConfig.ECSSSMProxy.Task != "" && !strings.Contains(taskName, proxyConfig.ECSSSMProxy.Task) {
-			continue
-		}
-		if proxyConfig.ECSSSMProxy.Service != "" && task.Group != nil && strings.HasPrefix(*task.Group, "service:") {
-			fmt.Println(*task.Group)
-			service := strings.TrimPrefix(*task.Group, "service:")
-			if !strings.Contains(service, proxyConfig.ECSSSMProxy.Service) {
+		if len(proxyConfig.ECSSSMProxy.Tasks) > 0 {
+			var found bool
+			for _, c := range proxyConfig.ECSSSMProxy.Tasks {
+				if strings.HasPrefix(strings.ToLower(taskName), strings.ToLower(c)) {
+					found = true
+					break
+				}
+			}
+			if !found {
 				continue
 			}
 		}
+
+		if len(proxyConfig.ECSSSMProxy.Services) > 0 {
+			service := strings.TrimPrefix(*task.Group, "service:")
+			var found bool
+			for _, c := range proxyConfig.ECSSSMProxy.Services {
+				if strings.EqualFold(c, service) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+
 		taskArnParts := strings.Split(*task.TaskArn, "/")
 		if len(taskArnParts) != 3 {
 			return fmt.Errorf("invalid task arn: %s", *task.TaskArn)
@@ -415,8 +437,17 @@ func pickAWSECSTarget(channel ssh.Channel, proxyConfig *ProxyConfig) error {
 		tasksIDS[taskName] = taskArnParts[2]
 		containers[taskName] = make(map[string]string)
 		for _, container := range task.Containers {
-			if proxyConfig.ECSSSMProxy.Container != "" && !strings.Contains(*container.Name, proxyConfig.ECSSSMProxy.Container) {
-				continue
+			if len(proxyConfig.ECSSSMProxy.Containers) > 0 {
+				var found bool
+				for _, c := range proxyConfig.ECSSSMProxy.Containers {
+					if strings.EqualFold(c, *container.Name) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					continue
+				}
 			}
 			containers[taskName][*container.Name] = *container.RuntimeId
 		}

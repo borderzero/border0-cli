@@ -110,7 +110,10 @@ func (c *ConnectorCore) TunnelConnnect(ctx context.Context, socket models.Socket
 
 	var sshProxyConfig *ssh.ProxyConfig
 	if socket.SocketType == "ssh" {
-		sshProxyConfig = ssh.BuildProxyConfig(socket, c.cfg.Connector.AwsRegion, c.cfg.Connector.AwsProfile)
+		sshProxyConfig, err = ssh.BuildProxyConfig(socket, c.cfg.Connector.AwsRegion, c.cfg.Connector.AwsProfile)
+		if err != nil {
+			return fmt.Errorf("failed to create config for socket: %s", err)
+		}
 	}
 
 	switch {

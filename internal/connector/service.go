@@ -67,6 +67,14 @@ func (c *ConnectorService) Start() error {
 		}
 	}
 
+	if len(c.cfg.EcsPlugin) > 0 {
+		ecsDiscover, err := discover.NewECSDiscover(c.cfg)
+		if err != nil {
+			c.logger.Error("error creating the ecs discover", zap.Error(err))
+		}
+		plugins = append(plugins, ecsDiscover)
+	}
+
 	if len(c.cfg.DockerPlugin) > 0 {
 		plugins = append(plugins, &discover.DockerFinder{Logger: c.logger})
 	}

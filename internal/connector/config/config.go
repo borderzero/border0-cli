@@ -34,24 +34,23 @@ type SocketConfig struct {
 	ConnectorAuthenticationEnabled bool     `mapstructure:"connector_authentication"`
 	Policies                       []string `mapstructure:"policies"`
 
-	UpstreamCertFile      string `mapstructure:"upstream_certificate_file"`
-	UpstreamKeyFile       string `mapstructure:"upstream_key_file"`
-	UpstreamCACertFile    string `mapstructure:"upstream_ca_file"`
-	UpstreamIdentifyFile  string `mapstructure:"upstream_identity_file"`
-	UpstreamTLS           *bool  `mapstructure:"upstream_tls,omitempty"`
-	RdsIAMAuth            bool   `mapstructure:"rds_iam_auth"`
-	AWSRegion             string `mapstructure:"aws_region"`
-	AWSEC2Target          string `mapstructure:"aws_ec2_target"`
-	CloudSQLConnector     bool   `mapstructure:"cloudsql_connector"`
-	CloudSQLIAMAuth       bool   `mapstructure:"cloudsql_iam_auth"`
-	CloudSQLInstance      string `mapstructure:"cloudsql_instance"`
-	GoogleCredentialsFile string `mapstructure:"google_credentials_file"`
-	SSHServer             bool   `mapstructure:"sshserver"`
-	AWSECSSSM             bool   `mapstructure:"aws_ecs_ssm"`
-	AWSECSCluster         string `mapstructure:"aws_ecs_cluster"`
-	AWSECSTask            string `mapstructure:"aws_ecs_task"`
-	AWSECSContainer       string `mapstructure:"aws_ecs_container"`
-	AWSECSService         string `mapstructure:"aws_ecs_service"`
+	UpstreamCertFile      string   `mapstructure:"upstream_certificate_file"`
+	UpstreamKeyFile       string   `mapstructure:"upstream_key_file"`
+	UpstreamCACertFile    string   `mapstructure:"upstream_ca_file"`
+	UpstreamIdentifyFile  string   `mapstructure:"upstream_identity_file"`
+	UpstreamTLS           *bool    `mapstructure:"upstream_tls,omitempty"`
+	RdsIAMAuth            bool     `mapstructure:"rds_iam_auth"`
+	AWSRegion             string   `mapstructure:"aws_region"`
+	AWSEC2Target          string   `mapstructure:"aws_ec2_target"`
+	CloudSQLConnector     bool     `mapstructure:"cloudsql_connector"`
+	CloudSQLIAMAuth       bool     `mapstructure:"cloudsql_iam_auth"`
+	CloudSQLInstance      string   `mapstructure:"cloudsql_instance"`
+	GoogleCredentialsFile string   `mapstructure:"google_credentials_file"`
+	SSHServer             bool     `mapstructure:"sshserver"`
+	AWSECSCluster         string   `mapstructure:"ecs_cluster"`
+	TaskFilter            []string `mapstructure:"task_filter"`
+	ServiceFilter         []string `mapstructure:"service_filter"`
+	ContainerFilter       []string `mapstructure:"container_filter"`
 }
 
 type Credentials struct {
@@ -83,6 +82,15 @@ type ConnectorGroups struct {
 	UpstreamUsername               string   `mapstructure:"upstream_username"`
 	UpstreamPassword               string   `mapstructure:"upstream_password"`
 	UpstreamIdentifyFile           string   `mapstructure:"upstream_identity_file"`
+}
+
+type EcsPlugin struct {
+	Group                          string
+	ConnectorAuthenticationEnabled bool     `mapstructure:"connector_authentication"`
+	Policies                       []string `mapstructure:"policies"`
+	TaskFilter                     []string `mapstructure:"task_filter"`
+	ServiceFilter                  []string `mapstructure:"service_filter"`
+	ContainerFilter                []string `mapstructure:"container_filter"`
 }
 
 type K8Plugin struct {
@@ -127,6 +135,7 @@ type Config struct {
 	Sockets       SocketParams
 	Connector     Connector
 	AwsGroups     []ConnectorGroups `mapstructure:"aws_groups"`
+	EcsPlugin     []EcsPlugin       `mapstructure:"aws_ecs_ssm"`
 	DockerPlugin  []ConnectorGroups `mapstructure:"docker_plugin"`
 	NetworkPlugin []NetworkPlugin   `mapstructure:"network_plugin"`
 	K8Plugin      []K8Plugin        `mapstructure:"k8_plugin"`
