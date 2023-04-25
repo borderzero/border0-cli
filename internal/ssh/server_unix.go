@@ -4,11 +4,13 @@
 package ssh
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -39,7 +41,12 @@ func execCmd(s ssh.Session, cmd exec.Cmd, uid, gid uint64) {
 	} else {
 		if euid == 0 && loginCmd != "" {
 			cmd.Path = loginCmd
-			cmd.Args = append([]string{loginCmd, "-p", "-h", "Border0", "-f", s.User()}, cmd.Args...)
+			if isAlpine() {
+				cmd.Args = append([]string{loginCmd, "-p", "-h", "Border0", "-f", s.User()})
+			} else {
+				cmd.Args = append([]string{loginCmd, "-p", "-h", "Border0", "-f", s.User()}, cmd.Args...)
+			}
+
 		} else {
 			sysProcAttr.Credential = &syscall.Credential{
 				Uid:         uint32(uid),
@@ -150,4 +157,38 @@ func execCmd(s ssh.Session, cmd exec.Cmd, uid, gid uint64) {
 func setWinsize(f *os.File, w, h int) {
 	syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), uintptr(syscall.TIOCSWINSZ),
 		uintptr(unsafe.Pointer(&struct{ h, w, x, y uint16 }{uint16(h), uint16(w), 0, 0})))
+}
+
+func isAlpine() bool {
+	file, err := os.Open("/etc/os-release")
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	isLinux := false
+	isAlpine := false
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "ID=") {
+			if strings.Contains(line, "alpine") {
+				isAlpine = true
+			}
+		} else if strings.HasPrefix(line, "NAME=") {
+			if strings.Contains(line, "Linux") {
+				isLinux = true
+			}
+		}
+		if isLinux && isAlpine {
+			break
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return false
+	}
+
+	return isLinux && isAlpine
 }

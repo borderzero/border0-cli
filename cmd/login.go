@@ -76,7 +76,11 @@ var loginCmd = &cobra.Command{
 			// close the new tab / browser session, or may want to authenticate in a different browser / session. In the
 			// event that opening the browser fails, the customer may still complete authenticating by navigating to the
 			// URL in a different device.
-			_ = open.Run(url)
+
+			/// check if the disableBrowser flag is set
+			if !disableBrowser {
+				_ = open.Run(url)
+			}
 
 			// Polling for token
 			i := 1
@@ -172,5 +176,10 @@ func init() {
 	loginCmd.Flags().StringVarP(&password, "password", "p", "", "Password")
 	loginCmd.Flags().StringVarP(&sso, "sso", "s", "sso", "SSO login")
 	loginCmd.Flags().StringVarP(&mfaCode, "mfa", "m", "", "MFA  Code")
+	// add hidden flag to disable browser opening
+	loginCmd.Flags().BoolVar(&disableBrowser, "disable-browser", false, "Disable browser opening")
+	// now make the disableBrowser flag hidden
+	loginCmd.Flags().MarkHidden("disable-browser")
+
 	rootCmd.AddCommand(loginCmd)
 }
