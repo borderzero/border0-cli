@@ -7,17 +7,26 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
+	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	iamTypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
+
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/session-manager-plugin/src/datachannel"
-	"github.com/aws/session-manager-plugin/src/log"
+	ssmLog "github.com/aws/session-manager-plugin/src/log"
 	"github.com/aws/session-manager-plugin/src/message"
 	"github.com/borderzero/border0-cli/internal/api/models"
+	"github.com/manifoldco/promptui"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -38,15 +47,25 @@ type ProxyConfig struct {
 	session         *ShellSession
 	AWSRegion       string
 	AWSProfile      string
+	ECSSSMProxy     *ECSSSMProxy
+	awsConfig       aws.Config
+}
+
+type ECSSSMProxy struct {
+	Cluster   string
+	Service   string
+	Task      string
+	Container string
 }
 
 func BuildProxyConfig(socket models.Socket, AWSRegion, AWSProfile string) *ProxyConfig {
 	if socket.ConnectorLocalData.UpstreamUsername == "" && socket.ConnectorLocalData.UpstreamPassword == "" &&
-		socket.ConnectorLocalData.UpstreamIdentifyFile == "" && socket.ConnectorLocalData.AWSEC2Target == "" {
+		socket.ConnectorLocalData.UpstreamIdentifyFile == "" && socket.ConnectorLocalData.AWSEC2Target == "" &&
+		!socket.ConnectorLocalData.AWSECSSSM {
 		return nil
 	}
 
-	return &ProxyConfig{
+	proxyConfig := &ProxyConfig{
 		Hostname:     socket.ConnectorData.TargetHostname,
 		Port:         socket.ConnectorData.Port,
 		Username:     socket.ConnectorLocalData.UpstreamUsername,
@@ -56,12 +75,23 @@ func BuildProxyConfig(socket models.Socket, AWSRegion, AWSProfile string) *Proxy
 		AWSRegion:    AWSRegion,
 		AWSProfile:   AWSProfile,
 	}
+
+	if socket.ConnectorLocalData.AWSECSSSM {
+		proxyConfig.ECSSSMProxy = &ECSSSMProxy{
+			Cluster:   socket.ConnectorLocalData.AWSECSCluster,
+			Service:   socket.ConnectorLocalData.AWSECSService,
+			Task:      socket.ConnectorLocalData.AWSECSTask,
+			Container: socket.ConnectorLocalData.AWSECSContainer,
+		}
+	}
+
+	return proxyConfig
 }
 
 func Proxy(l net.Listener, c ProxyConfig) error {
 	var handler func(net.Conn, ProxyConfig)
 
-	if c.AwsEC2Target != "" {
+	if c.AwsEC2Target != "" || c.ECSSSMProxy != nil {
 		var awsConfig aws.Config
 		var err error
 
@@ -81,6 +111,66 @@ func Proxy(l net.Listener, c ProxyConfig) error {
 		}
 
 		c.ssmClient = ssm.NewFromConfig(awsConfig)
+		c.awsConfig = awsConfig
+
+		if c.ECSSSMProxy != nil {
+			ecsSvc := ecs.NewFromConfig(c.awsConfig)
+			if err != nil {
+				return fmt.Errorf("failed to create ecs client: %s", err)
+			}
+
+			input := &ecs.ListTasksInput{
+				Cluster:       &c.ECSSSMProxy.Cluster,
+				DesiredStatus: types.DesiredStatusRunning,
+			}
+
+			output, err := ecsSvc.ListTasks(context.TODO(), input)
+			if err != nil {
+				return fmt.Errorf("unable to gather ECS cluster tasks, %v", err)
+			}
+
+			if len(output.TaskArns) == 0 {
+				log.Printf("sshauthproxy: no running tasks found in ECS cluster %s", c.ECSSSMProxy.Cluster)
+			}
+
+			stsClient := sts.NewFromConfig(c.awsConfig)
+			resp, err := stsClient.GetCallerIdentity(context.TODO(), &sts.GetCallerIdentityInput{})
+			if err != nil {
+				return fmt.Errorf("failed to get caller identity %s", err)
+			}
+
+			actualRoleArn := *resp.Arn
+			if strings.Contains(*resp.Arn, ":assumed-role/") {
+				roleArnParts := strings.Split(*resp.Arn, ":")
+				accountID := roleArnParts[4]
+				roleName := strings.Split(roleArnParts[5], "/")[1]
+				actualRoleArn = fmt.Sprintf("arn:aws:iam::%s:role/%s", accountID, roleName)
+			}
+
+			params := &iam.SimulatePrincipalPolicyInput{
+				PolicySourceArn: aws.String(actualRoleArn),
+				ActionNames:     []string{"ssm:StartSession"},
+			}
+
+			iamSvc := iam.NewFromConfig(c.awsConfig)
+			simulateResponse, err := iamSvc.SimulatePrincipalPolicy(context.TODO(), params)
+			if err != nil {
+				return fmt.Errorf("error simulating principal policy %s", err)
+			}
+
+			allowed := false
+			for _, evaluationResults := range simulateResponse.EvaluationResults {
+				if evaluationResults.EvalDecision == iamTypes.PolicyEvaluationDecisionTypeAllowed {
+					allowed = true
+					break
+				}
+			}
+
+			if !allowed {
+				return fmt.Errorf("user (%s) is not authorized to start a session", *resp.Account)
+			}
+		}
+
 		handler = handelSSMclient
 	} else {
 		var authMethods []ssh.AuthMethod
@@ -185,8 +275,16 @@ func handelSSMclient(conn net.Conn, config ProxyConfig) {
 				case req.Type == "window-change":
 					w, h := parseDims(req.Payload)
 					config.session.handleWindowChange(int(w), int(h))
-					req.Reply(true, nil)
+					req.Reply(false, nil)
 				case req.Type == "shell":
+					if config.ECSSSMProxy != nil {
+						if err := pickAWSECSTarget(channel, &config); err != nil {
+							log.Printf("sshauthproxy: failed to pick ECS target: %s", err)
+							req.Reply(false, nil)
+							sshConn.Close()
+							return
+						}
+					}
 					go handleSSMShell(channel, &config)
 					req.Reply(true, nil)
 				default:
@@ -198,15 +296,191 @@ func handelSSMclient(conn net.Conn, config ProxyConfig) {
 
 }
 
+func pickAWSECSTarget(channel ssh.Channel, proxyConfig *ProxyConfig) error {
+	ecsSvc := ecs.NewFromConfig(proxyConfig.awsConfig)
+	var selectedCluster string
+	if proxyConfig.ECSSSMProxy.Cluster == "" {
+		var clusters []string
+		input := &ecs.ListClustersInput{}
+		for {
+			output, err := ecsSvc.ListClusters(context.TODO(), input)
+			if err != nil {
+				return fmt.Errorf("unable to list clusters, %v", err)
+			}
+
+			clusters = append(clusters, output.ClusterArns...)
+			if output.NextToken == nil {
+				break
+			}
+			input.NextToken = output.NextToken
+		}
+
+		if len(clusters) == 0 {
+			return fmt.Errorf("no clusters found")
+		}
+
+		output, err := ecsSvc.DescribeClusters(context.TODO(), &ecs.DescribeClustersInput{Clusters: clusters})
+		if err != nil {
+			return fmt.Errorf("unable to describe clusters, %v", err)
+		}
+
+		var clusterNames []string
+
+		for _, cluster := range output.Clusters {
+			clusterNames = append(clusterNames, *cluster.ClusterName)
+		}
+
+		prompt := promptui.Select{
+			Label:             "Choose a cluster",
+			Items:             clusterNames,
+			Stdout:            channel,
+			Stdin:             channel,
+			StartInSearchMode: true,
+			Searcher: func(input string, index int) bool {
+				return strings.Contains(strings.ToLower(clusterNames[index]), strings.ToLower(input))
+			},
+		}
+
+		_, selectedCluster, err = prompt.Run()
+		if err != nil {
+			return fmt.Errorf("unable to select cluster, %v", err)
+		}
+
+	} else {
+		selectedCluster = proxyConfig.ECSSSMProxy.Cluster
+	}
+
+	var tasksArns []string
+	input := &ecs.ListTasksInput{
+		Cluster:       &selectedCluster,
+		DesiredStatus: types.DesiredStatusRunning,
+	}
+
+	for {
+		output, err := ecsSvc.ListTasks(context.TODO(), input)
+		if err != nil {
+			return fmt.Errorf("unable to list tasks, %v", err)
+		}
+
+		tasksArns = append(tasksArns, output.TaskArns...)
+		if output.NextToken == nil {
+			break
+		}
+		input.NextToken = output.NextToken
+	}
+
+	if len(tasksArns) == 0 {
+		return fmt.Errorf("no tasks found")
+	}
+
+	var tasks []string
+	tasksIDS := make(map[string]string)
+	containers := make(map[string]map[string]string)
+
+	tasksIput := &ecs.DescribeTasksInput{
+		Cluster: &selectedCluster,
+		Tasks:   tasksArns,
+	}
+
+	output, err := ecsSvc.DescribeTasks(context.TODO(), tasksIput)
+	if err != nil {
+		return fmt.Errorf("unable to describe tasks, %v", err)
+	}
+
+	for _, task := range output.Tasks {
+		taskDefinitionArn := *task.TaskDefinitionArn
+		taskParts := strings.Split(taskDefinitionArn, "/")
+		if len(taskParts) != 2 {
+			return fmt.Errorf("invalid task definition arn: %s", taskDefinitionArn)
+		}
+		taskName := taskParts[1]
+		if proxyConfig.ECSSSMProxy.Task != "" && !strings.Contains(taskName, proxyConfig.ECSSSMProxy.Task) {
+			continue
+		}
+		if proxyConfig.ECSSSMProxy.Service != "" && task.Group != nil && strings.HasPrefix(*task.Group, "service:") {
+			fmt.Println(*task.Group)
+			service := strings.TrimPrefix(*task.Group, "service:")
+			if !strings.Contains(service, proxyConfig.ECSSSMProxy.Service) {
+				continue
+			}
+		}
+		taskArnParts := strings.Split(*task.TaskArn, "/")
+		if len(taskArnParts) != 3 {
+			return fmt.Errorf("invalid task arn: %s", *task.TaskArn)
+		}
+
+		taskName = fmt.Sprintf("%s (%s)", taskName, taskArnParts[2])
+		tasks = append(tasks, taskName)
+
+		tasksIDS[taskName] = taskArnParts[2]
+		containers[taskName] = make(map[string]string)
+		for _, container := range task.Containers {
+			if proxyConfig.ECSSSMProxy.Container != "" && !strings.Contains(*container.Name, proxyConfig.ECSSSMProxy.Container) {
+				continue
+			}
+			containers[taskName][*container.Name] = *container.RuntimeId
+		}
+	}
+
+	if len(tasks) == 0 {
+		return fmt.Errorf("no tasks found")
+	}
+
+	prompt := promptui.Select{
+		Label:             "Choose a task",
+		Items:             tasks,
+		Stdout:            channel,
+		Stdin:             channel,
+		StartInSearchMode: true,
+		Searcher: func(input string, index int) bool {
+			return strings.Contains(strings.ToLower(tasks[index]), strings.ToLower(input))
+		},
+	}
+
+	_, selectedTask, err := prompt.Run()
+	if err != nil {
+		return fmt.Errorf("unable to select tasks, %v", err)
+	}
+
+	if len(containers[selectedTask]) == 0 {
+		return fmt.Errorf("no containers found")
+	}
+
+	var containerNames []string
+	for container := range containers[selectedTask] {
+		containerNames = append(containerNames, container)
+	}
+
+	prompt = promptui.Select{
+		Label:             "Choose a container",
+		Items:             containerNames,
+		Stdout:            channel,
+		Stdin:             channel,
+		StartInSearchMode: true,
+		Searcher: func(input string, index int) bool {
+			return strings.Contains(strings.ToLower(containerNames[index]), strings.ToLower(input))
+		},
+	}
+
+	_, selectedContainer, err := prompt.Run()
+	if err != nil {
+		return fmt.Errorf("unable to select container, %v", err)
+	}
+
+	proxyConfig.AwsEC2Target = fmt.Sprintf("ecs:%s_%s_%s", selectedCluster, tasksIDS[selectedTask], containers[selectedTask][selectedContainer])
+
+	return nil
+}
+
 type ssmDataChannel struct {
 	datachannel.DataChannel
 }
 
-func (s ssmDataChannel) HandleChannelClosedMessage(log log.T, stopHandler datachannel.Stop, sessionId string, outputMessage message.ClientMessage) {
+func (s ssmDataChannel) HandleChannelClosedMessage(log ssmLog.T, stopHandler datachannel.Stop, sessionId string, outputMessage message.ClientMessage) {
 	stopHandler()
 }
 
-func (dataChannel *ssmDataChannel) OutputMessageHandler(log log.T, stopHandler datachannel.Stop, sessionID string, rawMessage []byte) error {
+func (dataChannel *ssmDataChannel) OutputMessageHandler(log ssmLog.T, stopHandler datachannel.Stop, sessionID string, rawMessage []byte) error {
 	outputMessage := &message.ClientMessage{}
 	err := outputMessage.DeserializeClientMessage(log, rawMessage)
 	if err != nil {
@@ -256,7 +530,7 @@ func handleSSMShell(channel ssh.Channel, config *ProxyConfig) {
 	s.DataChannel = &datachannel
 	config.session = &s
 	s.handleWindowChange(config.windowWidth, config.windowHeight)
-	sessionLogger := log.Logger(false, "border0")
+	sessionLogger := ssmLog.Logger(false, "border0")
 
 	if err = s.OpenDataChannel(sessionLogger); err != nil {
 		fmt.Printf("sshauthproxy: failed to execute ssm session: %s\n", err)

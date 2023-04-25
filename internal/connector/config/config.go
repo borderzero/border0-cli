@@ -47,6 +47,11 @@ type SocketConfig struct {
 	CloudSQLInstance      string `mapstructure:"cloudsql_instance"`
 	GoogleCredentialsFile string `mapstructure:"google_credentials_file"`
 	SSHServer             bool   `mapstructure:"sshserver"`
+	AWSECSSSM             bool   `mapstructure:"aws_ecs_ssm"`
+	AWSECSCluster         string `mapstructure:"aws_ecs_cluster"`
+	AWSECSTask            string `mapstructure:"aws_ecs_task"`
+	AWSECSContainer       string `mapstructure:"aws_ecs_container"`
+	AWSECSService         string `mapstructure:"aws_ecs_service"`
 }
 
 type Credentials struct {

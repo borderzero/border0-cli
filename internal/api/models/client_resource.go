@@ -16,6 +16,7 @@ type ClientResource struct {
 	SocketPorts                    []int    `json:"socket_ports,omitempty"`
 	Domains                        []string `json:"domains,omitempty"`
 	DatabaseType                   string   `json:"database_type,omitempty"`
+	SshType                        string   `json:"ssh_type,omitempty"`
 	ConnectorAuthenticationEnabled bool     `json:"connector_authentication_enabled,omitempty"`
 }
 

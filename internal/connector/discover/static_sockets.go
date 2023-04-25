@@ -54,6 +54,11 @@ func (s *StaticSocketFinder) Find(ctx context.Context, cfg config.Config, state 
 				CloudSQLInstance:      v.CloudSQLInstance,
 				GoogleCredentialsFile: v.GoogleCredentialsFile,
 				SSHServer:             v.SSHServer,
+				AWSECSSSM:             v.AWSECSSSM,
+				AWSECSCluster:         v.AWSECSCluster,
+				AWSECSTask:            v.AWSECSTask,
+				AWSECSContainer:       v.AWSECSContainer,
+				AWSECSService:         v.AWSECSService,
 			}
 		}
 

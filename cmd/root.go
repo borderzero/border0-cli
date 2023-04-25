@@ -79,6 +79,11 @@ var (
 	upstream_tls            bool
 	upstream_identify_file  string
 	awsEC2Target            string
+	awsECSCluster           string
+	awsECSService           string
+	awsECSTask              string
+	awsProfile              string
+	awsECSContainer         string
 )
 
 // rootCmd represents the base command when called without any subcommands

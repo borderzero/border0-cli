@@ -63,12 +63,14 @@ var sshCmd = &cobra.Command{
 			}
 		}
 
+		var sshType string
 		if hostname == "" {
 			pickedHost, err := client.PickHost(hostname, enum.SSHSocket, enum.TLSSocket)
 			if err != nil {
 				return err
 			}
 			hostname = pickedHost.Hostname()
+			sshType = pickedHost.SshType
 		}
 
 		token, claims, err := client.MTLSLogin(hostname)
@@ -83,30 +85,31 @@ var sshCmd = &cobra.Command{
 		}
 		socketPref := preference.NewSSHSocket(hostname)
 
-		if sshLoginName == "" {
-			suggestedSocket := pref.Socket(hostname)
-			if preference.Found(suggestedSocket) {
-				sshLoginName = suggestedSocket.Username
-				socketPref = suggestedSocket
-			} else {
-				suggestedSocket = pref.SuggestSocket(hostname, enum.SSHSocket)
+		if sshType != "aws-ssm" {
+			if sshLoginName == "" {
+				suggestedSocket := pref.Socket(hostname)
 				if preference.Found(suggestedSocket) {
 					sshLoginName = suggestedSocket.Username
 					socketPref = suggestedSocket
-				}
-				if err = survey.AskOne(&survey.Input{
-					Message: "SSH username:",
-					Default: sshLoginName,
-				}, &sshLoginName); err != nil {
-					return errors.New("failed to get login/username, empty login not allowed")
+				} else {
+					suggestedSocket = pref.SuggestSocket(hostname, enum.SSHSocket)
+					if preference.Found(suggestedSocket) {
+						sshLoginName = suggestedSocket.Username
+						socketPref = suggestedSocket
+					}
+					if err = survey.AskOne(&survey.Input{
+						Message: "SSH username:",
+						Default: sshLoginName,
+					}, &sshLoginName); err != nil {
+						return errors.New("failed to get login/username, empty login not allowed")
+					}
 				}
 			}
+
+			// Now we should have the login name, so lets write back the data to the preference file
+			socketPref.Username = sshLoginName
+			pref.SetSocket(socketPref)
 		}
-
-		// Now we should have the login name, so lets write back the data to the preference file
-		socketPref.Username = sshLoginName
-		pref.SetSocket(socketPref)
-
 		sshCert, err := client.GenSSHKey(token, orgID, hostname)
 		if err != nil {
 			return fmt.Errorf("unable to create ssh key: %w", err)
