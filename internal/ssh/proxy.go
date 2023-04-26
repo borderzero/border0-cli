@@ -136,43 +136,43 @@ func Proxy(l net.Listener, c ProxyConfig) error {
 			if len(output.TaskArns) == 0 {
 				log.Printf("sshauthproxy: no running tasks found in ECS cluster %s", c.ECSSSMProxy.Cluster)
 			}
+		}
 
-			stsClient := sts.NewFromConfig(c.awsConfig)
-			resp, err := stsClient.GetCallerIdentity(context.TODO(), &sts.GetCallerIdentityInput{})
-			if err != nil {
-				return fmt.Errorf("failed to get caller identity %s", err)
-			}
+		stsClient := sts.NewFromConfig(c.awsConfig)
+		resp, err := stsClient.GetCallerIdentity(context.TODO(), &sts.GetCallerIdentityInput{})
+		if err != nil {
+			return fmt.Errorf("failed to get caller identity %s", err)
+		}
 
-			actualRoleArn := *resp.Arn
-			if strings.Contains(*resp.Arn, ":assumed-role/") {
-				roleArnParts := strings.Split(*resp.Arn, ":")
-				accountID := roleArnParts[4]
-				roleName := strings.Split(roleArnParts[5], "/")[1]
-				actualRoleArn = fmt.Sprintf("arn:aws:iam::%s:role/%s", accountID, roleName)
-			}
+		actualRoleArn := *resp.Arn
+		if strings.Contains(*resp.Arn, ":assumed-role/") {
+			roleArnParts := strings.Split(*resp.Arn, ":")
+			accountID := roleArnParts[4]
+			roleName := strings.Split(roleArnParts[5], "/")[1]
+			actualRoleArn = fmt.Sprintf("arn:aws:iam::%s:role/%s", accountID, roleName)
+		}
 
-			params := &iam.SimulatePrincipalPolicyInput{
-				PolicySourceArn: aws.String(actualRoleArn),
-				ActionNames:     []string{"ssm:StartSession"},
-			}
+		params := &iam.SimulatePrincipalPolicyInput{
+			PolicySourceArn: aws.String(actualRoleArn),
+			ActionNames:     []string{"ssm:StartSession"},
+		}
 
-			iamSvc := iam.NewFromConfig(c.awsConfig)
-			simulateResponse, err := iamSvc.SimulatePrincipalPolicy(context.TODO(), params)
-			if err != nil {
-				return fmt.Errorf("error simulating principal policy %s", err)
-			}
+		iamSvc := iam.NewFromConfig(c.awsConfig)
+		simulateResponse, err := iamSvc.SimulatePrincipalPolicy(context.TODO(), params)
+		if err != nil {
+			return fmt.Errorf("error simulating principal policy %s", err)
+		}
 
-			allowed := false
-			for _, evaluationResults := range simulateResponse.EvaluationResults {
-				if evaluationResults.EvalDecision == iamTypes.PolicyEvaluationDecisionTypeAllowed {
-					allowed = true
-					break
-				}
+		allowed := false
+		for _, evaluationResults := range simulateResponse.EvaluationResults {
+			if evaluationResults.EvalDecision == iamTypes.PolicyEvaluationDecisionTypeAllowed {
+				allowed = true
+				break
 			}
+		}
 
-			if !allowed {
-				return fmt.Errorf("user (%s) is not authorized to start a session", *resp.Account)
-			}
+		if !allowed {
+			return fmt.Errorf("user (%s) is not authorized to start a session", *resp.Account)
 		}
 
 		handler = handelSSMclient

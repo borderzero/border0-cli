@@ -384,6 +384,10 @@ var socketConnectCmd = &cobra.Command{
 					}
 				}
 			} else {
+				if awsECSCluster != "" || awsEC2Target != "" {
+					return fmt.Errorf("aws_ecs_cluster flag or aws_ec2_target is defined but socket is not configured with aws-ssm upstream type")
+				}
+
 				sshProxyConfig = ssh.ProxyConfig{
 					Hostname:     hostname,
 					Port:         port,
