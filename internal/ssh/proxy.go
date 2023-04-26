@@ -65,8 +65,16 @@ func BuildProxyConfig(socket models.Socket, AWSRegion, AWSProfile string) (*Prox
 		return nil, nil
 	}
 
-	if socket.UpstreamType == "aws-ssm" && socket.ConnectorLocalData.AWSECSCluster == "" {
-		return nil, fmt.Errorf("ecs_cluster is required for aws-ssm upstream type")
+	if socket.UpstreamType == "aws-ssm" && socket.ConnectorLocalData.AWSECSCluster == "" && socket.ConnectorLocalData.AWSEC2Target == "" {
+		return nil, fmt.Errorf("aws_ecs_cluster or aws_ec2_target is required for aws-ssm upstream type")
+	}
+
+	if socket.UpstreamType == "aws-ssm" && socket.ConnectorLocalData.AWSECSCluster != "" && socket.ConnectorLocalData.AWSEC2Target != "" {
+		return nil, fmt.Errorf("aws_ecs_cluster and aws_ec2_target are mutually exclusive")
+	}
+
+	if socket.UpstreamType != "aws-ssm" && (socket.ConnectorLocalData.AWSECSCluster != "" || socket.ConnectorLocalData.AWSEC2Target != "") {
+		return nil, fmt.Errorf("aws_ecs_cluster or aws_ec2_target is defined but upstream_type is not aws-ssm")
 	}
 
 	proxyConfig := &ProxyConfig{
@@ -80,7 +88,7 @@ func BuildProxyConfig(socket models.Socket, AWSRegion, AWSProfile string) (*Prox
 		AWSProfile:   AWSProfile,
 	}
 
-	if socket.UpstreamType == "aws-ssm" {
+	if socket.UpstreamType == "aws-ssm" && socket.ConnectorLocalData.AWSECSCluster != "" {
 		proxyConfig.ECSSSMProxy = &ECSSSMProxy{
 			Cluster:    socket.ConnectorLocalData.AWSECSCluster,
 			Services:   socket.ConnectorLocalData.AWSECSServices,

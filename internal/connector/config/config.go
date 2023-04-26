@@ -89,9 +89,9 @@ type EcsPlugin struct {
 	Group                          string
 	ConnectorAuthenticationEnabled bool     `mapstructure:"connector_authentication"`
 	Policies                       []string `mapstructure:"policies"`
-	TaskFilter                     []string `mapstructure:"task_filter"`
-	ServiceFilter                  []string `mapstructure:"service_filter"`
-	ContainerFilter                []string `mapstructure:"container_filter"`
+	TaskFilter                     []string `mapstructure:"aws_ecs_tasks"`
+	ServiceFilter                  []string `mapstructure:"aws_ecs_services"`
+	ContainerFilter                []string `mapstructure:"aws_ecs_containers"`
 }
 
 type K8Plugin struct {
