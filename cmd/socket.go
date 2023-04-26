@@ -616,7 +616,7 @@ func init() {
 	socketConnectCmd.Flags().StringVarP(&awsEC2Target, "aws_ec2_target", "", "", "Aws EC2 target identifier")
 	socketConnectCmd.Flags().StringVarP(&awsRegion, "region", "", "", "AWS region to use")
 	socketConnectCmd.Flags().StringVarP(&awsProfile, "profile", "", "", "AWS profile to use")
-	socketConnectCmd.Flags().StringVarP(&awsECSCluster, "aws_ecs_target", "", "", "The aws cluster to connect to, Required if upstream type is asw-ssm")
+	socketConnectCmd.Flags().StringVarP(&awsECSCluster, "aws_ecs_cluster", "", "", "The aws cluster to connect to, Required if upstream type is asw-ssm")
 	socketConnectCmd.Flags().StringSliceVarP(&awsECSServices, "aws_ecs_service", "", []string{}, "If specified, the list will only show service that has the specified service names")
 	socketConnectCmd.Flags().StringSliceVarP(&awsECSTasks, "aws_ecs_task", "", []string{}, "If specified, the list will only show tasks that starts with the specified task names")
 	socketConnectCmd.Flags().StringSliceVarP(&awsECSContainers, "aws_ecs_container", "", []string{}, "If specified, the list will only show containers that has the specified container names")
