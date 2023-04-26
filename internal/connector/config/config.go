@@ -26,7 +26,8 @@ type SocketConfig struct {
 	Description                    string
 	AllowedEmailAddresses          []string `mapstructure:"allowed_email_addresses"`
 	AllowedEmailDomains            []string `mapstructure:"allowed_email_domains"`
-	UpstreamUser                   string   `mapstructure:"upstream_user"`
+	UpstreamUserDeprecated         string   `mapstructure:"upstream_user"`
+	UpstreamUser                   string   `mapstructure:"upstream_username"`
 	UpstreamPassword               string   `mapstructure:"upstream_password"`
 	UpstreamType                   string   `mapstructure:"upstream_type"`
 	DatabaseCredentials            string   `mapstructure:"database_credentials"`
@@ -47,10 +48,10 @@ type SocketConfig struct {
 	CloudSQLInstance      string   `mapstructure:"cloudsql_instance"`
 	GoogleCredentialsFile string   `mapstructure:"google_credentials_file"`
 	SSHServer             bool     `mapstructure:"sshserver"`
-	AWSECSCluster         string   `mapstructure:"ecs_cluster"`
-	TaskFilter            []string `mapstructure:"task_filter"`
-	ServiceFilter         []string `mapstructure:"service_filter"`
-	ContainerFilter       []string `mapstructure:"container_filter"`
+	AWSECSCluster         string   `mapstructure:"aws_ecs_cluster"`
+	TaskFilter            []string `mapstructure:"aws_ecs_tasks"`
+	ServiceFilter         []string `mapstructure:"aws_ecs_services"`
+	ContainerFilter       []string `mapstructure:"aws_ecs_containers"`
 }
 
 type Credentials struct {

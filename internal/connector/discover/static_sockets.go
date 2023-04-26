@@ -2,6 +2,7 @@ package discover
 
 import (
 	"context"
+	"log"
 	"reflect"
 
 	"github.com/borderzero/border0-cli/internal/api/models"
@@ -37,6 +38,11 @@ func (s *StaticSocketFinder) Find(ctx context.Context, cfg config.Config, state 
 			socket.CloudAuthEnabled = true
 			socket.PolicyNames = v.Policies
 			socket.UpstreamType = v.UpstreamType
+
+			if v.UpstreamUser == "" && v.UpstreamUserDeprecated != "" {
+				log.Println("WARNING: upstream_user is deprecated, please use upstream_username instead")
+				v.UpstreamUser = v.UpstreamUserDeprecated
+			}
 
 			socket.ConnectorLocalData = &models.ConnectorLocalData{
 				UpstreamUsername:      v.UpstreamUser,

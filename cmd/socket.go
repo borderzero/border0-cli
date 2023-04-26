@@ -363,38 +363,34 @@ var socketConnectCmd = &cobra.Command{
 
 		var sshAuthProxy bool
 		var sshProxyConfig ssh.ProxyConfig
-		if socket.SocketType == "ssh" && (upstream_username != "" || upstream_password != "" || upstream_identify_file != "" || awsEC2Target != "") {
-			sshProxyConfig = ssh.ProxyConfig{
-				Hostname:     hostname,
-				Port:         port,
-				Username:     upstream_username,
-				Password:     upstream_password,
-				IdentityFile: upstream_identify_file,
-				AwsEC2Target: awsEC2Target,
-			}
-			sshAuthProxy = true
-		}
+		if socket.SocketType == "ssh" && (upstream_username != "" || upstream_password != "" || upstream_identify_file != "" || awsEC2Target != "" || socket.UpstreamType == "aws-ssm") {
+			if socket.UpstreamType == "aws-ssm" {
+				if awsECSCluster == "" && awsEC2Target == "" {
+					return fmt.Errorf("aws_ecs_cluster flag or aws_ec2_target is required for aws-ssm upstream services")
+				}
 
-		if socket.SocketType == "ssh" && socket.UpstreamType == "aws-ssm" {
-			if awsECSCluster == "" {
-				return fmt.Errorf("AWS ECS cluster flag is required for aws-ssm upstream services")
-			}
+				sshProxyConfig = ssh.ProxyConfig{
+					AwsEC2Target: awsEC2Target,
+					AWSRegion:    awsRegion,
+					AWSProfile:   awsProfile,
+				}
 
-			sshProxyConfig = ssh.ProxyConfig{
-				Hostname:     hostname,
-				Port:         port,
-				Username:     upstream_username,
-				Password:     upstream_password,
-				IdentityFile: upstream_identify_file,
-				AwsEC2Target: awsEC2Target,
-				AWSRegion:    awsRegion,
-				AWSProfile:   awsProfile,
-				ECSSSMProxy: &ssh.ECSSSMProxy{
-					Cluster:    awsECSCluster,
-					Services:   awsECSServices,
-					Tasks:      awsECSTasks,
-					Containers: awsECSContainers,
-				},
+				if awsECSCluster != "" {
+					sshProxyConfig.ECSSSMProxy = &ssh.ECSSSMProxy{
+						Cluster:    awsECSCluster,
+						Services:   awsECSServices,
+						Tasks:      awsECSTasks,
+						Containers: awsECSContainers,
+					}
+				}
+			} else {
+				sshProxyConfig = ssh.ProxyConfig{
+					Hostname:     hostname,
+					Port:         port,
+					Username:     upstream_username,
+					Password:     upstream_password,
+					IdentityFile: upstream_identify_file,
+				}
 			}
 			sshAuthProxy = true
 		}
@@ -616,10 +612,10 @@ func init() {
 	socketConnectCmd.Flags().StringVarP(&awsEC2Target, "aws_ec2_target", "", "", "Aws EC2 target identifier")
 	socketConnectCmd.Flags().StringVarP(&awsRegion, "region", "", "", "AWS region to use")
 	socketConnectCmd.Flags().StringVarP(&awsProfile, "profile", "", "", "AWS profile to use")
-	socketConnectCmd.Flags().StringVarP(&awsECSCluster, "cluster", "", "", "The aws cluster to connect to, Required if upstream type is asw-ssm")
-	socketConnectCmd.Flags().StringSliceVarP(&awsECSServices, "service", "", []string{}, "If specified, the list will only show service that has the specified service names")
-	socketConnectCmd.Flags().StringSliceVarP(&awsECSTasks, "task", "", []string{}, "If specified, the list will only show tasks that starts with the specified task names")
-	socketConnectCmd.Flags().StringSliceVarP(&awsECSContainers, "container", "", []string{}, "If specified, the list will only show containers that has the specified container names")
+	socketConnectCmd.Flags().StringVarP(&awsECSCluster, "aws_ecs_target", "", "", "The aws cluster to connect to, Required if upstream type is asw-ssm")
+	socketConnectCmd.Flags().StringSliceVarP(&awsECSServices, "aws_ecs_service", "", []string{}, "If specified, the list will only show service that has the specified service names")
+	socketConnectCmd.Flags().StringSliceVarP(&awsECSTasks, "aws_ecs_task", "", []string{}, "If specified, the list will only show tasks that starts with the specified task names")
+	socketConnectCmd.Flags().StringSliceVarP(&awsECSContainers, "aws_ecs_container", "", []string{}, "If specified, the list will only show containers that has the specified container names")
 
 	socketConnectCmd.RegisterFlagCompletionFunc("socket_id", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return getSockets(toComplete), cobra.ShellCompDirectiveNoFileComp
