@@ -178,8 +178,6 @@ func (s *Socket) BuildConnectorDataByTags() {
 
 func (s *Socket) SetupTypeAndUpstreamTypeByPortOrTags() {
 	if s.UpstreamType == "" {
-		s.UpstreamType = "http"
-
 		if s.SocketType != "" {
 			switch s.SocketType {
 			case "mysql":
@@ -198,6 +196,8 @@ func (s *Socket) SetupTypeAndUpstreamTypeByPortOrTags() {
 			case "https":
 				s.SocketType = "http"
 				s.UpstreamType = "https"
+			case "ssh":
+				s.UpstreamType = "ssh"
 			}
 
 		} else {

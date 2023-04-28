@@ -110,9 +110,11 @@ func (s *Ec2Discover) buildSocket(connector config.Connector, group config.Conne
 	}
 
 	if socket.SocketType == "ssh" {
-		if group.AwsSsmEnabled {
+		if group.AwsSsmEnabled || socket.UpstreamType == "aws-ssm" {
 			socket.UpstreamType = "aws-ssm"
 			socket.ConnectorLocalData.AWSEC2Target = socket.InstanceId
+		} else {
+			socket.UpstreamType = "ssh"
 		}
 
 		if group.UpstreamUsername != "" {

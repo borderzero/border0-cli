@@ -326,7 +326,7 @@ func (c *ConnectorCore) CheckAndUpdateSocket(ctx context.Context, apiSocket, loc
 		apiSocket.AllowedEmailDomains = localSocket.AllowedEmailDomains
 		apiSocket.UpstreamHttpHostname = localSocket.UpstreamHttpHostname
 		apiSocket.ConnectorAuthenticationEnabled = localSocket.ConnectorAuthenticationEnabled
-		apiSocket.UpstreamType = ""
+		apiSocket.UpstreamType = localSocket.UpstreamType
 		apiSocket.CloudAuthEnabled = true
 		apiSocket.Tags = localSocket.Tags
 		*apiSocket.UpstreamPassword = ""
@@ -341,6 +341,7 @@ func (c *ConnectorCore) CheckAndUpdateSocket(ctx context.Context, apiSocket, loc
 
 		err = c.border0API.UpdateSocket(ctx, apiSocket.SocketID, apiSocket)
 		if err != nil {
+			c.logger.Error("error updating socket", zap.Error(err), zap.String("socket_name", apiSocket.Name))
 			return nil, err
 		}
 
