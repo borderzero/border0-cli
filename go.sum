@@ -116,6 +116,8 @@ github.com/bluele/factory-go v0.0.1 h1:Wb3nA5Oe9biPfBJNNtZ9rcsf38jNwJV/2ASShHao8
 github.com/bluele/factory-go v0.0.1/go.mod h1:M5D/YMEfPK1tzRvy/nj1tb0nfvvNY3d9zmgT66sldu0=
 github.com/borderzero/border0-proto v0.0.0-20230613085511-b390af6b07b0 h1:wBniN3CRz00cfydK+cROuZUcC8banxIdR4Kiry5SUSM=
 github.com/borderzero/border0-proto v0.0.0-20230613085511-b390af6b07b0/go.mod h1:Iw+rHiXdZi1xqxSFG7+blVm9Kp5n7xzhVWQn2KHJKj8=
+github.com/borderzero/border0-proto v0.0.0-20230623130943-d56ac02de32b h1:8iyY3OEKEu23G2LuWdBfAJQnHCyU1VCjfoV4Xnqowc8=
+github.com/borderzero/border0-proto v0.0.0-20230623130943-d56ac02de32b/go.mod h1:Iw+rHiXdZi1xqxSFG7+blVm9Kp5n7xzhVWQn2KHJKj8=
 github.com/brianvoe/gofakeit v3.18.0+incompatible h1:wDOmHc9DLG4nRjUVVaxA+CEglKOW72Y5+4WNxUIkjM8=
 github.com/brianvoe/gofakeit v3.18.0+incompatible/go.mod h1:kfwdRA90vvNhPutZWfH7WPaDzUjz+CZFqG+rPkOjGOc=
 github.com/buger/jsonparser v1.1.1/go.mod h1:6RYKKt7H4d4+iWqouImQ9R2FZql3VbhNgx27UK13J/0=

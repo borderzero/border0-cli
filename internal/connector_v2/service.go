@@ -191,6 +191,17 @@ func (c *ConnectorService) controlStream() error {
 					c.logger.Error("unknown request id", zap.String("request_id", r.TunnelCertificateSignResponse.RequestId))
 				}
 			case *pb.ControlStreamReponse_Heartbeat:
+			case *pb.ControlStreamReponse_Stop:
+				c.logger.Info("stopping connector as requested by server")
+				return backoff.Permanent(nil)
+			case *pb.ControlStreamReponse_Disconnect:
+				c.logger.Info("disconnecting connector as requested by server")
+				err := stream.CloseSend()
+				if err != nil {
+					return fmt.Errorf("failed to close control stream: %w", err)
+				}
+
+				return fmt.Errorf("connector was disconnected by server")
 			default:
 				c.logger.Error("unknown message type", zap.Any("type", r))
 			}
@@ -428,7 +439,7 @@ func (c *ConnectorService) newSocket(config *pb.SocketConfig) (*border0.Socket, 
 	s := models.Socket{
 		SocketID:   config.GetId(),
 		SocketType: config.GetType(),
-		SSHServer:  config.GetSshServer(),
+		// SSHServer:  config.GetSshServer(),
 		// ConnectorAuthenticationEnabled: true,
 	}
 
