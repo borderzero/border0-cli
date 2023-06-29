@@ -19,13 +19,13 @@ const (
 	envNameConnectorInsecureTransport = "BORDER0_CONNECTOR_INSECURE_TRANSPORT"
 	envNameTunnelServer               = "BORDER0_TUNNEL_SERVER"
 
-	envNamePrefixBorder0Var = "B0_VAR_"
+	envNamePrefixBorder0Var = "BORDER0_VAR_"
 
 	envNameAndValueDelimeter = "="
 
 	defaultCredentialsFilePath = ".border0/config.yml"
 
-	DefaultConnectorServer = "api.border0.com:443"
+	DefaultConnectorServer = "capi.border0.com:443"
 	DefaultTunnelServer    = "tunnel.border0.com"
 )
 

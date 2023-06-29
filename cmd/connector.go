@@ -233,8 +233,7 @@ var connectorStartCmd = &cobra.Command{
 		log, _ := logging.BuildProduction()
 		defer log.Sync()
 
-		var configPath string
-		configPathFromEnv := os.Getenv("BORDER0_CONFIG_FILE")
+		SetRlimit()
 
 		if v2 {
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -242,6 +241,8 @@ var connectorStartCmd = &cobra.Command{
 
 			connectorv2.NewConnectorService(ctx, log, version).Start()
 		} else {
+			var configPath string
+			configPathFromEnv := os.Getenv("BORDER0_CONFIG_FILE")
 
 			// check if the config file is provided as a flag or environment variable
 			if connectorConfig != "" {
@@ -261,28 +262,6 @@ var connectorStartCmd = &cobra.Command{
 				} else {
 					log.Fatal("no default " + defaultConfigFileName + " config file found, neither in the current directory nor in '" + serviceConfigPath + "' please specify a config file with the --config flag")
 				}
-			}
-		}
-		parser := config.NewConfigParser()
-
-		log.Info("reading the config", zap.String("config_path", configPath))
-		cfg, err := parser.Parse(configPath)
-		if err != nil {
-			log.Fatal("failed to parse config", zap.String("error", err.Error()))
-		}
-
-		if err := cfg.Validate(); err != nil {
-			log.Fatal("failed to validate config", zap.String("error", err.Error()))
-		}
-
-		svc, err := config.StartSSMSession(cfg)
-		if err != nil {
-			log.Error("failed to start ssm session", zap.String("error", err.Error()))
-		}
-
-		if svc != nil {
-			if err := parser.LoadSSMInConfig(svc, cfg); err != nil {
-				log.Error("failed to load ssm config", zap.String("error", err.Error()))
 			}
 
 			parser := config.NewConfigParser()
@@ -306,12 +285,33 @@ var connectorStartCmd = &cobra.Command{
 				if err := parser.LoadSSMInConfig(svc, cfg); err != nil {
 					log.Error("failed to load ssm config", zap.String("error", err.Error()))
 				}
-			}
 
-			SetRlimit()
+				parser := config.NewConfigParser()
 
-			if err := connector.NewConnectorService(*cfg, log, version).Start(); err != nil {
-				log.Error("failed to start connector", zap.String("error", err.Error()))
+				log.Info("reading the config", zap.String("config_path", configPath))
+				cfg, err := parser.Parse(configPath)
+				if err != nil {
+					log.Fatal("failed to parse config", zap.String("error", err.Error()))
+				}
+
+				if err := cfg.Validate(); err != nil {
+					log.Fatal("failed to validate config", zap.String("error", err.Error()))
+				}
+
+				svc, err := config.StartSSMSession(cfg)
+				if err != nil {
+					log.Error("failed to start ssm session", zap.String("error", err.Error()))
+				}
+
+				if svc != nil {
+					if err := parser.LoadSSMInConfig(svc, cfg); err != nil {
+						log.Error("failed to load ssm config", zap.String("error", err.Error()))
+					}
+				}
+
+				if err := connector.NewConnectorService(*cfg, log, version).Start(); err != nil {
+					log.Error("failed to start connector", zap.String("error", err.Error()))
+				}
 			}
 		}
 	},
