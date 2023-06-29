@@ -398,20 +398,24 @@ func (c *ConnectorService) handleSocketConfig(action pb.Action, config *pb.Socke
 		}
 
 		c.sockets[config.GetId()] = socket
-
 	case pb.Action_UPDATE:
 		c.logger.Info("updating socket", zap.Any("socket", config))
 
-		// plugin, ok := c.plugins[config.GetId()]
-		// if !ok {
-		// 	return fmt.Errorf("plugin does not exist")
-		// }
+		socket, ok := c.sockets[config.GetId()]
+		if !ok {
+			return fmt.Errorf("socket does not exist")
+		}
 
-		// if err := plugin.Update(config); err != nil {
-		// 	return fmt.Errorf("failed to update plugin: %w", err)
-		// }
+		if !socket.IsClosed() {
+			socket.Close()
+		}
 
-		return nil
+		socket, err := c.newSocket(config)
+		if err != nil {
+			return fmt.Errorf("failed to register plugin: %w", err)
+		}
+
+		c.sockets[config.GetId()] = socket
 	case pb.Action_DELETE:
 		c.logger.Info("deleting socket", zap.Any("socket", config))
 
@@ -420,13 +424,11 @@ func (c *ConnectorService) handleSocketConfig(action pb.Action, config *pb.Socke
 			return fmt.Errorf("socket does not exists")
 		}
 
-		delete(c.sockets, config.GetId())
-
-		if err := socket.Close(); err != nil {
-			return fmt.Errorf("failed to close socket: %w", err)
+		if !socket.IsClosed() {
+			socket.Close()
 		}
-		return nil
 
+		delete(c.sockets, config.GetId())
 	default:
 		return fmt.Errorf("unknown action: %s", action)
 	}
@@ -439,8 +441,6 @@ func (c *ConnectorService) newSocket(config *pb.SocketConfig) (*border0.Socket, 
 	s := models.Socket{
 		SocketID:   config.GetId(),
 		SocketType: config.GetType(),
-		// SSHServer:  config.GetSshServer(),
-		// ConnectorAuthenticationEnabled: true,
 	}
 
 	socket, err := border0.NewSocketFromConnectorAPI(c.context, c, s, c.organization)

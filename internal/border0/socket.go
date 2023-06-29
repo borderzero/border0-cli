@@ -87,6 +87,12 @@ func (e border0NetError) Error() string   { return "Border0 network error " + st
 func (e border0NetError) Timeout() bool   { return false }
 func (e border0NetError) Temporary() bool { return true }
 
+type PermanentError struct {
+	Message string
+}
+
+func (e PermanentError) Error() string { return e.Message }
+
 func NewSocket(ctx context.Context, border0API api.API, nameOrID string) (*Socket, error) {
 	socketFromApi, err := border0API.GetSocket(ctx, nameOrID)
 	if err != nil {
@@ -173,24 +179,27 @@ func (s *Socket) Listen() (net.Listener, error) {
 
 	go s.tunnelConnect()
 
-	select {
-	case err := <-s.errChan:
-		return nil, err
-	case <-s.context.Done():
-		return nil, s.context.Err()
-	case <-s.readyChan:
-	}
-
 	go func() {
 		for {
 			select {
 			case err := <-s.errChan:
 				log.Printf("border0 listener: %v", err)
+				if _, ok := err.(PermanentError); ok {
+					log.Printf("border0 listener: permanent error, exiting")
+					s.cancel()
+					return
+				}
 			case <-s.context.Done():
 				return
 			}
 		}
 	}()
+
+	select {
+	case <-s.context.Done():
+		return nil, s.context.Err()
+	case <-s.readyChan:
+	}
 
 	newConn := make(chan net.Conn)
 	go func() {
@@ -238,13 +247,13 @@ func (s *Socket) Listen() (net.Listener, error) {
 func (s *Socket) tunnelConnect() {
 	defer close(s.errChan)
 	if err := s.generateSSHKeyPair(); err != nil {
-		s.errChan <- err
+		s.errChan <- PermanentError{fmt.Sprintf("failed to generate ssh key pair: %v", err)}
 		return
 	}
 
 	userID, err := s.border0API.GetUserID()
 	if err != nil {
-		s.errChan <- fmt.Errorf("failed to get userid from token: %v", err)
+		s.errChan <- PermanentError{fmt.Sprintf("failed to get userid from token: %v", err)}
 		return
 	}
 
@@ -260,7 +269,7 @@ func (s *Socket) tunnelConnect() {
 
 	err = backoff.Retry(func() error {
 		if err := s.refreshSSHCert(); err != nil {
-			fmt.Printf("failed to refresh tunnel certificate (%s), retrying...\n", err)
+			s.errChan <- fmt.Errorf("failed to refresh tunnel certificate: %s", err)
 			return err
 		}
 
@@ -268,7 +277,6 @@ func (s *Socket) tunnelConnect() {
 		sshConfig.Auth = []ssh.AuthMethod{ssh.PublicKeys(s.sshSigner)}
 
 		if err = s.sshConnect(sshConfig, ebackoff); err != nil {
-			fmt.Printf("failed to connect to server (%s), retrying...\n", err)
 			s.errChan <- fmt.Errorf("failed to connect to server: %s", err)
 			return err
 		}
