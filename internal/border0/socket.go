@@ -43,13 +43,18 @@ const (
 	proxyHostRegex                        = "^http(s)?://"
 )
 
+type Border0API interface {
+	GetUserID() (string, error)
+	SignSSHKey(ctx context.Context, socketID string, publicKey []byte) (string, string, error)
+}
+
 type Socket struct {
 	SocketID                         string
 	SocketType                       string
 	UpstreamType                     string
 	ConnectorAuthenticationEnabled   bool
 	ConnectorAuthenticationTLSConfig *tls.Config
-	border0API                       api.API
+	border0API                       Border0API
 	keyPair                          sshKeyPair
 	sshSigner                        ssh.Signer
 	tunnelHost                       string
@@ -63,6 +68,7 @@ type Socket struct {
 	acceptChan                       chan connWithError
 	context                          context.Context
 	cancel                           context.CancelFunc
+	Socket                           *models.Socket
 }
 
 type connWithError struct {
@@ -100,7 +106,7 @@ func NewSocket(ctx context.Context, border0API api.API, nameOrID string) (*Socke
 		UpstreamType:                   socketFromApi.UpstreamType,
 		ConnectorAuthenticationEnabled: socketFromApi.ConnectorAuthenticationEnabled,
 		border0API:                     border0API,
-		tunnelHost:                     getTunnelHost(),
+		tunnelHost:                     TunnelHost(),
 		errChan:                        make(chan error),
 		readyChan:                      make(chan bool),
 		Organization:                   org,
@@ -108,6 +114,27 @@ func NewSocket(ctx context.Context, border0API api.API, nameOrID string) (*Socke
 
 		context: sckContext,
 		cancel:  sckCancel,
+	}, nil
+}
+
+func NewSocketFromConnectorAPI(ctx context.Context, border0API Border0API, socket models.Socket, org *models.Organization) (*Socket, error) {
+	newCtx, cancel := context.WithCancel(context.Background())
+
+	return &Socket{
+		SocketID:                       socket.SocketID,
+		SocketType:                     socket.SocketType,
+		UpstreamType:                   socket.UpstreamType,
+		ConnectorAuthenticationEnabled: socket.ConnectorAuthenticationEnabled,
+		border0API:                     border0API,
+		tunnelHost:                     TunnelHost(),
+		errChan:                        make(chan error),
+		readyChan:                      make(chan bool),
+		Organization:                   org,
+		acceptChan:                     make(chan connWithError),
+		Socket:                         &socket,
+
+		context: newCtx,
+		cancel:  cancel,
 	}, nil
 }
 
@@ -135,8 +162,6 @@ func (s *Socket) WithProxy(proxyHost string) error {
 }
 
 func (s *Socket) Listen() (net.Listener, error) {
-	s.border0API.StartRefreshAccessTokenJob(s.context)
-
 	if s.ConnectorAuthenticationEnabled {
 		tlsConfig, err := s.generateConnectorAuthenticationTLSConfig()
 		if err != nil {
@@ -243,6 +268,7 @@ func (s *Socket) tunnelConnect() {
 		sshConfig.Auth = []ssh.AuthMethod{ssh.PublicKeys(s.sshSigner)}
 
 		if err = s.sshConnect(sshConfig, ebackoff); err != nil {
+			fmt.Printf("failed to connect to server (%s), retrying...\n", err)
 			s.errChan <- fmt.Errorf("failed to connect to server: %s", err)
 			return err
 		}
@@ -412,7 +438,7 @@ func (s *Socket) refreshSSHCert() error {
 	return nil
 }
 
-func getTunnelHost() string {
+func TunnelHost() string {
 	if os.Getenv(tunnelHostEnvVar) != "" {
 		if !strings.Contains(os.Getenv(tunnelHostEnvVar), ":") {
 			return net.JoinHostPort(os.Getenv(tunnelHostEnvVar), strconv.Itoa(defaultTunnelPort))

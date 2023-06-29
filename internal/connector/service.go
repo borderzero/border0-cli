@@ -47,6 +47,8 @@ func (c *ConnectorService) Start() error {
 	//setup the version for border0
 	border0API.With(api.WithVersion(c.version))
 
+	border0API.StartRefreshAccessTokenJob(ctx)
+
 	var plugins []discover.Discover
 	if len(c.cfg.AwsGroups) > 0 {
 		sess, err := session.NewSessionWithOptions(session.Options{

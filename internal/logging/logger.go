@@ -3,6 +3,7 @@ package logging
 import (
 	"os"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -15,6 +16,7 @@ func BuildProduction() (*zap.Logger, error) {
 	c.Level = zap.NewAtomicLevelAt(logLevel)
 	c.EncoderConfig.StacktraceKey = ""
 	c.EncoderConfig.CallerKey = ""
+	c.EncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout(time.RFC3339)
 
 	log, err := c.Build()
 	if err != nil {

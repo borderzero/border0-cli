@@ -59,6 +59,10 @@ type ECSSSMProxy struct {
 }
 
 func BuildProxyConfig(socket models.Socket, AWSRegion, AWSProfile string) (*ProxyConfig, error) {
+	if socket.ConnectorLocalData == nil {
+		return nil, nil
+	}
+
 	if socket.ConnectorLocalData.UpstreamUsername == "" && socket.ConnectorLocalData.UpstreamPassword == "" &&
 		socket.ConnectorLocalData.UpstreamIdentifyFile == "" && socket.ConnectorLocalData.AWSEC2Target == "" &&
 		socket.UpstreamType != "aws-ssm" {

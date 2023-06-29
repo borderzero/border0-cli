@@ -20,6 +20,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.19.0
 	github.com/aws/session-manager-plugin v0.0.0-20230315220744-7b544e9f381d
 	github.com/bluele/factory-go v0.0.1
+	github.com/borderzero/border0-proto v0.0.0-20230613085511-b390af6b07b0
 	github.com/brianvoe/gofakeit v3.18.0+incompatible
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/creack/pty v1.1.18
@@ -28,6 +29,7 @@ require (
 	github.com/gliderlabs/ssh v0.3.5
 	github.com/go-mysql-org/go-mysql v1.7.0
 	github.com/golang-jwt/jwt v3.2.2+incompatible
+	github.com/google/uuid v1.3.0
 	github.com/ivanpirog/coloredcobra v1.0.1
 	github.com/jackc/pgconn v1.14.0
 	github.com/jackc/pgproto3/v2 v2.3.2
@@ -51,6 +53,7 @@ require (
 	golang.org/x/sync v0.2.0
 	golang.org/x/sys v0.8.0
 	golang.org/x/term v0.8.0
+	google.golang.org/grpc v1.55.0
 	k8s.io/api v0.27.2
 	k8s.io/apimachinery v0.27.2
 	k8s.io/client-go v0.27.2
@@ -76,7 +79,6 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/s2a-go v0.1.4 // indirect
-	github.com/google/uuid v1.3.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.2.3 // indirect
 	github.com/googleapis/gax-go/v2 v2.9.1 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
@@ -102,7 +104,6 @@ require (
 	google.golang.org/api v0.124.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20230525234020-1aefcd67740a // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230526203410-71b5a4ffd15e // indirect
-	google.golang.org/grpc v1.55.0 // indirect
 	gotest.tools/v3 v3.4.0 // indirect
 )
 
@@ -166,7 +167,7 @@ require (
 	golang.org/x/text v0.9.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/protobuf v1.30.0 // indirect
+	google.golang.org/protobuf v1.30.0
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0

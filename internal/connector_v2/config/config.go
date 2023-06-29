@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/borderzero/border0-cli/lib/varsource"
@@ -12,36 +13,50 @@ import (
 )
 
 const (
-	envNameBorder0ConfigFile = "B0_CONFIG_FILE"
-	envNameBorder0Token      = "B0_TOKEN"
-	envNamePrefixBorder0Var  = "B0_VAR_"
+	envNameConfigFile                 = "BORDER0_CONFIG_FILE"
+	envNameToken                      = "BORDER0_TOKEN"
+	envNameConnectorServer            = "BORDER0_CONNECTOR_SERVER"
+	envNameConnectorInsecureTransport = "BORDER0_CONNECTOR_INSECURE_TRANSPORT"
+	envNameTunnelServer               = "BORDER0_TUNNEL_SERVER"
+
+	envNamePrefixBorder0Var = "B0_VAR_"
 
 	envNameAndValueDelimeter = "="
 
 	defaultCredentialsFilePath = ".border0/config.yml"
+
+	DefaultConnectorServer = "api.border0.com:443"
+	DefaultTunnelServer    = "tunnel.border0.com"
 )
 
 // Configuration represents (static) connector configuration
 type Configuration struct {
-	Token     string            `yaml:"token"`
-	Variables map[string]string `yaml:"variables,omitempty"`
+	Token                      string            `yaml:"token"`
+	ConnectorServer            string            `yaml:"connector_server"`
+	ConnectorInsecureTransport bool              `yaml:"connector_insecure"`
+	TunnelServer               string            `yaml:"tunnel_server"`
+	Variables                  map[string]string `yaml:"variables,omitempty"`
 }
 
 // GetConfiguration looks for credentials and variables in the standard variable chain.
 // i.e. environment variabels take priority and override any values in config files.
 func GetConfiguration(ctx context.Context) (*Configuration, error) {
 	vs := varsource.NewDefaultVariableSource()
-	config := &Configuration{}
+	config := &Configuration{
+		ConnectorServer:            DefaultConnectorServer,
+		ConnectorInsecureTransport: false,
+		TunnelServer:               DefaultTunnelServer,
+	}
 
 	// if a non-default config file path is provided via
 	// the environment, use it and error on any failure
-	path := os.Getenv(envNameBorder0ConfigFile)
+	path := os.Getenv(envNameConfigFile)
 	if path != "" {
 		_, err := os.Stat(path)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"failed to find configuration file specified via environment variable %s (%s): %v",
-				envNameBorder0ConfigFile,
+				envNameConfigFile,
 				path,
 				err,
 			)
@@ -49,7 +64,7 @@ func GetConfiguration(ctx context.Context) (*Configuration, error) {
 		if err = unmarshalConfiguration(path, config); err != nil {
 			return nil, fmt.Errorf(
 				"failed to read configuration file specified via environment variable %s (%s): %v",
-				envNameBorder0ConfigFile,
+				envNameConfigFile,
 				path,
 				err,
 			)
@@ -81,8 +96,8 @@ func GetConfiguration(ctx context.Context) (*Configuration, error) {
 	}
 
 	// if there is a token in the environment, overwrite that read from config file
-	if os.Getenv(envNameBorder0Token) != "" {
-		config.Token = os.Getenv(envNameBorder0Token)
+	if os.Getenv(envNameToken) != "" {
+		config.Token = os.Getenv(envNameToken)
 	}
 
 	// if there was no token in env nor in config file, error out
@@ -96,6 +111,40 @@ func GetConfiguration(ctx context.Context) (*Configuration, error) {
 		return nil, fmt.Errorf("failed to process token value: %v", err)
 	}
 	config.Token = token
+
+	// if there is a connector server in the environment, overwrite that read from config file
+	if os.Getenv(envNameConnectorServer) != "" {
+		config.ConnectorServer = os.Getenv(envNameConnectorServer)
+	}
+
+	// if the connector server is a pointer to some upstream source, fetch it
+	connectorServer, err := vs.GetVariable(ctx, config.ConnectorServer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to process connectorServer value: %v", err)
+	}
+	config.ConnectorServer = connectorServer
+
+	// if there is a connector insecure in the environment, overwrite that read from config file
+	if os.Getenv(envNameConnectorInsecureTransport) != "" {
+		connectorInsecureTransport, err := strconv.ParseBool(os.Getenv(envNameConnectorInsecureTransport))
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse connectorInsecure value: %v", err)
+		}
+
+		config.ConnectorInsecureTransport = connectorInsecureTransport
+	}
+
+	// if there is a tunnel server in the environment, overwrite that read from config file
+	if os.Getenv(envNameTunnelServer) != "" {
+		config.TunnelServer = os.Getenv(envNameTunnelServer)
+	}
+
+	// if the connector server is a pointer to some upstream source, fetch it
+	tunnelServer, err := vs.GetVariable(ctx, config.TunnelServer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to process tunnelServer value: %v", err)
+	}
+	config.TunnelServer = tunnelServer
 
 	// if there were no variables defined in a config file, init empty map
 	if config.Variables == nil {

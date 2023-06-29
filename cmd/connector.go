@@ -25,6 +25,7 @@ import (
 	"github.com/borderzero/border0-cli/internal/connector/install"
 	"github.com/borderzero/border0-cli/internal/connector/service_daemon"
 
+	connectorv2 "github.com/borderzero/border0-cli/internal/connector_v2"
 	"github.com/borderzero/border0-cli/internal/http"
 	"github.com/borderzero/border0-cli/internal/logging"
 	"github.com/spf13/cobra"
@@ -46,6 +47,7 @@ const (
 var defaultConfigFileName = "border0.yaml"
 var serviceConfigPath = "/etc/border0/"
 var serviceName = "border0"
+var v2 bool
 
 type TemplateConnectorConfig struct {
 	Connector struct {
@@ -234,26 +236,33 @@ var connectorStartCmd = &cobra.Command{
 		var configPath string
 		configPathFromEnv := os.Getenv("BORDER0_CONFIG_FILE")
 
-		// check if the config file is provided as a flag or environment variable
-		if connectorConfig != "" {
-			configPath = connectorConfig
+		if v2 {
+			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
 
-		} else if configPathFromEnv != "" {
-			configPath = configPathFromEnv
+			connectorv2.NewConnectorService(ctx, log, version).Start()
 		} else {
-			// check if defaultConfigFileName "border0.yaml" exists in the current directory
-			// if not check if it exists in the serviceConfigPath directory
-			if _, err := os.Stat(defaultConfigFileName); err == nil {
-				configPath = filepath.Join(defaultConfigFileName)
-				log.Info("using config file in the current directory", zap.String("config_path", configPath))
-			} else if _, err := os.Stat(serviceConfigPath + defaultConfigFileName); err == nil {
-				configPath = filepath.Join(serviceConfigPath + defaultConfigFileName)
-				log.Info("using config file in the service config directory", zap.String("config_path", configPath))
+
+			// check if the config file is provided as a flag or environment variable
+			if connectorConfig != "" {
+				configPath = connectorConfig
+
+			} else if configPathFromEnv != "" {
+				configPath = configPathFromEnv
 			} else {
-				log.Fatal("no default " + defaultConfigFileName + " config file found, neither in the current directory nor in '" + serviceConfigPath + "' please specify a config file with the --config flag")
+				// check if defaultConfigFileName "border0.yaml" exists in the current directory
+				// if not check if it exists in the serviceConfigPath directory
+				if _, err := os.Stat(defaultConfigFileName); err == nil {
+					configPath = filepath.Join(defaultConfigFileName)
+					log.Info("using config file in the current directory", zap.String("config_path", configPath))
+				} else if _, err := os.Stat(serviceConfigPath + defaultConfigFileName); err == nil {
+					configPath = filepath.Join(serviceConfigPath + defaultConfigFileName)
+					log.Info("using config file in the service config directory", zap.String("config_path", configPath))
+				} else {
+					log.Fatal("no default " + defaultConfigFileName + " config file found, neither in the current directory nor in '" + serviceConfigPath + "' please specify a config file with the --config flag")
+				}
 			}
 		}
-
 		parser := config.NewConfigParser()
 
 		log.Info("reading the config", zap.String("config_path", configPath))
@@ -275,11 +284,35 @@ var connectorStartCmd = &cobra.Command{
 			if err := parser.LoadSSMInConfig(svc, cfg); err != nil {
 				log.Error("failed to load ssm config", zap.String("error", err.Error()))
 			}
-		}
 
-		SetRlimit()
-		if err := connector.NewConnectorService(*cfg, log, version).Start(); err != nil {
-			log.Error("failed to start connector", zap.String("error", err.Error()))
+			parser := config.NewConfigParser()
+
+			log.Info("reading the config", zap.String("config_path", configPath))
+			cfg, err := parser.Parse(configPath)
+			if err != nil {
+				log.Fatal("failed to parse config", zap.String("error", err.Error()))
+			}
+
+			if err := cfg.Validate(); err != nil {
+				log.Fatal("failed to validate config", zap.String("error", err.Error()))
+			}
+
+			svc, err := config.StartSSMSession(cfg)
+			if err != nil {
+				log.Error("failed to start ssm session", zap.String("error", err.Error()))
+			}
+
+			if svc != nil {
+				if err := parser.LoadSSMInConfig(svc, cfg); err != nil {
+					log.Error("failed to load ssm config", zap.String("error", err.Error()))
+				}
+			}
+
+			SetRlimit()
+
+			if err := connector.NewConnectorService(*cfg, log, version).Start(); err != nil {
+				log.Error("failed to start connector", zap.String("error", err.Error()))
+			}
 		}
 	},
 }
@@ -626,6 +659,8 @@ var connectorStatusCmd = &cobra.Command{
 
 func init() {
 	connectorStartCmd.Flags().StringVarP(&connectorConfig, "config", "f", "", "yaml configuration file for connector service, see https://docs.border0.com for more info")
+	connectorStartCmd.Flags().BoolVarP(&v2, "v2", "", false, "use connector v2")
+	connectorStartCmd.Flag("v2").Hidden = true
 	connectorCmd.AddCommand(connectorStartCmd)
 	connectorCmd.AddCommand(connectorStopCmd)
 	connectorCmd.AddCommand(connectorStatusCmd)
