@@ -2,7 +2,6 @@ package db
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -89,7 +88,7 @@ var mysqlWorkbenchCmd = &cobra.Command{
 			}
 		}
 		xmlPath := filepath.Join(configPath, "connections.xml")
-		if err = ioutil.WriteFile(xmlPath, []byte(xmlDoc), 0600); err != nil {
+		if err = os.WriteFile(xmlPath, []byte(xmlDoc), 0600); err != nil {
 			return fmt.Errorf("failed writing MySQL Workbench connections.xml file: %w", err)
 		}
 

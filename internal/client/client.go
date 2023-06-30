@@ -795,7 +795,7 @@ func StartConnectorAuthListener(addr string, certificate tls.Certificate, port i
 			go func() {
 				conn, err := ConnectorAuthConnect(addr, tlsConfig)
 				if err != nil {
-					log.Printf("Failed to connect: %v", err)
+					log.Printf("failed to connect: %v", err)
 					return
 				}
 
@@ -810,7 +810,7 @@ func StartConnectorAuthListener(addr string, certificate tls.Certificate, port i
 func ConnectorAuthConnect(addr string, tlsConfig *tls.Config) (conn net.Conn, err error) {
 	conn, err = tls.Dial("tcp", addr, tlsConfig)
 	if err != nil {
-		log.Printf("Failed to connect: %v", err)
+		log.Printf("failed to connect: %v", err)
 		return
 	}
 

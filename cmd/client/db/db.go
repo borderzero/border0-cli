@@ -6,12 +6,15 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/borderzero/border0-cli/client/preference"
 	"github.com/borderzero/border0-cli/internal/client"
+	"github.com/borderzero/border0-cli/internal/client/sqlclientproxy"
 	"github.com/borderzero/border0-cli/internal/enum"
 	"github.com/spf13/cobra"
 )
 
 var (
 	hostname string
+	local    bool
+	port     int
 )
 
 func AddCommandsTo(client *cobra.Command) {
@@ -22,6 +25,9 @@ func AddCommandsTo(client *cobra.Command) {
 	addOneCommandTo(dbeaverCmd, client)
 	addOneCommandTo(psqlCmd, client)
 	addOneCommandTo(pgcliCmd, client)
+
+	dbCmd.Flags().BoolVarP(&local, "local", "l", false, "start a local listener")
+	dbCmd.Flags().IntVarP(&port, "port", "p", 0, "local listener port")
 }
 
 func addOneCommandTo(cmdToAdd, cmdAddedTo *cobra.Command) {
@@ -46,6 +52,15 @@ var dbCmd = &cobra.Command{
 			return err
 		}
 		hostname = pickedHost.Hostname()
+
+		if local {
+			proxy, err := sqlclientproxy.NewSqlClientProxy(port, pickedHost)
+			if err != nil {
+				return fmt.Errorf("failed to start local listener: %w", err)
+			}
+
+			return proxy.Listen()
+		}
 
 		// Let's read preferences from the config file
 		pref, err := preference.Read()
