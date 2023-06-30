@@ -79,29 +79,27 @@ var dbCmd = &cobra.Command{
 			}
 		}
 
-		dbName, err = client.EnterDBName(dbName, suggestedDBName)
-		if err != nil {
-			return err
-		}
-
 		var (
 			dbClient            string
-			dbClients           []string
+			dbClients           = []string{"local listener"}
 			dbClientsMySQL      = []string{"mysql", "mysqlworkbench", "mycli", "dbeaver"}
 			dbClientsPostgreSQL = []string{"psql", "pgcli"}
 		)
+
 		switch pickedHost.DatabaseType {
 		case "mysql":
-			dbClients = dbClientsMySQL
+			dbClients = append(dbClients, dbClientsMySQL...)
 		case "postgres":
-			dbClients = dbClientsPostgreSQL
+			dbClients = append(dbClients, dbClientsPostgreSQL...)
 		default:
-			dbClients = dbClientsMySQL
+			dbClients = append(dbClients, dbClientsMySQL...)
 		}
+
 		prompt := &survey.Select{
 			Message: "choose a client:",
 			Options: dbClients,
 		}
+
 		if suggestedDBClient != "" {
 			for _, oneDBClient := range dbClients {
 				if oneDBClient == suggestedDBClient {
@@ -110,6 +108,20 @@ var dbCmd = &cobra.Command{
 			}
 		}
 		if err := survey.AskOne(prompt, &dbClient); err != nil {
+			return err
+		}
+
+		if dbClient == "local listener" {
+			proxy, err := sqlclientproxy.NewSqlClientProxy(port, pickedHost)
+			if err != nil {
+				return fmt.Errorf("failed to start local listener: %w", err)
+			}
+
+			return proxy.Listen()
+		}
+
+		dbName, err = client.EnterDBName(dbName, suggestedDBName)
+		if err != nil {
 			return err
 		}
 
