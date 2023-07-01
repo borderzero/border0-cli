@@ -25,6 +25,7 @@ func AddCommandsTo(client *cobra.Command) {
 	addOneCommandTo(dbeaverCmd, client)
 	addOneCommandTo(psqlCmd, client)
 	addOneCommandTo(pgcliCmd, client)
+	addOneCommandTo(dataGripCmd, client)
 
 	dbCmd.Flags().BoolVarP(&local, "local", "l", false, "start a local listener")
 	dbCmd.Flags().IntVarP(&port, "port", "p", 0, "local listener port")
@@ -82,8 +83,8 @@ var dbCmd = &cobra.Command{
 		var (
 			dbClient            string
 			dbClients           = []string{"local listener"}
-			dbClientsMySQL      = []string{"mysql", "mysqlworkbench", "mycli", "dbeaver"}
-			dbClientsPostgreSQL = []string{"psql", "pgcli"}
+			dbClientsMySQL      = []string{"mysql", "mysqlworkbench", "mycli", "dbeaver", "datagrip"}
+			dbClientsPostgreSQL = []string{"psql", "pgcli", "datagrip"}
 		)
 
 		switch pickedHost.DatabaseType {

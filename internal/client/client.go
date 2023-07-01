@@ -642,6 +642,32 @@ func ExecCommand(name string, arg ...string) error {
 	return cmd.Run()
 }
 
+func FindWindowsExecutable(parentDir, contains, suffix string) string {
+	var (
+		latestPath    string
+		latestModTime time.Time
+	)
+
+	_ = filepath.Walk(parentDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Check if path matches the pattern
+		if strings.Contains(path, contains) && strings.HasSuffix(path, suffix) {
+			// Found the DataGrip executable
+			if info.ModTime().After(latestModTime) {
+				latestPath = path
+				latestModTime = info.ModTime()
+			}
+		}
+
+		return nil
+	})
+
+	return latestPath
+}
+
 func CertToKeyStore(cert *x509.Certificate, key *rsa.PrivateKey) (ks keystore.KeyStore, pass []byte, err error) {
 	// for more about keystore and jdbc to mysql connection with ssl, see:
 	// https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-using-ssl.html

@@ -1,7 +1,9 @@
 package db
 
 import (
+	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -10,14 +12,14 @@ import (
 
 	"github.com/borderzero/border0-cli/client/preference"
 	"github.com/borderzero/border0-cli/internal/client"
-	"github.com/borderzero/border0-cli/internal/client/mysqlworkbench"
+	"github.com/borderzero/border0-cli/internal/client/datagrip"
 	"github.com/borderzero/border0-cli/internal/enum"
 	"github.com/spf13/cobra"
 )
 
-var mysqlWorkbenchCmd = &cobra.Command{
-	Use:   "db:mysqlworkbench",
-	Short: "Connect to a database socket with MySQL Workbench",
+var dataGripCmd = &cobra.Command{
+	Use:   "db:datagrip",
+	Short: "Connect to a database socket with DataGrip",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		pickedHost, err := client.PickHost(hostname, enum.DatabaseSocket)
 		if err != nil {
@@ -49,7 +51,7 @@ var mysqlWorkbenchCmd = &cobra.Command{
 		}
 
 		socketPref.DatabaseName = dbName
-		socketPref.DatabaseClient = "mysqlworkbench"
+		socketPref.DatabaseClient = "datagrip"
 		pref.SetSocket(socketPref)
 
 		info, err := client.GetResourceInfo(hostname)
@@ -62,34 +64,50 @@ var mysqlWorkbenchCmd = &cobra.Command{
 		if info.ConnectorAuthenticationEnabled {
 			info.Port, err = client.StartConnectorAuthListener(fmt.Sprintf("%s:%d", hostname, info.Port), info.SetupTLSCertificate(), 0)
 			if err != nil {
-				fmt.Println("ERROR: could not setup listener:", err)
-				return err
+				return fmt.Errorf("could not start listener: %w", err)
 			}
 
 			hostname = "localhost"
 		}
 
-		// for more info about mysql workbench command line options and config files, see:
-		// https://dev.mysql.com/doc/workbench/en/wb-command-line-options.html
-		// https://dev.mysql.com/doc/workbench/en/wb-configuring-files.html
-		xmlDoc, err := mysqlworkbench.ConnectionsXML(connectionName, hostname, info.Port, info.CertificatePath, info.PrivateKeyPath, dbName)
+		certChainPath, err := client.DownloadCertificateChain(hostname)
+		if err != nil {
+			return err
+		}
+
+		xmlDoc, err := datagrip.DataSourcesXML(&datagrip.Config{
+			Type:        pickedHost.DatabaseType,
+			Name:        connectionName,
+			Host:        hostname,
+			Port:        info.Port,
+			Database:    dbName,
+			CAPath:      certChainPath,
+			SSLCertPath: info.CertificatePath,
+			SSLKeyPath:  info.PrivateKeyPath,
+		})
 		if err != nil {
 			return err
 		}
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return fmt.Errorf("failed to get home dir : %w", err)
+			return fmt.Errorf("failed to get home dir: %w", err)
 		}
 		// create dir if not exists
-		configPath := filepath.Join(home, ".border0", "mysqlworkbench")
+		configPath := filepath.Join(home, ".border0", fmt.Sprintf("datagrip_%s", connectionName))
 		if _, err := os.Stat(configPath); os.IsNotExist(err) {
 			if err := os.Mkdir(configPath, 0700); err != nil {
-				return fmt.Errorf("failed to create directory %s : %w", configPath, err)
+				return fmt.Errorf("failed to create directory %s: %w", configPath, err)
 			}
 		}
-		xmlPath := filepath.Join(configPath, "connections.xml")
-		if err = os.WriteFile(xmlPath, []byte(xmlDoc), 0600); err != nil {
-			return fmt.Errorf("failed writing MySQL Workbench connections.xml file: %w", err)
+		dotIdeaPath := filepath.Join(configPath, ".idea")
+		if _, err := os.Stat(dotIdeaPath); os.IsNotExist(err) {
+			if err := os.Mkdir(dotIdeaPath, 0700); err != nil {
+				return fmt.Errorf("failed to create directory %s: %w", dotIdeaPath, err)
+			}
+		}
+		xmlPath := filepath.Join(dotIdeaPath, "dataSources.xml")
+		if err = ioutil.WriteFile(xmlPath, []byte(xmlDoc), 0600); err != nil {
+			return fmt.Errorf("failed writing DataGrip dataSources.xml file: %w", err)
 		}
 
 		persistPreference := func() {
@@ -104,21 +122,22 @@ var mysqlWorkbenchCmd = &cobra.Command{
 		defer persistPreference()
 		client.OnInterruptDo(persistPreference)
 
-		fmt.Println("Starting up MySQL Workbench...")
+		fmt.Println("Starting up DataGrip...")
 		switch runtime.GOOS {
 		case "darwin":
-			err = client.ExecCommand("open", "-a", "MySQLWorkbench", "--args", "--configdir", configPath, "--query", connectionName)
+			err = client.ExecCommand("open", "-a", "datagrip", "--args", configPath)
 		case "windows":
-			command := []string{"cmd", "/C", "start", "", "MySQLWorkbench.exe", "--configdir", configPath, "--query", connectionName}
-			found := client.FindWindowsExecutable(`C:\Program Files\MySQL`, "MySQL Workbench", "MySQLWorkbench.exe")
+			command := []string{"cmd", "/C", "start", "", "datagrip.exe", configPath}
+			found := client.FindWindowsExecutable(`C:\Program Files\JetBrains`, "DataGrip", filepath.Join("bin", "datagrip64.exe"))
 			if len(found) > 0 {
-				command = []string{"cmd", "/C", "start", "", found, "--configdir", configPath, "--query", connectionName}
+				command = []string{"cmd", "/C", "start", "", found, configPath}
 			}
 			if err = client.ExecCommand(command[0], command[1:]...); err != nil {
-				return fmt.Errorf(`failed to start MySQL Workbench, please make sure the executable is either in system's PATH, or installed in C:\Program Files\`)
+				return errors.New(`failed to start DataGrip. Please make sure DataGrip executable (datagrip64.exe) is either in system's PATH, or installed in C:\Program Files\.`)
 			}
 		default:
-			err = client.ExecCommand("mysql-workbench", "--configdir", configPath, "--query", connectionName)
+			// linux
+			err = client.ExecCommand("datagrip", configPath)
 		}
 
 		if info.ConnectorAuthenticationEnabled {

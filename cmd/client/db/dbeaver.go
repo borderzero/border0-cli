@@ -128,8 +128,8 @@ var dbeaverCmd = &cobra.Command{
 		case "darwin":
 			err = client.ExecCommand("open", "-a", "dbeaver", "--args", "-con", conn)
 		case "windows":
-			conn = "\"" + conn + "\""
-			err = client.ExecCommand("cmd", "/C", "start", "", "c:\\Program Files\\DBeaver\\dbeaver.exe", "-con", conn)
+			conn = `"` + conn + `"`
+			err = client.ExecCommand("cmd", "/C", "start", "", `c:\Program Files\DBeaver\dbeaver.exe`, "-con", conn)
 		default:
 			err = client.ExecCommand("dbeaver", "-con", conn)
 		}
