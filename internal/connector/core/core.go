@@ -27,13 +27,13 @@ type connectTunnelData struct {
 	action string
 }
 type ConnectorCore struct {
-	discovery  discover.Discover
-	cfg        config.Config
-	border0API api.API
-	logger     *zap.Logger
-	version    string
+	numberOfRuns int64
+	discovery    discover.Discover
+	cfg          config.Config
+	border0API   api.API
+	logger       *zap.Logger
+	version      string
 
-	numberOfRuns     int64
 	discoverState    discover.DiscoverState
 	connectChan      chan connectTunnelData
 	connectedTunnels sync.Map
