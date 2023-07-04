@@ -3,8 +3,10 @@ package connectorv2
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/borderzero/border0-cli/internal/api/models"
@@ -25,6 +27,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -41,8 +45,10 @@ type ConnectorService struct {
 	heartbeatInterval int
 	plugins           map[string]plugin.Plugin
 	sockets           map[string]*border0.Socket
-	requests          map[string]chan *pb.ControlStreamReponse
-	organization      *models.Organization
+	// requests            map[string]chan *pb.ControlStreamReponse
+	requests            sync.Map
+	organization        *models.Organization
+	discoveryResultChan chan *plugin.PluginDiscoveryResults
 }
 
 func NewConnectorService(ctx context.Context, logger *zap.Logger, version string) *ConnectorService {
@@ -59,7 +65,8 @@ func NewConnectorService(ctx context.Context, logger *zap.Logger, version string
 		heartbeatInterval: 10,
 		plugins:           make(map[string]plugin.Plugin),
 		sockets:           make(map[string]*border0.Socket),
-		requests:          make(map[string]chan *pb.ControlStreamReponse),
+		// requests:            make(map[string]chan *pb.ControlStreamReponse),
+		discoveryResultChan: make(chan *plugin.PluginDiscoveryResults, 100),
 	}
 }
 
@@ -68,6 +75,7 @@ func (c *ConnectorService) Start() {
 	newCtx, cancel := context.WithCancel(c.context)
 
 	go c.StartControlStream(newCtx, cancel)
+	go c.handleDiscoveryResult(newCtx)
 
 	<-newCtx.Done()
 }
@@ -90,7 +98,7 @@ func (c *ConnectorService) heartbeat(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-time.After(time.Duration(c.heartbeatInterval) * time.Second):
-			if err := c.stream.Send(&pb.ControlStreamRequest{RequestType: &pb.ControlStreamRequest_Heartbeat{Heartbeat: &pb.HeartbeatRequest{}}}); err != nil {
+			if err := c.sendControlStreamRequest(&pb.ControlStreamRequest{RequestType: &pb.ControlStreamRequest_Heartbeat{Heartbeat: &pb.HeartbeatRequest{}}}); err != nil {
 				c.logger.Error("failed to send heartbeat", zap.Error(err))
 			}
 		}
@@ -181,9 +189,14 @@ func (c *ConnectorService) controlStream() error {
 					c.logger.Error("unknown config type", zap.Any("type", t))
 				}
 			case *pb.ControlStreamReponse_TunnelCertificateSignResponse:
-				if _, ok := c.requests[r.TunnelCertificateSignResponse.RequestId]; ok {
+				if v, ok := c.requests.Load(r.TunnelCertificateSignResponse.RequestId); ok {
+					// if _, ok := c.requests[r.TunnelCertificateSignResponse.RequestId]; ok {
+					responseChan, ok := v.(chan *pb.ControlStreamReponse)
+					if !ok {
+						c.logger.Error("failed to cast response channel", zap.String("request_id", r.TunnelCertificateSignResponse.RequestId))
+					}
 					select {
-					case c.requests[r.TunnelCertificateSignResponse.RequestId] <- msg.response:
+					case responseChan <- msg.response:
 					default:
 						c.logger.Error("failed to send response to request channel", zap.String("request_id", r.TunnelCertificateSignResponse.RequestId))
 					}
@@ -266,7 +279,7 @@ func (c *ConnectorService) handleInit(init *pb.Init) error {
 
 	for _, config := range pluginConfig {
 		var action pb.Action
-		if _, ok := c.plugins[config.GetName()]; ok {
+		if _, ok := c.plugins[config.GetId()]; ok {
 			action = pb.Action_UPDATE
 		} else {
 			action = pb.Action_CREATE
@@ -276,20 +289,20 @@ func (c *ConnectorService) handleInit(init *pb.Init) error {
 			return fmt.Errorf("failed to handle plugin config: %w", err)
 		}
 
-		knowPlugins = append(knowPlugins, config.GetName())
+		knowPlugins = append(knowPlugins, config.GetId())
 	}
 
-	for name := range c.plugins {
+	for id := range c.plugins {
 		var found bool
 		for _, knowPlugin := range knowPlugins {
-			if name == knowPlugin {
+			if id == knowPlugin {
 				found = true
 				break
 			}
 		}
 
 		if !found {
-			if err := c.handlePluginConfig(pb.Action_DELETE, &pb.PluginConfig{Name: name}); err != nil {
+			if err := c.handlePluginConfig(pb.Action_DELETE, &pb.PluginConfig{Id: id}); err != nil {
 				return fmt.Errorf("failed to handle plugin config: %w", err)
 			}
 		}
@@ -336,46 +349,53 @@ func (c *ConnectorService) handleInit(init *pb.Init) error {
 func (c *ConnectorService) handlePluginConfig(action pb.Action, config *pb.PluginConfig) error {
 	switch action {
 	case pb.Action_CREATE:
-		c.logger.Info("adding plugin", zap.Any("plugin", config))
+		c.logger.Info("new plugin", zap.String("plugin", config.GetName()))
 
-		if _, ok := c.plugins[config.GetName()]; ok {
+		if _, ok := c.plugins[config.GetId()]; ok {
 			return fmt.Errorf("plugin already exists")
 		}
 
-		plugin, err := plugin.NewPlugin(c.context, c.logger, config)
+		p, err := plugin.NewPlugin(c.context, c.logger, config)
 		if err != nil {
 			return fmt.Errorf("failed to register plugin: %w", err)
 		}
 
-		c.plugins[config.GetName()] = plugin
-	case pb.Action_UPDATE:
-		c.logger.Info("updating plugin", zap.Any("plugin", config))
+		go p.Start(c.context, c.discoveryResultChan)
 
-		plugin, ok := c.plugins[config.GetName()]
+		c.plugins[config.GetId()] = p
+	case pb.Action_UPDATE:
+		c.logger.Info("update plugin", zap.String("plugin", config.GetName()))
+
+		p, ok := c.plugins[config.GetId()]
 		if !ok {
 			return fmt.Errorf("plugin does not exist")
 		}
 
-		if err := plugin.Update(config); err != nil {
-			return fmt.Errorf("failed to update plugin: %w", err)
+		if err := p.Stop(); err != nil {
+			return fmt.Errorf("failed to stop plugin: %w", err)
 		}
 
-		return nil
-	case pb.Action_DELETE:
-		c.logger.Info("deleting plugin", zap.Any("plugin", config))
+		p, err := plugin.NewPlugin(c.context, c.logger, config)
+		if err != nil {
+			return fmt.Errorf("failed to register plugin: %w", err)
+		}
 
-		plugin, ok := c.plugins[config.GetName()]
+		go p.Start(c.context, c.discoveryResultChan)
+
+		c.plugins[config.GetId()] = p
+	case pb.Action_DELETE:
+		c.logger.Info("delete plugin", zap.String("plugin", config.GetId()))
+
+		p, ok := c.plugins[config.GetId()]
 		if !ok {
 			return fmt.Errorf("plugin does not exists")
 		}
 
-		if err := plugin.Delete(); err != nil {
+		if err := p.Stop(); err != nil {
 			return fmt.Errorf("failed to delete plugin: %w", err)
 		}
 
-		delete(c.plugins, config.GetName())
-		return nil
-
+		delete(c.plugins, config.GetId())
 	default:
 		return fmt.Errorf("unknown action: %s", action)
 	}
@@ -386,7 +406,7 @@ func (c *ConnectorService) handlePluginConfig(action pb.Action, config *pb.Plugi
 func (c *ConnectorService) handleSocketConfig(action pb.Action, config *pb.SocketConfig) error {
 	switch action {
 	case pb.Action_CREATE:
-		c.logger.Info("adding socket", zap.Any("socket", config))
+		c.logger.Info("new socket", zap.String("socket", config.GetName()))
 
 		if _, ok := c.sockets[config.GetId()]; ok {
 			return fmt.Errorf("socket already exists")
@@ -399,7 +419,7 @@ func (c *ConnectorService) handleSocketConfig(action pb.Action, config *pb.Socke
 
 		c.sockets[config.GetId()] = socket
 	case pb.Action_UPDATE:
-		c.logger.Info("updating socket", zap.Any("socket", config))
+		c.logger.Info("update socket", zap.String("socket", config.GetName()))
 
 		socket, ok := c.sockets[config.GetId()]
 		if !ok {
@@ -417,7 +437,7 @@ func (c *ConnectorService) handleSocketConfig(action pb.Action, config *pb.Socke
 
 		c.sockets[config.GetId()] = socket
 	case pb.Action_DELETE:
-		c.logger.Info("deleting socket", zap.Any("socket", config))
+		c.logger.Info("delete socket", zap.String("socket", config.GetId()))
 
 		socket, ok := c.sockets[config.GetId()]
 		if !ok {
@@ -438,9 +458,31 @@ func (c *ConnectorService) handleSocketConfig(action pb.Action, config *pb.Socke
 
 func (c *ConnectorService) newSocket(config *pb.SocketConfig) (*border0.Socket, error) {
 
+	var configMap map[string]interface{}
+	if err := util.AsStruct(config.GetConfig(), &configMap); err != nil {
+		return nil, fmt.Errorf("failed to parse socket config: %w", err)
+	}
+
 	s := models.Socket{
 		SocketID:   config.GetId(),
 		SocketType: config.GetType(),
+	}
+
+	switch config.GetType() {
+	case "ssh":
+		switch configMap["upstream_connection_type"] {
+		case "ssh":
+			s.TargetHostname = configMap["hostname"].(string)
+			s.TargetPort = int(configMap["port"].(float64))
+		case "aws_ssm":
+			s.UpstreamType = "aws-ssm"
+		case nil:
+			return nil, fmt.Errorf("upstream connection type is required")
+		default:
+			return nil, fmt.Errorf("unknown upstream connection type: %s", configMap["upstream_connection_type"])
+		}
+	default:
+		return nil, fmt.Errorf("unsupported socket type: %s", config.GetType())
 	}
 
 	socket, err := border0.NewSocketFromConnectorAPI(c.context, c, s, c.organization)
@@ -483,7 +525,7 @@ func (c *ConnectorService) SignSSHKey(ctx context.Context, socketID string, publ
 	}
 
 	requestId := uuid.New().String()
-	if err := c.stream.Send(&pb.ControlStreamRequest{
+	if err := c.sendControlStreamRequest(&pb.ControlStreamRequest{
 		RequestType: &pb.ControlStreamRequest_TunnelCertificateSignRequest{
 			TunnelCertificateSignRequest: &pb.TunnelCertificateSignRequest{
 				RequestId: requestId,
@@ -496,7 +538,7 @@ func (c *ConnectorService) SignSSHKey(ctx context.Context, socketID string, publ
 	}
 
 	recChan := make(chan *pb.ControlStreamReponse)
-	c.requests[requestId] = recChan
+	c.requests.Store(requestId, recChan)
 
 	select {
 	case <-time.After(5 * time.Second):
@@ -511,7 +553,7 @@ func (c *ConnectorService) SignSSHKey(ctx context.Context, socketID string, publ
 			return "", "", fmt.Errorf("invalid response")
 		}
 
-		delete(c.requests, response.GetRequestId())
+		c.requests.Delete(response.GetRequestId())
 		return response.GetCertificate(), response.GetHostkey(), nil
 	}
 }
@@ -554,9 +596,61 @@ func (c *ConnectorService) Listen(socket *border0.Socket) {
 			c.logger.Error("sql proxy failed", zap.String("socket", socket.SocketID), zap.Error(err))
 		}
 	default:
-		// if err := border0.Serve(l, socket.ConnectorData.TargetHostname, socket.ConnectorData.Port); err != nil {
-		if err := border0.Serve(l, "127.0.0.1", 2222); err != nil {
+		if err := border0.Serve(l, socket.Socket.TargetHostname, socket.Socket.TargetPort); err != nil {
 			c.logger.Error("proxy failed", zap.String("socket", socket.SocketID), zap.Error(err))
 		}
 	}
+}
+
+func (c *ConnectorService) handleDiscoveryResult(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case result := <-c.discoveryResultChan:
+			var resources []*structpb.Struct
+			for _, r := range result.Result.Resources {
+				jsonBytes, err := json.Marshal(r)
+				if err != nil {
+					c.logger.Error("failed to marshal resource", zap.Error(err))
+					continue
+				}
+
+				var structpbStruct structpb.Struct
+				err = json.Unmarshal(jsonBytes, &structpbStruct)
+				if err != nil {
+					c.logger.Error("failed to unmarshal resource", zap.Error(err))
+					continue
+				}
+
+				resources = append(resources, &structpbStruct)
+			}
+
+			if err := c.sendControlStreamRequest(&pb.ControlStreamRequest{
+				RequestType: &pb.ControlStreamRequest_PluginDiscoveryResults{
+					PluginDiscoveryResults: &pb.PluginDiscoveryResults{
+						PluginId: result.PluginID,
+						Metadata: &pb.PluginDiscoveryResultsMetadata{
+							DiscoveryId: result.Result.Metadata.DiscovererId,
+							StartedAt:   timestamppb.New(result.Result.Metadata.StartedAt),
+							EndedAt:     timestamppb.New(result.Result.Metadata.EndedAt),
+						},
+						Errors:    result.Result.Errors,
+						Resources: resources,
+					},
+				},
+			}); err != nil {
+				c.logger.Error("failed to send plugin discovery results", zap.Error(err))
+				continue
+			}
+		}
+	}
+}
+
+func (c *ConnectorService) sendControlStreamRequest(request *pb.ControlStreamRequest) error {
+	if c.stream == nil {
+		return fmt.Errorf("stream is not connected")
+	}
+
+	return c.stream.Send(request)
 }
