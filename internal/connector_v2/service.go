@@ -414,7 +414,7 @@ func (c *ConnectorService) handleSocketConfig(action pb.Action, config *pb.Socke
 
 		socket, err := c.newSocket(config)
 		if err != nil {
-			return fmt.Errorf("failed to register plugin: %w", err)
+			return fmt.Errorf("failed to create socket: %w", err)
 		}
 
 		c.sockets[config.GetId()] = socket
@@ -432,7 +432,7 @@ func (c *ConnectorService) handleSocketConfig(action pb.Action, config *pb.Socke
 
 		socket, err := c.newSocket(config)
 		if err != nil {
-			return fmt.Errorf("failed to register plugin: %w", err)
+			return fmt.Errorf("failed to create socket: %w", err)
 		}
 
 		c.sockets[config.GetId()] = socket
