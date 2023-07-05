@@ -22,7 +22,7 @@ require (
 	github.com/aws/session-manager-plugin v0.0.0-20230315220744-7b544e9f381d
 	github.com/bluele/factory-go v0.0.1
 	github.com/borderzero/border0-go v0.1.5
-	github.com/borderzero/border0-proto v0.0.0-20230703113850-398aae81e2fc
+	github.com/borderzero/border0-proto v1.0.0
 	github.com/borderzero/discovery v0.1.6
 	github.com/brianvoe/gofakeit v3.18.0+incompatible
 	github.com/cenkalti/backoff/v4 v4.2.1
