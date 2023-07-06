@@ -23,10 +23,11 @@ import (
 	"github.com/borderzero/border0-cli/internal/connector"
 	"github.com/borderzero/border0-cli/internal/connector/config"
 	"github.com/borderzero/border0-cli/internal/connector/install"
+	"github.com/borderzero/border0-cli/internal/connector/service"
+
 	"github.com/borderzero/border0-cli/internal/http"
 	"github.com/borderzero/border0-cli/internal/logging"
 	"github.com/spf13/cobra"
-	"github.com/takama/daemon"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 )
@@ -45,12 +46,6 @@ const (
 var defaultConfigFileName = "border0.yaml"
 var serviceConfigPath = "/etc/border0/"
 var serviceName = "border0"
-
-type Service struct {
-	daemon.Daemon
-}
-
-var service_dependencies = []string{}
 
 type TemplateConnectorConfig struct {
 	Connector struct {
@@ -309,7 +304,7 @@ func connectorInstallAws(ctx context.Context) {
 
 	go func() {
 		if sig, ok := <-sigs; ok {
-			fmt.Println(fmt.Sprintf("Received shutdown signal: %s", sig.String()))
+			fmt.Println("Received shutdown signal:", sig.String())
 			cancel()
 		}
 	}()
@@ -322,17 +317,12 @@ func connectorInstallAws(ctx context.Context) {
 }
 
 func checkDaemonInstallation() (bool, error) {
-	deamonType := daemon.SystemDaemon
-	if runtime.GOOS == "darwin" {
-		deamonType = daemon.GlobalDaemon
-	}
-
-	daemon, err := daemon.New(serviceName, serviceDescription, deamonType, service_dependencies...)
+	service, err := service.New(serviceName, serviceDescription)
 	if err != nil {
 		return false, err
 	}
 
-	status, err := daemon.Status()
+	status, err := service.Status()
 	if err != nil {
 		return false, err
 	}
@@ -353,21 +343,11 @@ var connectorInstallCmd = &cobra.Command{
 			return
 		}
 
-		// put the install code here
-		deamonType := daemon.SystemDaemon
-		if runtime.GOOS == "darwin" {
-			// GlobalDaemon is a system daemon that runs as the root user and stores its
-			// property list in the global LaunchDaemons directory. In other words,
-			// system-wide daemons provided by the administrator. Valid for macOS only.
-			deamonType = daemon.GlobalDaemon
-		}
-
-		srv, err := daemon.New(serviceName, serviceDescription, deamonType, service_dependencies...)
+		service, err := service.New(serviceName, serviceDescription)
 		if err != nil {
 			log.Println("Error: ", err)
 			os.Exit(1)
 		}
-		service := &Service{srv}
 		checkRootPermission()
 		// check if the service is already isntalled
 		installed, _ := checkDaemonInstallation()
@@ -406,18 +386,13 @@ var connectorInstallCmd = &cobra.Command{
 			log.Fatalf(fmt.Sprintf("Error: %v", err))
 		}
 
-		u, err := user.Current()
-		if err != nil {
-			log.Fatal(err)
-		}
-		homedir := u.HomeDir
-
 		configPath := makeConfigPath()
 		// check if current user has sudo permissions
 		// Also check for sudo users
 		username := os.Getenv("SUDO_USER")
 		if username != "" {
 			// we are in sudo mode
+			var homedir string
 			if runtime.GOOS == "darwin" {
 				// This is because of:
 				// https://github.com/golang/go/issues/24383
@@ -425,7 +400,7 @@ var connectorInstallCmd = &cobra.Command{
 				// So we'll just hard code for MACOS
 				homedir = "/Users/" + username
 			} else {
-				u, err = user.Lookup(username)
+				u, err := user.Lookup(username)
 				if err != nil {
 					log.Fatal(err)
 				}
@@ -558,22 +533,11 @@ var connectorUnInstallCmd = &cobra.Command{
 	Use:   "uninstall",
 	Short: "uninstall the connector service from the machine",
 	Run: func(cmd *cobra.Command, args []string) {
-		// put the uninstall code here
-
-		deamonType := daemon.SystemDaemon
-		if runtime.GOOS == "darwin" {
-			// GlobalDaemon is a system daemon that runs as the root user and stores its
-			// property list in the global LaunchDaemons directory. In other words,
-			// system-wide daemons provided by the administrator. Valid for macOS only.
-			deamonType = daemon.GlobalDaemon
-		}
-
-		srv, err := daemon.New(serviceName, serviceDescription, deamonType, service_dependencies...)
+		service, err := service.New(serviceName, serviceDescription)
 		if err != nil {
 			log.Println("Error: ", err)
 			os.Exit(1)
 		}
-		service := &Service{srv}
 		checkRootPermission()
 
 		installed, _ := checkDaemonInstallation()
