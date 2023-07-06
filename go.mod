@@ -23,7 +23,7 @@ require (
 	github.com/bluele/factory-go v0.0.1
 	github.com/borderzero/border0-go v0.1.6
 	github.com/borderzero/border0-proto v1.0.0
-	github.com/borderzero/discovery v0.1.6
+	github.com/borderzero/discovery v0.1.9
 	github.com/brianvoe/gofakeit v3.18.0+incompatible
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/creack/pty v1.1.18
@@ -104,7 +104,6 @@ require (
 	github.com/twinj/uuid v0.0.0-20151029044442-89173bcdda19 // indirect
 	github.com/yusufpapurcu/wmi v1.2.3 // indirect
 	go.opencensus.io v0.24.0 // indirect
-	golang.org/x/exp v0.0.0-20230522175609-2e198f4a06a1 // indirect
 	golang.org/x/mod v0.10.0 // indirect
 	golang.org/x/tools v0.9.1 // indirect
 	google.golang.org/api v0.124.0 // indirect

@@ -349,7 +349,7 @@ func (c *ConnectorService) handleInit(init *pb.Init) error {
 func (c *ConnectorService) handlePluginConfig(action pb.Action, config *pb.PluginConfig) error {
 	switch action {
 	case pb.Action_CREATE:
-		c.logger.Info("new plugin", zap.String("plugin", config.GetName()))
+		c.logger.Info("new plugin", zap.String("plugin", config.GetId()))
 
 		if _, ok := c.plugins[config.GetId()]; ok {
 			return fmt.Errorf("plugin already exists")
@@ -364,7 +364,7 @@ func (c *ConnectorService) handlePluginConfig(action pb.Action, config *pb.Plugi
 
 		c.plugins[config.GetId()] = p
 	case pb.Action_UPDATE:
-		c.logger.Info("update plugin", zap.String("plugin", config.GetName()))
+		c.logger.Info("update plugin", zap.String("plugin", config.GetId()))
 
 		p, ok := c.plugins[config.GetId()]
 		if !ok {
@@ -406,7 +406,7 @@ func (c *ConnectorService) handlePluginConfig(action pb.Action, config *pb.Plugi
 func (c *ConnectorService) handleSocketConfig(action pb.Action, config *pb.SocketConfig) error {
 	switch action {
 	case pb.Action_CREATE:
-		c.logger.Info("new socket", zap.String("socket", config.GetName()))
+		c.logger.Info("new socket", zap.String("socket", config.GetId()))
 
 		if _, ok := c.sockets[config.GetId()]; ok {
 			return fmt.Errorf("socket already exists")
@@ -419,7 +419,7 @@ func (c *ConnectorService) handleSocketConfig(action pb.Action, config *pb.Socke
 
 		c.sockets[config.GetId()] = socket
 	case pb.Action_UPDATE:
-		c.logger.Info("update socket", zap.String("socket", config.GetName()))
+		c.logger.Info("update socket", zap.String("socket", config.GetId()))
 
 		socket, ok := c.sockets[config.GetId()]
 		if !ok {

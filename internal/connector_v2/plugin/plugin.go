@@ -10,6 +10,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/borderzero/border0-go/lib/types/slice"
 	"github.com/borderzero/border0-go/service/connector/types"
 	pb "github.com/borderzero/border0-proto/connector"
 	"github.com/borderzero/discovery"
@@ -41,7 +43,13 @@ func NewPlugin(ctx context.Context, logger *zap.Logger, plugin *pb.PluginConfig)
 			}
 
 			engine := engines.WithDiscoverer(
-				discoverers.NewAwsEcsDiscoverer(awsConfig),
+				discoverers.NewAwsEcsDiscoverer(
+					awsConfig,
+					discoverers.WithAwsEcsDiscovererDiscovererId(fmt.Sprintf("aws ecs %s", awsConfig.Region)),
+					discoverers.WithAwsEcsDiscovererIncludedClusterStatuses(config.AwsEcsDiscoveryPluginConfiguration.IncludeWithStatuses...),
+					discoverers.WithAwsEcsDiscovererInclusionClusterTags(config.AwsEcsDiscoveryPluginConfiguration.IncludeWithTags),
+					discoverers.WithAwsEcsDiscovererExclusionClusterTags(config.AwsEcsDiscoveryPluginConfiguration.ExcludeWithTags),
+				),
 				engines.WithInitialInterval(time.Duration(config.AwsEcsDiscoveryPluginConfiguration.ScanIntervalMinutes)*time.Minute),
 			)
 
@@ -76,7 +84,18 @@ func NewPlugin(ctx context.Context, logger *zap.Logger, plugin *pb.PluginConfig)
 			}
 
 			engine := engines.WithDiscoverer(
-				discoverers.NewAwsEc2Discoverer(awsConfig),
+				discoverers.NewAwsEc2Discoverer(
+					awsConfig,
+					discoverers.WithAwsEc2DiscovererDiscovererId(fmt.Sprintf("aws ec2 %s", awsConfig.Region)),
+					discoverers.WithAwsEc2DiscovererIncludedInstanceStates(
+						slice.Transform(
+							config.AwsEc2DiscoveryPluginConfiguration.IncludeWithStates,
+							func(s string) ec2types.InstanceStateName { return ec2types.InstanceStateName(s) },
+						)...,
+					),
+					discoverers.WithAwsEc2DiscovererInclusionInstanceTags(config.AwsEc2DiscoveryPluginConfiguration.IncludeWithTags),
+					discoverers.WithAwsEc2DiscovererExclusionInstanceTags(config.AwsEc2DiscoveryPluginConfiguration.ExcludeWithTags),
+				),
 				engines.WithInitialInterval(time.Duration(config.AwsEc2DiscoveryPluginConfiguration.ScanIntervalMinutes)*time.Minute),
 			)
 
@@ -111,7 +130,13 @@ func NewPlugin(ctx context.Context, logger *zap.Logger, plugin *pb.PluginConfig)
 			}
 
 			engine := engines.WithDiscoverer(
-				discoverers.NewAwsRdsDiscoverer(awsConfig),
+				discoverers.NewAwsRdsDiscoverer(
+					awsConfig,
+					discoverers.WithAwsRdsDiscovererDiscovererId(fmt.Sprintf("aws rds %s", awsConfig.Region)),
+					discoverers.WithAwsRdsDiscovererIncludedInstanceStatuses(config.AwsRdsDiscoveryPluginConfiguration.IncludeWithStatuses...),
+					discoverers.WithAwsRdsDiscovererInclusionInstanceTags(config.AwsRdsDiscoveryPluginConfiguration.IncludeWithTags),
+					discoverers.WithAwsRdsDiscovererExclusionInstanceTags(config.AwsRdsDiscoveryPluginConfiguration.ExcludeWithTags),
+				),
 				engines.WithInitialInterval(time.Duration(config.AwsRdsDiscoveryPluginConfiguration.ScanIntervalMinutes)*time.Minute),
 			)
 
@@ -200,9 +225,9 @@ func (p *pluginImpl) Start(ctx context.Context, csResults chan *PluginDiscoveryR
 		case <-ctx.Done():
 			return nil
 		case result := <-results:
-			p.logger.Debug("discovery result", zap.String("plugin", p.Name), zap.Int("#resources", len(result.Resources)))
+			p.logger.Debug("discovery result", zap.String("plugin", p.ID), zap.String("discoverer_id", result.Metadata.DiscovererId), zap.Int("resources", len(result.Resources)))
 			if len(result.Errors) > 0 {
-				p.logger.Warn("discovery error", zap.String("plugin", p.Name), zap.Any("errors", result.Errors))
+				p.logger.Warn("discovery error", zap.String("plugin", p.ID), zap.String("discoverer_id", result.Metadata.DiscovererId), zap.Any("errors", result.Errors))
 			}
 
 			csResults <- &PluginDiscoveryResults{
