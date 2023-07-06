@@ -1,7 +1,7 @@
 //go:build !openbsd
 // +build !openbsd
 
-package service
+package service_daemon
 
 import (
 	"runtime"

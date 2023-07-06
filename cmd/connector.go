@@ -23,7 +23,7 @@ import (
 	"github.com/borderzero/border0-cli/internal/connector"
 	"github.com/borderzero/border0-cli/internal/connector/config"
 	"github.com/borderzero/border0-cli/internal/connector/install"
-	"github.com/borderzero/border0-cli/internal/connector/service"
+	"github.com/borderzero/border0-cli/internal/connector/service_daemon"
 
 	"github.com/borderzero/border0-cli/internal/http"
 	"github.com/borderzero/border0-cli/internal/logging"
@@ -317,7 +317,7 @@ func connectorInstallAws(ctx context.Context) {
 }
 
 func checkDaemonInstallation() (bool, error) {
-	service, err := service.New(serviceName, serviceDescription)
+	service, err := service_daemon.New(serviceName, serviceDescription)
 	if err != nil {
 		return false, err
 	}
@@ -343,7 +343,7 @@ var connectorInstallCmd = &cobra.Command{
 			return
 		}
 
-		service, err := service.New(serviceName, serviceDescription)
+		service, err := service_daemon.New(serviceName, serviceDescription)
 		if err != nil {
 			log.Println("Error: ", err)
 			os.Exit(1)
@@ -533,7 +533,7 @@ var connectorUnInstallCmd = &cobra.Command{
 	Use:   "uninstall",
 	Short: "uninstall the connector service from the machine",
 	Run: func(cmd *cobra.Command, args []string) {
-		service, err := service.New(serviceName, serviceDescription)
+		service, err := service_daemon.New(serviceName, serviceDescription)
 		if err != nil {
 			log.Println("Error: ", err)
 			os.Exit(1)
