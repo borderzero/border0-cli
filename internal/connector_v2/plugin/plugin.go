@@ -29,7 +29,6 @@ func NewPlugin(ctx context.Context, logger *zap.Logger, plugin *pb.PluginConfig)
 	case types.PluginTypeAwsEcsDiscovery:
 		awsRegions := config.AwsEcsDiscoveryPluginConfiguration.AwsRegions
 		if len(config.AwsEcsDiscoveryPluginConfiguration.AwsRegions) == 0 {
-			fmt.Println("no regions specified, using default region")
 			awsRegions = []string{""}
 		}
 
@@ -43,7 +42,7 @@ func NewPlugin(ctx context.Context, logger *zap.Logger, plugin *pb.PluginConfig)
 
 			engine := engines.WithDiscoverer(
 				discoverers.NewAwsEcsDiscoverer(awsConfig),
-				engines.WithInitialInterval(time.Duration(config.AwsEcsDiscoveryPluginConfiguration.ScanIntervalSeconds)*time.Second),
+				engines.WithInitialInterval(time.Duration(config.AwsEcsDiscoveryPluginConfiguration.ScanIntervalMinutes)*time.Minute),
 			)
 
 			discovers = append(discovers, engine)
@@ -65,7 +64,6 @@ func NewPlugin(ctx context.Context, logger *zap.Logger, plugin *pb.PluginConfig)
 	case types.PluginTypeAwsEc2Discovery:
 		awsRegions := config.AwsEc2DiscoveryPluginConfiguration.AwsRegions
 		if len(config.AwsEc2DiscoveryPluginConfiguration.AwsRegions) == 0 {
-			fmt.Println("no regions specified, using default region")
 			awsRegions = []string{""}
 		}
 
@@ -79,7 +77,7 @@ func NewPlugin(ctx context.Context, logger *zap.Logger, plugin *pb.PluginConfig)
 
 			engine := engines.WithDiscoverer(
 				discoverers.NewAwsEc2Discoverer(awsConfig),
-				engines.WithInitialInterval(time.Duration(config.AwsEc2DiscoveryPluginConfiguration.ScanIntervalSeconds)*time.Second),
+				engines.WithInitialInterval(time.Duration(config.AwsEc2DiscoveryPluginConfiguration.ScanIntervalMinutes)*time.Minute),
 			)
 
 			discovers = append(discovers, engine)
@@ -101,7 +99,6 @@ func NewPlugin(ctx context.Context, logger *zap.Logger, plugin *pb.PluginConfig)
 	case types.PluginTypeAwsRdsDiscovery:
 		awsRegions := config.AwsRdsDiscoveryPluginConfiguration.AwsRegions
 		if len(config.AwsRdsDiscoveryPluginConfiguration.AwsRegions) == 0 {
-			fmt.Println("no regions specified, using default region")
 			awsRegions = []string{""}
 		}
 
@@ -115,7 +112,7 @@ func NewPlugin(ctx context.Context, logger *zap.Logger, plugin *pb.PluginConfig)
 
 			engine := engines.WithDiscoverer(
 				discoverers.NewAwsRdsDiscoverer(awsConfig),
-				engines.WithInitialInterval(time.Duration(config.AwsRdsDiscoveryPluginConfiguration.ScanIntervalSeconds)*time.Second),
+				engines.WithInitialInterval(time.Duration(config.AwsRdsDiscoveryPluginConfiguration.ScanIntervalMinutes)*time.Minute),
 			)
 
 			discovers = append(discovers, engine)
