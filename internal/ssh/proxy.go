@@ -4,7 +4,10 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/binary"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"log"
@@ -15,6 +18,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/ec2instanceconnect"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
@@ -41,6 +45,7 @@ type ProxyConfig struct {
 	sshClientConfig *ssh.ClientConfig
 	sshServerConfig *ssh.ServerConfig
 	AwsEC2Target    string
+	AwsEC2AZ        string
 	ssmClient       *ssm.Client
 	windowWidth     int
 	windowHeight    int
@@ -49,6 +54,7 @@ type ProxyConfig struct {
 	AWSProfile      string
 	ECSSSMProxy     *ECSSSMProxy
 	awsConfig       aws.Config
+	AwsUpstreamType string
 }
 
 type ECSSSMProxy struct {
@@ -65,7 +71,7 @@ func BuildProxyConfig(socket models.Socket, AWSRegion, AWSProfile string) (*Prox
 
 	if socket.ConnectorLocalData.UpstreamUsername == "" && socket.ConnectorLocalData.UpstreamPassword == "" &&
 		socket.ConnectorLocalData.UpstreamIdentifyFile == "" && socket.ConnectorLocalData.AWSEC2Target == "" &&
-		socket.UpstreamType != "aws-ssm" {
+		socket.UpstreamType != "aws-ssm" && socket.UpstreamType != "aws-ec2connect" {
 		return nil, nil
 	}
 
@@ -92,6 +98,13 @@ func BuildProxyConfig(socket models.Socket, AWSRegion, AWSProfile string) (*Prox
 		AWSProfile:   AWSProfile,
 	}
 
+	switch socket.UpstreamType {
+	case "aws-ssm":
+		proxyConfig.AwsUpstreamType = "aws-ssm"
+	case "aws-ec2connect":
+		proxyConfig.AwsUpstreamType = "aws-ec2connect"
+	}
+
 	if socket.UpstreamType == "aws-ssm" && socket.ConnectorLocalData.AWSECSCluster != "" {
 		proxyConfig.ECSSSMProxy = &ECSSSMProxy{
 			Cluster:    socket.ConnectorLocalData.AWSECSCluster,
@@ -107,7 +120,7 @@ func BuildProxyConfig(socket models.Socket, AWSRegion, AWSProfile string) (*Prox
 func Proxy(l net.Listener, c ProxyConfig) error {
 	var handler func(net.Conn, ProxyConfig)
 
-	if c.AwsEC2Target != "" || c.ECSSSMProxy != nil {
+	if c.AwsUpstreamType != "" {
 		var awsConfig aws.Config
 		var err error
 
@@ -126,14 +139,15 @@ func Proxy(l net.Listener, c ProxyConfig) error {
 			awsConfig.Region = c.AWSRegion
 		}
 
-		c.ssmClient = ssm.NewFromConfig(awsConfig)
 		c.awsConfig = awsConfig
+	}
+
+	switch c.AwsUpstreamType {
+	case "aws-ssm":
+		c.ssmClient = ssm.NewFromConfig(c.awsConfig)
 
 		if c.ECSSSMProxy != nil {
 			ecsSvc := ecs.NewFromConfig(c.awsConfig)
-			if err != nil {
-				return fmt.Errorf("failed to create ecs client: %s", err)
-			}
 
 			input := &ecs.ListTasksInput{
 				Cluster:       &c.ECSSSMProxy.Cluster,
@@ -188,7 +202,15 @@ func Proxy(l net.Listener, c ProxyConfig) error {
 		}
 
 		handler = handelSSMclient
-	} else {
+	case "aws-ec2connect":
+		c.sshClientConfig = &ssh.ClientConfig{
+			User:            c.Username,
+			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+			Timeout:         5 * time.Second,
+		}
+
+		handler = handleEC2ConnectClient
+	default:
 		var authMethods []ssh.AuthMethod
 		if c.IdentityFile != "" {
 			bytes, err := os.ReadFile(c.IdentityFile)
@@ -597,6 +619,68 @@ func handleSSHclient(conn net.Conn, config ProxyConfig) {
 	sshConn, chans, reqs, err := ssh.NewServerConn(conn, config.sshServerConfig)
 	if err != nil {
 		fmt.Printf("sshauthproxy: failed to accept ssh connection: %s\n", err)
+		return
+	}
+
+	go ssh.DiscardRequests(reqs)
+	if err := handleChannels(sshConn, chans, config); err != nil {
+		fmt.Printf("sshauthproxy: failed to handle channels: %s\n", err)
+		return
+	}
+}
+
+func handleEC2ConnectClient(conn net.Conn, config ProxyConfig) {
+	defer conn.Close()
+
+	sshConn, chans, reqs, err := ssh.NewServerConn(conn, config.sshServerConfig)
+	if err != nil {
+		fmt.Printf("sshauthproxy: failed to accept ssh connection: %s\n", err)
+		return
+	}
+
+	user := sshConn.User()
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	privateKeyBytes := x509.MarshalPKCS1PrivateKey(privateKey)
+	privateKeyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: privateKeyBytes,
+	})
+
+	signer, err := ssh.ParsePrivateKey(privateKeyPEM)
+	if err != nil {
+		fmt.Printf("sshauthproxy: unable to parse private key: %s\n", err)
+		return
+	}
+
+	config.sshClientConfig.Auth = []ssh.AuthMethod{
+		ssh.PublicKeys(signer),
+	}
+
+	config.sshClientConfig.User = user
+
+	publicKey, err := ssh.NewPublicKey(&privateKey.PublicKey)
+	if err != nil {
+		fmt.Printf("sshauthproxy: unable to generate public key: %s\n", err)
+		return
+	}
+
+	publicKeyBytes := ssh.MarshalAuthorizedKey(publicKey)
+	publicKeyString := string(publicKeyBytes)
+
+	ec2ConnectClient := ec2instanceconnect.NewFromConfig(config.awsConfig)
+	_, err = ec2ConnectClient.SendSSHPublicKey(context.TODO(), &ec2instanceconnect.SendSSHPublicKeyInput{
+		AvailabilityZone: &config.AwsEC2AZ,
+		InstanceId:       &config.AwsEC2Target,
+		InstanceOSUser:   &user,
+		SSHPublicKey:     &publicKeyString,
+	})
+
+	if err != nil {
+		fmt.Printf("sshauthproxy: failed to send ssh public key: %s\n", err)
 		return
 	}
 

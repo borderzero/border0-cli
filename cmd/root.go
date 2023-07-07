@@ -85,6 +85,7 @@ var (
 	awsECSServices          []string
 	awsECSTasks             []string
 	awsECSContainers        []string
+	awsEC2AZ                string
 	disableBrowser          bool
 )
 
