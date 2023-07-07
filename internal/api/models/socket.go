@@ -55,6 +55,8 @@ type ConnectorLocalData struct {
 	AWSECSServices        []string
 	AWSECSTasks           []string
 	AWSECSContainers      []string
+	AWSEC2ConnectEnabled  bool
+	AWSEC2AZ              string
 }
 
 func (c *ConnectorData) Tags() map[string]string {

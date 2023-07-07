@@ -71,7 +71,7 @@ func BuildProxyConfig(socket models.Socket, AWSRegion, AWSProfile string) (*Prox
 
 	if socket.ConnectorLocalData.UpstreamUsername == "" && socket.ConnectorLocalData.UpstreamPassword == "" &&
 		socket.ConnectorLocalData.UpstreamIdentifyFile == "" && socket.ConnectorLocalData.AWSEC2Target == "" &&
-		socket.UpstreamType != "aws-ssm" && socket.UpstreamType != "aws-ec2connect" {
+		socket.UpstreamType != "aws-ssm" && socket.UpstreamType != "aws-ec2connect" && !socket.ConnectorLocalData.AWSEC2ConnectEnabled {
 		return nil, nil
 	}
 
@@ -83,7 +83,7 @@ func BuildProxyConfig(socket models.Socket, AWSRegion, AWSProfile string) (*Prox
 		return nil, fmt.Errorf("aws_ecs_cluster and aws_ec2_target are mutually exclusive")
 	}
 
-	if socket.UpstreamType != "aws-ssm" && (socket.ConnectorLocalData.AWSECSCluster != "" || socket.ConnectorLocalData.AWSEC2Target != "") {
+	if socket.UpstreamType != "aws-ssm" && !socket.ConnectorLocalData.AWSEC2ConnectEnabled && (socket.ConnectorLocalData.AWSECSCluster != "" || socket.ConnectorLocalData.AWSEC2Target != "") {
 		return nil, fmt.Errorf("aws_ecs_cluster or aws_ec2_target is defined but upstream_type is not aws-ssm")
 	}
 
@@ -96,12 +96,13 @@ func BuildProxyConfig(socket models.Socket, AWSRegion, AWSProfile string) (*Prox
 		AwsEC2Target: socket.ConnectorLocalData.AWSEC2Target,
 		AWSRegion:    AWSRegion,
 		AWSProfile:   AWSProfile,
+		AwsEC2AZ:     socket.ConnectorLocalData.AWSEC2AZ,
 	}
 
-	switch socket.UpstreamType {
-	case "aws-ssm":
+	switch {
+	case socket.UpstreamType == "aws-ssm":
 		proxyConfig.AwsUpstreamType = "aws-ssm"
-	case "aws-ec2connect":
+	case socket.UpstreamType == "aws-ec2connect" || socket.ConnectorLocalData.AWSEC2ConnectEnabled:
 		proxyConfig.AwsUpstreamType = "aws-ec2connect"
 	}
 

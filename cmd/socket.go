@@ -363,9 +363,9 @@ var socketConnectCmd = &cobra.Command{
 
 		var sshAuthProxy bool
 		var sshProxyConfig ssh.ProxyConfig
-		if socket.SocketType == "ssh" && (upstream_username != "" || upstream_password != "" || upstream_identify_file != "" || awsEC2Target != "" || socket.UpstreamType == "aws-ssm" || socket.UpstreamType == "aws-ec2connect") {
-			switch socket.UpstreamType {
-			case "aws-ssm":
+		if socket.SocketType == "ssh" && (upstream_username != "" || upstream_password != "" || upstream_identify_file != "" || awsEC2Target != "" || socket.UpstreamType == "aws-ssm" || socket.UpstreamType == "aws-ec2connect" || awsEC2Connect) {
+			switch {
+			case socket.UpstreamType == "aws-ssm":
 				if awsECSCluster == "" && awsEC2Target == "" {
 					return fmt.Errorf("aws_ecs_cluster flag or aws_ec2_target is required for aws-ssm upstream services")
 				}
@@ -385,7 +385,7 @@ var socketConnectCmd = &cobra.Command{
 						Containers: awsECSContainers,
 					}
 				}
-			case "aws-ec2connect":
+			case socket.UpstreamType == "aws-ec2connect" || awsEC2Connect:
 				if awsEC2Target == "" || awsEC2AZ == "" {
 					return fmt.Errorf("aws_ec2_target and aws_ec2_az is required for aws-ec2connect upstream services")
 				}
@@ -633,6 +633,7 @@ func init() {
 	socketConnectCmd.Flags().StringVarP(&upstream_identify_file, "upstream_identity_file", "", "", "Upstream identity file")
 	socketConnectCmd.Flags().StringVarP(&awsEC2Target, "aws_ec2_target", "", "", "Aws EC2 target identifier")
 	socketConnectCmd.Flags().StringVarP(&awsEC2AZ, "aws_ec2_az", "", "", "Aws EC2 availability zone")
+	socketConnectCmd.Flags().BoolVarP(&awsEC2Connect, "aws_ec2_connect", "", false, "Use AWS EC2 connect to connect to the target")
 	socketConnectCmd.Flags().StringVarP(&awsRegion, "region", "", "", "AWS region to use")
 	socketConnectCmd.Flags().StringVarP(&awsProfile, "profile", "", "", "AWS profile to use")
 	socketConnectCmd.Flags().StringVarP(&awsECSCluster, "aws_ecs_cluster", "", "", "The aws cluster to connect to, Required if upstream type is asw-ssm")

@@ -43,6 +43,8 @@ type SocketConfig struct {
 	RdsIAMAuth            bool     `mapstructure:"rds_iam_auth"`
 	AWSRegion             string   `mapstructure:"aws_region"`
 	AWSEC2Target          string   `mapstructure:"aws_ec2_target"`
+	AWSEC2AZ              string   `mapstructure:"aws_ec2_az"`
+	AWSEC2ConnectEnabled  bool     `mapstructure:"aws_ec2_connect"`
 	CloudSQLConnector     bool     `mapstructure:"cloudsql_connector"`
 	CloudSQLIAMAuth       bool     `mapstructure:"cloudsql_iam_auth"`
 	CloudSQLInstance      string   `mapstructure:"cloudsql_instance"`
@@ -80,6 +82,7 @@ type ConnectorGroups struct {
 	ConnectorAuthenticationEnabled bool     `mapstructure:"connector_authentication"`
 	Policies                       []string `mapstructure:"policies"`
 	AwsSsmEnabled                  bool     `mapstructure:"aws_ssm_enabled"`
+	AwsEC2ConnectEnabled           bool     `mapstructure:"aws_ec2_connect"`
 	UpstreamUsername               string   `mapstructure:"upstream_username"`
 	UpstreamPassword               string   `mapstructure:"upstream_password"`
 	UpstreamIdentifyFile           string   `mapstructure:"upstream_identity_file"`

@@ -87,6 +87,7 @@ var (
 	awsECSContainers        []string
 	awsEC2AZ                string
 	disableBrowser          bool
+	awsEC2Connect           bool
 )
 
 // rootCmd represents the base command when called without any subcommands
