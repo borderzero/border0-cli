@@ -236,7 +236,7 @@ var connectorStartCmd = &cobra.Command{
 		SetRlimit()
 
 		if v2 {
-			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
 			connectorv2.NewConnectorService(ctx, log, version).Start()

@@ -16,6 +16,7 @@ import (
 	"github.com/borderzero/border0-cli/internal/connector_v2/util"
 	"github.com/borderzero/border0-cli/internal/sqlauthproxy"
 	"github.com/borderzero/border0-cli/internal/ssh"
+	"github.com/borderzero/border0-go/service/connector/types"
 	pb "github.com/borderzero/border0-proto/connector"
 	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/golang-jwt/jwt"
@@ -32,20 +33,19 @@ import (
 )
 
 const (
-	BackoffMaxInterval = 1 * time.Hour
+	backoffMaxInterval = 1 * time.Hour
 )
 
 type ConnectorService struct {
-	config            *config.Configuration
-	logger            *zap.Logger
-	backoff           *backoff.ExponentialBackOff
-	version           string
-	context           context.Context
-	stream            pb.ConnectorService_ControlStreamClient
-	heartbeatInterval int
-	plugins           map[string]plugin.Plugin
-	sockets           map[string]*border0.Socket
-	// requests            map[string]chan *pb.ControlStreamReponse
+	config              *config.Configuration
+	logger              *zap.Logger
+	backoff             *backoff.ExponentialBackOff
+	version             string
+	context             context.Context
+	stream              pb.ConnectorService_ControlStreamClient
+	heartbeatInterval   int
+	plugins             map[string]plugin.Plugin
+	sockets             map[string]*border0.Socket
 	requests            sync.Map
 	organization        *models.Organization
 	discoveryResultChan chan *plugin.PluginDiscoveryResults
@@ -85,7 +85,7 @@ func (c *ConnectorService) StartControlStream(ctx context.Context, cancel contex
 
 	c.backoff = backoff.NewExponentialBackOff()
 	c.backoff.MaxElapsedTime = 0
-	c.backoff.MaxInterval = BackoffMaxInterval
+	c.backoff.MaxInterval = backoffMaxInterval
 
 	if err := backoff.Retry(c.controlStream, c.backoff); err != nil {
 		c.logger.Error("error in control stream", zap.Error(err))
@@ -347,6 +347,11 @@ func (c *ConnectorService) handleInit(init *pb.Init) error {
 }
 
 func (c *ConnectorService) handlePluginConfig(action pb.Action, config *pb.PluginConfig) error {
+	var innerConfig *types.PluginConfiguration
+	if err := util.AsStruct(config.GetConfig(), &innerConfig); err != nil {
+		return fmt.Errorf("failed to decode plugin configuration: %v", err)
+	}
+
 	switch action {
 	case pb.Action_CREATE:
 		c.logger.Info("new plugin", zap.String("plugin", config.GetId()))
@@ -355,7 +360,7 @@ func (c *ConnectorService) handlePluginConfig(action pb.Action, config *pb.Plugi
 			return fmt.Errorf("plugin already exists")
 		}
 
-		p, err := plugin.NewPlugin(c.context, c.logger, config)
+		p, err := plugin.NewPlugin(c.context, c.logger, config.GetId(), config.GetType(), innerConfig)
 		if err != nil {
 			return fmt.Errorf("failed to register plugin: %w", err)
 		}
@@ -375,7 +380,7 @@ func (c *ConnectorService) handlePluginConfig(action pb.Action, config *pb.Plugi
 			return fmt.Errorf("failed to stop plugin: %w", err)
 		}
 
-		p, err := plugin.NewPlugin(c.context, c.logger, config)
+		p, err := plugin.NewPlugin(c.context, c.logger, config.GetId(), config.GetType(), innerConfig)
 		if err != nil {
 			return fmt.Errorf("failed to register plugin: %w", err)
 		}

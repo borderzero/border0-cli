@@ -4,23 +4,15 @@ import (
 	"context"
 
 	"github.com/borderzero/discovery"
-	"github.com/borderzero/discovery/engines"
-	"go.uber.org/zap"
 )
 
+// Plugin represents actions required of a plugin implementation.
 type Plugin interface {
-	Start(ctx context.Context, resultChan chan *PluginDiscoveryResults) error
+	Start(ctx context.Context, results chan *PluginDiscoveryResults) error
 	Stop() error
 }
 
-type pluginImpl struct {
-	logger *zap.Logger
-	ID     string
-	Name   string
-	engine *engines.ContinuousEngine
-	cancel context.CancelFunc
-}
-
+// PluginDiscoveryResults represents results of a single plugin
 type PluginDiscoveryResults struct {
 	PluginID string
 	Result   *discovery.Result
