@@ -184,6 +184,28 @@ func newKubernetesDiscoveryPlugin(ctx context.Context,
 	return newPlugin(pluginId, logger, engine), nil
 }
 
+func newDockerDiscoveryPlugin(ctx context.Context,
+	logger *zap.Logger,
+	pluginId string,
+	config *types.DockerDiscoveryPluginConfiguration,
+) (Plugin, error) {
+	if config == nil {
+		return nil, fmt.Errorf("Received nil docker discovery plugin configuration for plugin %s", pluginId)
+	}
+
+	engine := engines.NewContinuousEngine(
+		engines.WithDiscoverer(
+			discoverers.NewDockerDiscoverer(
+				discoverers.WithDockerDiscovererInclusionContainerLabels(config.IncludeWithLabels),
+				discoverers.WithDockerDiscovererExclusionContainerLabels(config.ExcludeWithLabels),
+			),
+			engines.WithInitialInterval(time.Duration(config.ScanIntervalMinutes)*time.Minute),
+		),
+	)
+
+	return newPlugin(pluginId, logger, engine), nil
+}
+
 // returns slice of aws configurations based on an aws-based plugin's configuration
 func getAwsConfigs(ctx context.Context, awsPluginConfig types.BaseAwsPluginConfiguration) ([]aws.Config, error) {
 	optFns := []func(*config.LoadOptions) error{}
