@@ -56,7 +56,7 @@ func (s *StaticSocketFinder) Find(ctx context.Context, cfg config.Config, state 
 				AWSRegion:             v.AWSRegion,
 				AWSEC2Target:          v.AWSEC2Target,
 				AWSEC2ConnectEnabled:  v.AWSEC2ConnectEnabled,
-				AWSEC2AZ:              v.AWSEC2AZ,
+				AWSAvailabilityZone:   v.AWSAvailabilityZone,
 				CloudSQLConnector:     v.CloudSQLConnector,
 				CloudSQLIAMAuth:       v.CloudSQLIAMAuth,
 				CloudSQLInstance:      v.CloudSQLInstance,

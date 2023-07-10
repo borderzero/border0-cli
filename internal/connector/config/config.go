@@ -43,7 +43,7 @@ type SocketConfig struct {
 	RdsIAMAuth            bool     `mapstructure:"rds_iam_auth"`
 	AWSRegion             string   `mapstructure:"aws_region"`
 	AWSEC2Target          string   `mapstructure:"aws_ec2_target"`
-	AWSEC2AZ              string   `mapstructure:"aws_ec2_az"`
+	AWSAvailabilityZone   string   `mapstructure:"aws_availability_zone"`
 	AWSEC2ConnectEnabled  bool     `mapstructure:"aws_ec2_connect"`
 	CloudSQLConnector     bool     `mapstructure:"cloudsql_connector"`
 	CloudSQLIAMAuth       bool     `mapstructure:"cloudsql_iam_auth"`

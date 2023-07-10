@@ -119,7 +119,7 @@ func (s *Ec2Discover) buildSocket(connector config.Connector, group config.Conne
 
 		if group.AwsEC2ConnectEnabled {
 			socket.ConnectorLocalData.AWSEC2Target = socket.InstanceId
-			socket.ConnectorLocalData.AWSEC2AZ = *instance.Placement.AvailabilityZone
+			socket.ConnectorLocalData.AWSAvailabilityZone = *instance.Placement.AvailabilityZone
 			socket.ConnectorLocalData.AWSEC2ConnectEnabled = true
 		}
 

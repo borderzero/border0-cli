@@ -90,12 +90,6 @@ func (c *ConnectorCore) TunnelConnnect(ctx context.Context, socket models.Socket
 	socket = *socketFromApi
 	socket.BuildConnectorDataByTags()
 
-	time.Sleep(1 * time.Second)
-	l, err := conn.Socket.Listen()
-	if err != nil {
-		return err
-	}
-
 	var handlerConfig *sqlauthproxy.Config
 	if socket.SocketType == "database" {
 		handlerConfig, err = sqlauthproxy.BuildHandlerConfig(socket)
@@ -110,6 +104,12 @@ func (c *ConnectorCore) TunnelConnnect(ctx context.Context, socket models.Socket
 		if err != nil {
 			return fmt.Errorf("failed to create config for socket: %s", err)
 		}
+	}
+
+	time.Sleep(1 * time.Second)
+	l, err := conn.Socket.Listen()
+	if err != nil {
+		return err
 	}
 
 	switch {
