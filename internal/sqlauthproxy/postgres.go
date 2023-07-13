@@ -2,8 +2,14 @@ package sqlauthproxy
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"fmt"
 	"log"
+	"math/big"
 	"net"
 	"strconv"
 	"strings"
@@ -21,6 +27,7 @@ type postgresHandler struct {
 	Config
 	UpstreamConfig *pgconn.Config
 	awsCredentials aws.CredentialsProvider
+	tlsConfig      *tls.Config
 }
 
 func newPostgresHandler(c Config) (*postgresHandler, error) {
@@ -32,6 +39,15 @@ func newPostgresHandler(c Config) (*postgresHandler, error) {
 		}
 
 		awsCredentials = cfg.Credentials
+	}
+
+	cert, err := generateX509KeyPair()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate tls certificate: %s", err)
+	}
+
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
 	}
 
 	var sslSettings []string
@@ -73,21 +89,23 @@ func newPostgresHandler(c Config) (*postgresHandler, error) {
 		Config:         c,
 		UpstreamConfig: config,
 		awsCredentials: awsCredentials,
+		tlsConfig:      tlsConfig,
 	}, nil
 }
 
 func (h postgresHandler) handleClient(c net.Conn) {
 	defer c.Close()
 
-	clientConn := pgproto3.NewBackend(pgproto3.NewChunkReader(c), c)
-
-	startupMessage, err := h.handleClientStartup(clientConn, c)
+	startupMessage, c, err := h.handleClientStartup(c)
 	if err != nil {
 		log.Printf("sqlauthproxy: failed to handle client startup: %s", err)
 		return
 	}
 
+	clientConn := pgproto3.NewBackend(pgproto3.NewChunkReader(c), c)
+
 	if startupMessage == nil {
+		log.Printf("sqlauthproxy: failed to handle client startup")
 		return
 	}
 
@@ -128,27 +146,35 @@ func (h postgresHandler) handleClient(c net.Conn) {
 	border0.ProxyConnection(c, pgconn.Conn)
 }
 
-func (h postgresHandler) handleClientStartup(c *pgproto3.Backend, conn net.Conn) (*pgproto3.StartupMessage, error) {
+func (h postgresHandler) handleClientStartup(conn net.Conn) (*pgproto3.StartupMessage, *tls.Conn, error) {
+	c := pgproto3.NewBackend(pgproto3.NewChunkReader(conn), conn)
+
 	message, err := c.ReceiveStartupMessage()
 	if err != nil {
-		return nil, nil
+		return nil, nil, err
 	}
 
 	switch msg := message.(type) {
 	case *pgproto3.StartupMessage:
-		return msg, nil
-	case *pgproto3.SSLRequest:
-		_, err = conn.Write([]byte("N"))
-		if err != nil {
-			return nil, nil
+		tlsConn, ok := conn.(*tls.Conn)
+		if !ok {
+			return nil, nil, fmt.Errorf("failed to get TLS connection info")
 		}
 
-		return nil, nil
+		return msg, tlsConn, nil
+	case *pgproto3.SSLRequest:
+		_, err = conn.Write([]byte("S"))
+		if err != nil {
+			return nil, nil, err
+		}
+
+		conn = tls.Server(conn, h.tlsConfig)
+		return h.handleClientStartup(conn)
 	case *pgproto3.CancelRequest:
 		conn.Close()
-		return nil, nil
+		return nil, nil, nil
 	default:
-		return nil, fmt.Errorf("invalid startup message (%T)", msg)
+		return nil, nil, fmt.Errorf("invalid startup message (%T)", msg)
 	}
 }
 
@@ -174,4 +200,34 @@ func (h postgresHandler) handleClientAuthRequest(serverSession *pgproto3.Backend
 	}
 
 	return nil
+}
+
+func generateX509KeyPair() (tls.Certificate, error) {
+	now := time.Now()
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(now.Unix()),
+		Subject: pkix.Name{
+			CommonName:   "sqlauthproxy",
+			Organization: []string{"border.com"},
+		},
+		NotBefore: now,
+		NotAfter:  now.AddDate(10, 0, 0),
+	}
+
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+
+	cert, err := x509.CreateCertificate(rand.Reader, template, template,
+		priv.Public(), priv)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+
+	var outCert tls.Certificate
+	outCert.Certificate = append(outCert.Certificate, cert)
+	outCert.PrivateKey = priv
+
+	return outCert, nil
 }
