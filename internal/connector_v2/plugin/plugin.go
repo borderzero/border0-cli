@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/borderzero/border0-cli/internal/connector_v2/logger"
 	"github.com/borderzero/border0-go/service/connector/types"
 	"github.com/borderzero/discovery"
 	"go.uber.org/zap"
@@ -11,7 +12,7 @@ import (
 
 type pluginImpl struct {
 	ID     string
-	logger *zap.Logger
+	logger logger.Logger
 	engine discovery.Engine
 	cancel context.CancelFunc
 }
@@ -22,11 +23,12 @@ var _ Plugin = (*pluginImpl)(nil)
 // NewPlugin returns a new plugin given a plugin configuration.
 func NewPlugin(
 	ctx context.Context,
-	logger *zap.Logger,
+	logger logger.Logger,
 	pluginId string,
 	pluginType string,
 	config *types.PluginConfiguration,
 ) (Plugin, error) {
+	logger = logger.NewConnectorPluginLogger(pluginId)
 	switch pluginType {
 	case types.PluginTypeAwsEc2Discovery:
 		return newAwsEc2DiscoveryPlugin(ctx, logger, pluginId, config.AwsEc2DiscoveryPluginConfiguration)

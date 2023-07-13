@@ -12,6 +12,7 @@ import (
 	"github.com/borderzero/border0-cli/internal/api/models"
 	"github.com/borderzero/border0-cli/internal/border0"
 	"github.com/borderzero/border0-cli/internal/connector_v2/config"
+	"github.com/borderzero/border0-cli/internal/connector_v2/logger"
 	"github.com/borderzero/border0-cli/internal/connector_v2/plugin"
 	"github.com/borderzero/border0-cli/internal/connector_v2/upstreamdata"
 	"github.com/borderzero/border0-cli/internal/connector_v2/util"
@@ -39,7 +40,7 @@ const (
 
 type ConnectorService struct {
 	config              *config.Configuration
-	logger              *zap.Logger
+	logger              logger.Logger
 	backoff             *backoff.ExponentialBackOff
 	version             string
 	context             context.Context
@@ -52,27 +53,29 @@ type ConnectorService struct {
 	discoveryResultChan chan *plugin.PluginDiscoveryResults
 }
 
-func NewConnectorService(ctx context.Context, logger *zap.Logger, version string) *ConnectorService {
+func NewConnectorService(ctx context.Context, l *zap.Logger, version string) *ConnectorService {
 	config, err := config.GetConfiguration(ctx)
 	if err != nil {
-		logger.Fatal("failed to get configuration", zap.Error(err))
+		l.Fatal("failed to get configuration", zap.Error(err))
 	}
 
-	return &ConnectorService{
-		config:            config,
-		logger:            logger,
-		version:           version,
-		context:           ctx,
-		heartbeatInterval: 10,
-		plugins:           make(map[string]plugin.Plugin),
-		sockets:           make(map[string]*border0.Socket),
-		// requests:            make(map[string]chan *pb.ControlStreamReponse),
+	cs := &ConnectorService{
+		config:              config,
+		version:             version,
+		context:             ctx,
+		heartbeatInterval:   10,
+		plugins:             make(map[string]plugin.Plugin),
+		sockets:             make(map[string]*border0.Socket),
 		discoveryResultChan: make(chan *plugin.PluginDiscoveryResults, 100),
 	}
+
+	cs.logger = logger.NewConnectorLogger(l, cs.sendControlStreamRequest, "")
+
+	return cs
 }
 
 func (c *ConnectorService) Start() {
-	c.logger.Info("starting the connector service")
+	c.logger.LocalInfo("starting the connector service")
 	newCtx, cancel := context.WithCancel(c.context)
 
 	go c.StartControlStream(newCtx, cancel)
@@ -110,11 +113,13 @@ func (c *ConnectorService) controlStream() error {
 	ctx, cancel := context.WithCancel(c.context)
 	defer cancel()
 
-	defer func() { c.logger.Debug("control stream closed", zap.Duration("next retry", c.backoff.NextBackOff())) }()
+	defer func() {
+		c.logger.LocalDebug("control stream closed", zap.Duration("next retry", c.backoff.NextBackOff()))
+	}()
 
 	grpcConn, err := c.newConnectorClient(ctx)
 	if err != nil {
-		c.logger.Error("failed to setup connection", zap.Error(err))
+		c.logger.LocalError("failed to setup connection", zap.Error(err))
 		return fmt.Errorf("failed to create connector client: %w", err)
 	}
 
@@ -122,7 +127,7 @@ func (c *ConnectorService) controlStream() error {
 
 	stream, err := pb.NewConnectorServiceClient(grpcConn).ControlStream(c.context)
 	if err != nil {
-		c.logger.Error("failed to setup control stream", zap.Error(err))
+		c.logger.LocalError("failed to setup control stream", zap.Error(err))
 		return fmt.Errorf("failed to create control stream: %w", err)
 	}
 
@@ -191,7 +196,6 @@ func (c *ConnectorService) controlStream() error {
 				}
 			case *pb.ControlStreamReponse_TunnelCertificateSignResponse:
 				if v, ok := c.requests.Load(r.TunnelCertificateSignResponse.RequestId); ok {
-					// if _, ok := c.requests[r.TunnelCertificateSignResponse.RequestId]; ok {
 					responseChan, ok := v.(chan *pb.ControlStreamReponse)
 					if !ok {
 						c.logger.Error("failed to cast response channel", zap.String("request_id", r.TunnelCertificateSignResponse.RequestId))
@@ -242,7 +246,7 @@ func (c *ConnectorService) newConnectorClient(ctx context.Context) (*grpc.Client
 		grpcOpts = append(grpcOpts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})))
 	}
 
-	c.logger.Info("connecting to connector server", zap.String("server", c.config.ConnectorServer))
+	c.logger.LocalInfo("connecting to connector server", zap.String("server", c.config.ConnectorServer))
 	client, err := grpc.DialContext(c.context, c.config.ConnectorServer, grpcOpts...)
 	if err != nil {
 		return nil, err
