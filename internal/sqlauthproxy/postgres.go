@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"fmt"
+	"math/big"
 	"net"
 	"strconv"
 	"strings"
@@ -104,7 +105,7 @@ func (h postgresHandler) handleClient(c net.Conn) {
 	clientConn := pgproto3.NewBackend(pgproto3.NewChunkReader(c), c)
 
 	if startupMessage == nil {
-		log.Printf("sqlauthproxy: failed to handle client startup")
+		h.Logger.Error("sqlauthproxy: failed to handle client startup")
 		return
 	}
 
