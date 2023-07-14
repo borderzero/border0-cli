@@ -45,7 +45,28 @@ Resources:
               - 'sts:AssumeRole'
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess'
+        - 'arn:aws:iam::aws:policy/AmazonRDSReadOnlyAccess'
+        - 'arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess'
       Policies:
+        # There is no AWS-Managed ECS ReadOnly policy
+        - PolicyName: AmazonECSReadOnlyAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ecs:DescribeClusters'
+                  - 'ecs:DescribeContainerInstances'
+                  - 'ecs:DescribeServices'
+                  - 'ecs:DescribeTaskDefinition'
+                  - 'ecs:DescribeTasks'
+                  - 'ecs:ListClusters'
+                  - 'ecs:ListContainerInstances'
+                  - 'ecs:ListServices'
+                  - 'ecs:ListTaskDefinitionFamilies'
+                  - 'ecs:ListTaskDefinitions'
+                  - 'ecs:ListTasks'
+                Resource: '*'
         - PolicyName: AccessToBorder0TokenSsmParameter
           PolicyDocument:
             Version: '2012-10-17'
@@ -54,7 +75,7 @@ Resources:
                 Action: 'ssm:DescribeParameters'
                 Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*'
               - Effect: Allow
-                Action: 
+                Action:
                   - 'ssm:GetParameter'
                   - 'ssm:GetParameters'
                 Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${Border0TokenSsmParameter}'
@@ -85,25 +106,23 @@ Resources:
       AssociatePublicIpAddress: true
       UserData:
         Fn::Base64:
-          !Sub |
-            #!/bin/bash -xe
-
-            sudo curl https://download.border0.com/linux_arm64/border0 -o /usr/local/bin/border0
-            sudo chmod +x /usr/local/bin/border0
-
-            cat << EOF > border0.yaml
-            connector:
-              name: aws-install-wizard-connector
-              ssm-aws-region: ${AWS::Region}
-            credentials:
-              token: aws:ssm:${Border0TokenSsmParameter}
-            sockets:
-              - aws-install-wizard-connector:
-                  type: ssh
-                  sshserver: true
-            EOF
-
-            border0 connector start --config border0.yaml
+          !Sub 
+            - |
+              #!/bin/bash -xe
+              sudo curl https://download.border0.com/linux_arm64/border0 -o /usr/local/bin/border0
+              sudo chmod +x /usr/local/bin/border0
+              export BORDER0_TUNNEL=tunnel.staging.border0.com
+              export BORDER0_CONNECTOR_SERVER=capi.staging.border0.com:443
+              export BORDER0_LOG_LEVEL=debug
+              export BORDER0_TOKEN=${Border0TokenSsmVarTemplate}
+              export AWS_REGION=${AWS::Region}
+              border0 connector start --v2
+            - Border0TokenSsmVarTemplate:
+                Fn::Join:
+                  - ''
+                  - - '\${aws:ssm:'
+                    - !Ref Border0TokenSsmParameter
+                    - '}'
 
   ConnectorInstanceAutoScalingGroup:
     Type: 'AWS::AutoScaling::AutoScalingGroup'

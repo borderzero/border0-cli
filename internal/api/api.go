@@ -345,6 +345,19 @@ func (a *Border0API) DetachPolicies(ctx context.Context, socketID string, policy
 	return response, nil
 }
 
+// CreateConnector creates a new border0 connector (v2)
+func (a *Border0API) CreateConnector(ctx context.Context, name string, description string) (*models.Connector, error) {
+	payload := &models.Connector{Name: name, Description: description}
+
+	var connector models.Connector
+	err := a.Request(http.MethodPost, "connector", &connector, payload, true)
+	if err != nil {
+		return nil, err
+	}
+
+	return &connector, nil
+}
+
 // CreateToken creates a new border0 admin token (api key)
 func (a *Border0API) CreateToken(ctx context.Context, name string, role string, expiresAt *time.Time) (*models.Token, error) {
 	payload := &models.Token{Name: name, Role: role}
@@ -354,6 +367,19 @@ func (a *Border0API) CreateToken(ctx context.Context, name string, role string, 
 
 	var tk models.Token
 	err := a.Request(http.MethodPost, "organizations/tokens", &tk, payload, true)
+	if err != nil {
+		return nil, err
+	}
+
+	return &tk, nil
+}
+
+// CreateConnectorToken creates a new border0 connector token
+func (a *Border0API) CreateConnectorToken(ctx context.Context, connectorName string, name string, expiresAt *time.Time) (*models.ConnectorToken, error) {
+	payload := &models.ConnectorTokenRequest{ConnectorName: connectorName, Name: name, ExpiresAt: expiresAt.Unix()}
+
+	var tk models.ConnectorToken
+	err := a.Request(http.MethodPost, "connector/token", &tk, payload, true)
 	if err != nil {
 		return nil, err
 	}

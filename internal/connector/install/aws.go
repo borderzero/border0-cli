@@ -79,12 +79,22 @@ func RunWizardForAWS(ctx context.Context, cliVersion string) error {
 		return fmt.Errorf("failed to prompt for AWS VPC Subnet ID: %v", err)
 	}
 
-	border0TokenSsmParameter, err := promptForBorder0TokenSsmParameterPath(ctx, cfg)
+	border0ConnectorName, err := promptForBorder0ConnectorName(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("failed to prompt for Border0 connector name: %v", err)
+	}
+
+	border0TokenSsmParameter, err := promptForBorder0TokenSsmParameterPath(ctx, cfg, border0ConnectorName)
 	if err != nil {
 		return fmt.Errorf("failed to prompt for AWS SSM Parameter path for Border0 token: %v", err)
 	}
 
-	border0Token, err := generateNewBorder0ConnectorToken(ctx, cliVersion, runId)
+	border0Connector, err := createNewBorder0Connector(ctx, border0ConnectorName, cliVersion)
+	if err != nil {
+		return fmt.Errorf("failed to create new Border0 connector: %v", err)
+	}
+
+	border0Token, err := generateNewBorder0ConnectorToken(ctx, border0Connector.Name, cliVersion, runId)
 	if err != nil {
 		return fmt.Errorf("failed to create new Border0 token: %v", err)
 	}
@@ -246,10 +256,35 @@ func promptForVpcSubnetId(ctx context.Context, cfg aws.Config, vpcId string) (st
 	return strings.Split(subnetIdChoice, " ")[0], nil
 }
 
-func promptForBorder0TokenSsmParameterPath(ctx context.Context, cfg aws.Config) (string, error) {
+func promptForBorder0ConnectorName(ctx context.Context, cfg aws.Config) (string, error) {
+	var connectorNameTarget string
+	err := survey.AskOne(
+		&survey.Input{
+			Message: "What name would you like for your new Border0 Connector?",
+			Default: fmt.Sprintf("my-connector-%d", time.Now().Unix()),
+		},
+		&connectorNameTarget,
+		survey.WithValidator(survey.Required),
+		// TODO: validator for connector not already existing
+		// TODO: validator for connector name regex
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to ask survey question: %v", err)
+	}
+	return connectorNameTarget, nil
+}
+
+func promptForBorder0TokenSsmParameterPath(
+	ctx context.Context,
+	cfg aws.Config,
+	connectorName string,
+) (string, error) {
 	var parameterPathTarget string
 	err := survey.AskOne(
-		&survey.Input{Message: "What is the SSM parameter store path you'd like your border0 token to be stored at?"},
+		&survey.Input{
+			Message: "What is the SSM parameter store path you'd like your border0 token to be stored at?",
+			Default: fmt.Sprintf("connector-%s-token", connectorName),
+		},
 		&parameterPathTarget,
 		survey.WithValidator(survey.Required),
 		survey.WithValidator(getBorder0TokenSsmParameterPathValidator(ctx, cfg)),
@@ -292,11 +327,29 @@ func getBorder0TokenSsmParameterPathValidator(ctx context.Context, cfg aws.Confi
 	}
 }
 
+func createNewBorder0Connector(
+	ctx context.Context,
+	connectorName string,
+	cliVersion string,
+) (*models.Connector, error) {
+	border0Client := border0.NewAPI(border0.WithVersion(cliVersion))
+
+	connector, err := border0Client.CreateConnector(ctx, connectorName, fmt.Sprintf("AWS Cloud-Install Border0 Connector"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create a new Border0 connector via the Border0 API: %v", err)
+	}
+
+	fmt.Printf("🚀 Border0 connector \"%s\" created successfully!\n", connectorName)
+
+	return connector, nil
+}
+
 func generateNewBorder0ConnectorToken(
 	ctx context.Context,
+	connectorName string,
 	cliVersion string,
 	tokenName string,
-) (*models.Token, error) {
+) (*models.ConnectorToken, error) {
 	border0Client := border0.NewAPI(border0.WithVersion(cliVersion))
 
 	oneYearFromNow := time.Now().AddDate(1, 0, 0)
@@ -304,15 +357,17 @@ func generateNewBorder0ConnectorToken(
 	createTokenCtx, createTokenCtxCancel := context.WithTimeout(ctx, timeoutCreateBorder0Token)
 	defer createTokenCtxCancel()
 
-	token, err := border0Client.CreateToken(
+	token, err := border0Client.CreateConnectorToken(
 		createTokenCtx,
-		tokenName,
-		"connector",
+		connectorName,
+		fmt.Sprintf("connector-token-%d", time.Now().Unix()),
 		&oneYearFromNow,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create a new Border0 token for connector via the Border0 API: %v", err)
 	}
+
+	fmt.Printf("🚀 Border0 connector token \"%s\" created successfully!\n", token.Name)
 
 	return token, nil
 }
