@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/borderzero/border0-cli/cmd/logger"
 	"github.com/borderzero/border0-cli/internal/api"
 	"github.com/borderzero/border0-cli/internal/api/models"
 	"github.com/borderzero/border0-cli/internal/border0"
@@ -214,7 +215,11 @@ func createSocketStartTunnel(ctx context.Context, border0API *api.Border0API, qu
 
 			defer l.Close()
 
-			sshServer := ssh.NewServer(socket.Organization.Certificates["ssh_public_key"])
+			sshServer, err := ssh.NewServer(logger.Logger, socket.Organization.Certificates["ssh_public_key"])
+			if err != nil {
+				log.Fatalf("error: %v", err)
+			}
+
 			err = sshServer.Serve(l)
 
 			return err

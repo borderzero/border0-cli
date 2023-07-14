@@ -1,112 +1,96 @@
 package logger
 
 import (
-	"fmt"
-
+	"github.com/borderzero/border0-cli/internal/connector_v2/errors"
 	pb "github.com/borderzero/border0-proto/connector"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const (
-	debugLevel = "debug"
-	infoLevel  = "info"
-	warnLevel  = "warn"
-	errorLevel = "error"
-)
-
-type Logger interface {
-	LocalDebug(format string, args ...interface{})
-	LocalInfo(format string, args ...interface{})
-	LocalWarn(format string, args ...interface{})
-	LocalError(format string, args ...interface{})
-
-	Debug(format string, args ...interface{})
-	Info(format string, args ...interface{})
-	Warn(format string, args ...interface{})
-	Error(format string, args ...interface{})
-
-	NewConnectorPluginLogger(pluginID string) *ConnectorLogger
-}
-
-type ConnectorLogger struct {
+type connectorLogger struct {
 	logger   *zap.Logger
 	sendFunc func(*pb.ControlStreamRequest) error
-	socketID string
+	encoder  zapcore.Encoder
+	level    zapcore.Level
+	fields   []zapcore.Field
+
 	pluginID string
+	socketID string
 }
 
-func NewConnectorLogger(logger *zap.Logger, sendFunc func(*pb.ControlStreamRequest) error, connectorID string) *ConnectorLogger {
-	return &ConnectorLogger{
-		logger:   logger,
+func NewConnectorLogger(l *zap.Logger, sendFunc func(*pb.ControlStreamRequest) error) *zap.Logger {
+	encoderConfig := zap.NewProductionEncoderConfig()
+	encoderConfig.LevelKey = ""
+	encoderConfig.TimeKey = ""
+	encoder := zapcore.NewJSONEncoder(encoderConfig)
+
+	core := &connectorLogger{
+		logger:   l,
+		encoder:  encoder,
+		level:    l.Level(),
 		sendFunc: sendFunc,
 	}
+
+	return zap.New(core)
 }
 
-func (l *ConnectorLogger) NewConnectorPluginLogger(pluginID string) *ConnectorLogger {
-	newLogger := *l
-	newLogger.pluginID = pluginID
-	return &newLogger
-}
-
-func (l *ConnectorLogger) LocalDebug(format string, args ...interface{}) {
-	l.logger.Debug(fmt.Sprintf(format, args...))
-}
-
-func (l *ConnectorLogger) LocalInfo(format string, args ...interface{}) {
-	l.logger.Info(fmt.Sprintf(format, args...))
-}
-
-func (l *ConnectorLogger) LocalWarn(format string, args ...interface{}) {
-	l.logger.Warn(fmt.Sprintf(format, args...))
-}
-
-func (l *ConnectorLogger) LocalError(format string, args ...interface{}) {
-	l.logger.Error(fmt.Sprintf(format, args...))
-}
-
-func (l *ConnectorLogger) Debug(format string, args ...interface{}) {
-	l.LocalDebug(format, args...)
-
-	if err := l.sendLog(debugLevel, fmt.Sprintf(format, args...)); err != nil {
-		l.logger.Error("Failed to send log", zap.Error(err))
+func (c *connectorLogger) Check(entry zapcore.Entry, checkedEntry *zapcore.CheckedEntry) *zapcore.CheckedEntry {
+	if c.Enabled(entry.Level) {
+		return checkedEntry.AddCore(entry, c)
 	}
+	return checkedEntry
 }
 
-func (l *ConnectorLogger) Info(format string, args ...interface{}) {
-	l.LocalInfo(fmt.Sprintf(format, args...))
+func (c *connectorLogger) Sync() error {
+	return nil
+}
 
-	if err := l.sendLog(infoLevel, fmt.Sprintf(format, args...)); err != nil {
-		l.logger.Error("Failed to send log", zap.Error(err))
+func (c *connectorLogger) With(fields []zapcore.Field) zapcore.Core {
+	cloned := *c
+	cloned.fields = append(cloned.fields, fields...)
+
+	for _, field := range fields {
+		switch field.Key {
+		case "plugin_id":
+			cloned.pluginID = field.String
+		case "socket_id":
+			cloned.socketID = field.String
+		}
 	}
+
+	return &cloned
 }
 
-func (l *ConnectorLogger) Warn(format string, args ...interface{}) {
-	l.LocalWarn(fmt.Sprintf(format, args...))
+func (c *connectorLogger) Enabled(level zapcore.Level) bool {
+	return true
+}
 
-	if err := l.sendLog(warnLevel, fmt.Sprintf(format, args...)); err != nil {
-		l.logger.Error("Failed to send log", zap.Error(err))
+func (c *connectorLogger) Write(entry zapcore.Entry, fields []zapcore.Field) error {
+	allFields := append(c.fields, fields...)
+
+	c.logger.Log(entry.Level, entry.Message, allFields...)
+
+	buffer, err := c.encoder.EncodeEntry(entry, allFields)
+	if err != nil {
+		return err
 	}
-}
 
-func (l *ConnectorLogger) Error(format string, args ...interface{}) {
-	l.LocalError(fmt.Sprintf(format, args...))
-
-	if err := l.sendLog(errorLevel, fmt.Sprintf(format, args...)); err != nil {
-		l.logger.Error("Failed to send log", zap.Error(err))
-	}
-}
-
-func (l *ConnectorLogger) sendLog(level, message string) error {
-	return l.sendFunc(&pb.ControlStreamRequest{
+	err = c.sendFunc(&pb.ControlStreamRequest{
 		RequestType: &pb.ControlStreamRequest_Log{
 			Log: &pb.Log{
-				SocketId:  l.socketID,
-				PluginId:  l.pluginID,
 				Timestamp: timestamppb.Now(),
-				Severity:  level,
-				Message:   message,
+				Severity:  entry.Level.String(),
+				Message:   string(buffer.Bytes()),
+				PluginId:  c.pluginID,
+				SocketId:  c.socketID,
 			},
 		},
 	})
+
+	if err != nil && err.Error() != errors.ErrStreamNotConnected {
+		c.logger.Error("Failed to send log", zap.Error(err))
+	}
+
+	return nil
 }

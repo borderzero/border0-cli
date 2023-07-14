@@ -10,7 +10,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
 	"strings"
@@ -21,6 +20,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2instanceconnect"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	"github.com/aws/aws-sdk-go-v2/service/ecs/types"
+	"go.uber.org/zap"
 
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/session-manager-plugin/src/datachannel"
@@ -53,6 +53,7 @@ type ProxyConfig struct {
 	ECSSSMProxy        *ECSSSMProxy
 	awsConfig          aws.Config
 	AwsUpstreamType    string
+	Logger              *zap.Logger
 }
 
 type ECSSSMProxy struct {
@@ -62,7 +63,7 @@ type ECSSSMProxy struct {
 	Containers []string
 }
 
-func BuildProxyConfig(socket models.Socket, AWSRegion, AWSProfile string) (*ProxyConfig, error) {
+func BuildProxyConfig(logger *zap.Logger, socket models.Socket, AWSRegion, AWSProfile string) (*ProxyConfig, error) {
 	if socket.ConnectorLocalData == nil {
 		return nil, nil
 	}
@@ -95,6 +96,7 @@ func BuildProxyConfig(socket models.Socket, AWSRegion, AWSProfile string) (*Prox
 	}
 
 	proxyConfig := &ProxyConfig{
+		Logger:              logger,
 		Hostname:           socket.ConnectorData.TargetHostname,
 		Port:               socket.ConnectorData.Port,
 		Username:           socket.ConnectorLocalData.UpstreamUsername,
@@ -171,7 +173,7 @@ func Proxy(l net.Listener, c ProxyConfig) error {
 			}
 
 			if len(output.TaskArns) == 0 {
-				log.Printf("sshauthproxy: no running tasks found in ECS cluster %s", c.ECSSSMProxy.Cluster)
+				c.Logger.Sugar().Infof("sshauthproxy: no running tasks found in ECS cluster %s", c.ECSSSMProxy.Cluster)
 			}
 		}
 
@@ -300,7 +302,7 @@ func handleSsmClient(conn net.Conn, config ProxyConfig) {
 				case req.Type == "shell":
 					if config.ECSSSMProxy != nil {
 						if err := pickAwsEcsTargetForAwsSsm(channel, &config); err != nil {
-							log.Printf("sshauthproxy: failed to pick ECS target: %s", err)
+							config.Logger.Sugar().Errorf("sshauthproxy: failed to pick ECS target: %s", err)
 							req.Reply(false, nil)
 							sshConn.Close()
 							return

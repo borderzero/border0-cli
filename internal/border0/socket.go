@@ -26,6 +26,7 @@ import (
 	"github.com/borderzero/border0-cli/internal/api"
 	"github.com/borderzero/border0-cli/internal/api/models"
 	"github.com/cenkalti/backoff/v4"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/net/proxy"
 )
@@ -654,7 +655,7 @@ func ProxyConnection(client net.Conn, remote net.Conn) {
 	<-chDone
 }
 
-func Serve(l net.Listener, hostname string, port int) error {
+func Serve(logger *zap.Logger, l net.Listener, hostname string, port int) error {
 	for {
 		rconn, err := l.Accept()
 		if err != nil {
@@ -664,7 +665,7 @@ func Serve(l net.Listener, hostname string, port int) error {
 		go func() {
 			lconn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", hostname, port), 5*time.Second)
 			if err != nil {
-				log.Printf("failed to connect to local service: %s", err)
+				logger.Sugar().Errorf("failed to connect to local service: %s", err)
 				rconn.Close()
 				return
 			}

@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/borderzero/border0-cli/cmd/logger"
 	"github.com/borderzero/border0-cli/internal/api"
 	"github.com/borderzero/border0-cli/internal/api/models"
 	"github.com/borderzero/border0-cli/internal/border0"
@@ -349,6 +350,7 @@ var socketConnectCmd = &cobra.Command{
 				UpstreamCertFile: upstream_cert_file,
 				UpstreamKeyFile:  upstream_key_file,
 				UpstreamTLS:      upstream_tls,
+				Logger:           logger.Logger,
 			}
 
 			if cloudSqlConnector {
@@ -366,7 +368,10 @@ var socketConnectCmd = &cobra.Command{
 		}
 
 		var sshAuthProxy bool
-		var sshProxyConfig ssh.ProxyConfig
+		sshProxyConfig := ssh.ProxyConfig{
+			Logger: logger.Logger,
+		}
+
 		if socket.SocketType == "ssh" && (upstream_username != "" || upstream_password != "" || upstream_identify_file != "" || awsEc2InstanceId != "" || socket.UpstreamType == "aws-ssm" || socket.UpstreamType == "aws-ec2connect" || awsEc2InstanceConnect) {
 			switch {
 			case socket.UpstreamType == "aws-ssm":
@@ -454,7 +459,11 @@ var socketConnectCmd = &cobra.Command{
 				return err
 			}
 		case localssh:
-			sshServer := ssh.NewServer(socket.Organization.Certificates["ssh_public_key"])
+			sshServer, err := ssh.NewServer(logger.Logger, socket.Organization.Certificates["ssh_public_key"])
+			if err != nil {
+				return err
+			}
+
 			if err := sshServer.Serve(l); err != nil {
 				return err
 			}
@@ -474,7 +483,7 @@ var socketConnectCmd = &cobra.Command{
 			if port < 1 {
 				return fmt.Errorf("error: port not specified")
 			}
-			if err := border0.Serve(l, hostname, port); err != nil {
+			if err := border0.Serve(logger.Logger, l, hostname, port); err != nil {
 				return err
 			}
 		}

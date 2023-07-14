@@ -14,6 +14,7 @@ import (
 	"github.com/borderzero/border0-cli/internal/border0"
 	"github.com/borderzero/border0-cli/internal/client"
 	mysqlClient "github.com/go-mysql-org/go-mysql/client"
+	"go.uber.org/zap"
 
 	"github.com/go-mysql-org/go-mysql/server"
 )
@@ -45,8 +46,8 @@ func (p *dummyProvider) GetCredential(username string) (password string, found b
 	return "", true, nil
 }
 
-func newMysqlClientProxy(port int, resource models.ClientResource) (*mysqlClientProxy, error) {
-	info, err := client.GetResourceInfo(resource.Hostname())
+func newMysqlClientProxy(logger *zap.Logger, port int, resource models.ClientResource) (*mysqlClientProxy, error) {
+	info, err := client.GetResourceInfo(logger, resource.Hostname())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get resource info")
 	}
@@ -62,6 +63,7 @@ func newMysqlClientProxy(port int, resource models.ClientResource) (*mysqlClient
 			info:      info,
 			resource:  resource,
 			tlsConfig: tlsConfig,
+			logger:    logger,
 		},
 		server: server.NewDefaultServer(),
 	}, nil

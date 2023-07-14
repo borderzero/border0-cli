@@ -5,6 +5,7 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/borderzero/border0-cli/client/preference"
+	"github.com/borderzero/border0-cli/cmd/logger"
 	"github.com/borderzero/border0-cli/internal/client"
 	"github.com/borderzero/border0-cli/internal/client/sqlclientproxy"
 	"github.com/borderzero/border0-cli/internal/enum"
@@ -55,7 +56,7 @@ var dbCmd = &cobra.Command{
 		hostname = pickedHost.Hostname()
 
 		if local {
-			proxy, err := sqlclientproxy.NewSqlClientProxy(port, pickedHost)
+			proxy, err := sqlclientproxy.NewSqlClientProxy(logger.Logger, port, pickedHost)
 			if err != nil {
 				return fmt.Errorf("failed to start local listener: %w", err)
 			}
@@ -113,7 +114,7 @@ var dbCmd = &cobra.Command{
 		}
 
 		if dbClient == "local listener" {
-			proxy, err := sqlclientproxy.NewSqlClientProxy(port, pickedHost)
+			proxy, err := sqlclientproxy.NewSqlClientProxy(logger.Logger, port, pickedHost)
 			if err != nil {
 				return fmt.Errorf("failed to start local listener: %w", err)
 			}

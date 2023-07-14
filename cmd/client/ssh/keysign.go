@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/borderzero/border0-cli/cmd/logger"
 	"github.com/borderzero/border0-cli/internal/client"
 	"github.com/spf13/cobra"
 )
@@ -21,7 +22,7 @@ var keySignCmd = &cobra.Command{
 			return errors.New("empty hostname not allowed")
 		}
 
-		token, claims, err := client.MTLSLogin(hostname)
+		token, claims, err := client.MTLSLogin(logger.Logger, hostname)
 		if err != nil {
 			return err
 		}

@@ -15,6 +15,7 @@ import (
 	"github.com/borderzero/border0-cli/internal/client"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgproto3/v2"
+	"go.uber.org/zap"
 )
 
 type postgresClientProxy struct {
@@ -22,8 +23,8 @@ type postgresClientProxy struct {
 	upstreamConfig *pgconn.Config
 }
 
-func newPostgresClientProxy(port int, resource models.ClientResource) (*postgresClientProxy, error) {
-	info, err := client.GetResourceInfo(resource.Hostname())
+func newPostgresClientProxy(logger *zap.Logger, port int, resource models.ClientResource) (*postgresClientProxy, error) {
+	info, err := client.GetResourceInfo(logger, resource.Hostname())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get resource info")
 	}
@@ -46,6 +47,7 @@ func newPostgresClientProxy(port int, resource models.ClientResource) (*postgres
 			info:      info,
 			resource:  resource,
 			tlsConfig: tlsConfig,
+			logger:    logger,
 		},
 		upstreamConfig: upstreamConfig,
 	}, nil

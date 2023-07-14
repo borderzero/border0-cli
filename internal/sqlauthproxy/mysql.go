@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"log"
 	"net"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/borderzero/border0-cli/internal/border0"
 	"github.com/go-mysql-org/go-mysql/client"
 	"github.com/go-mysql-org/go-mysql/server"
+	"go.uber.org/zap"
 	"k8s.io/client-go/util/cert"
 )
 
@@ -100,14 +100,14 @@ func (h mysqlHandler) handleClient(c net.Conn) {
 	serverHandler := &mysqlServerHandler{}
 	clientConn, err := server.NewCustomizedConn(c, h.server, &dummyProvider{}, serverHandler)
 	if err != nil {
-		log.Printf("sqlauthproxy: failed to accept connection: %s", err)
+		h.Logger.Error("sqlauthproxy: failed to accept connection", zap.Error(err))
 		return
 	}
 
 	if h.RdsIam {
 		authenticationToken, err := auth.BuildAuthToken(context.TODO(), h.upstreamAddress, h.AwsRegion, h.Username, h.awsCredentials)
 		if err != nil {
-			log.Printf("sqlauthproxy: failed to create authentication token: %s", err)
+			h.Logger.Error("sqlauthproxy: failed to create authentication token", zap.Error(err))
 			return
 		}
 
@@ -122,7 +122,7 @@ func (h mysqlHandler) handleClient(c net.Conn) {
 
 	serverConn, err := client.ConnectWithDialer(context.Background(), "tcp", h.upstreamAddress, h.Username, h.Password, serverHandler.Database, h.DialerFunc, h.options...)
 	if err != nil {
-		log.Printf("sqlauthproxy: failed to connect upstream: %s", err)
+		h.Logger.Error("sqlauthproxy: failed to connect upstream:", zap.Error(err))
 		return
 	}
 

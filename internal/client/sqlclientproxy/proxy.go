@@ -6,6 +6,7 @@ import (
 
 	"github.com/borderzero/border0-cli/internal/api/models"
 	"github.com/borderzero/border0-cli/internal/client"
+	"go.uber.org/zap"
 )
 
 type SqlClientProxy interface {
@@ -17,14 +18,15 @@ type sqlClientProxy struct {
 	info      client.ResourceInfo
 	resource  models.ClientResource
 	tlsConfig *tls.Config
+	logger    *zap.Logger
 }
 
-func NewSqlClientProxy(port int, resource models.ClientResource) (SqlClientProxy, error) {
+func NewSqlClientProxy(logger *zap.Logger, port int, resource models.ClientResource) (SqlClientProxy, error) {
 	switch resource.DatabaseType {
 	case "mysql":
-		return newMysqlClientProxy(port, resource)
+		return newMysqlClientProxy(logger, port, resource)
 	case "postgres":
-		return newPostgresClientProxy(port, resource)
+		return newPostgresClientProxy(logger, port, resource)
 	default:
 		return nil, fmt.Errorf("unsupported database type: %s", resource.DatabaseType)
 	}

@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/borderzero/border0-cli/client/preference"
+	"github.com/borderzero/border0-cli/cmd/logger"
 	"github.com/borderzero/border0-cli/internal/client"
 	"github.com/borderzero/border0-cli/internal/client/datagrip"
 	"github.com/borderzero/border0-cli/internal/enum"
@@ -54,7 +55,7 @@ var dataGripCmd = &cobra.Command{
 		socketPref.DatabaseClient = "datagrip"
 		pref.SetSocket(socketPref)
 
-		info, err := client.GetResourceInfo(hostname)
+		info, err := client.GetResourceInfo(logger.Logger, hostname)
 		if err != nil {
 			return err
 		}

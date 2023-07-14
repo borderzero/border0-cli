@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/borderzero/border0-cli/cmd/logger"
 	"github.com/borderzero/border0-cli/internal/client"
 	"github.com/borderzero/border0-cli/internal/enum"
 	"github.com/spf13/cobra"
@@ -48,7 +49,7 @@ var clientTlsCmd = &cobra.Command{
 			hostname = match[1]
 		}
 
-		info, err := client.GetResourceInfo(hostname)
+		info, err := client.GetResourceInfo(logger.Logger, hostname)
 		if err != nil {
 			log.Fatalf("failed to get certificate: %v", err.Error())
 		}

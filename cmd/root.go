@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/borderzero/border0-cli/cmd/logger"
 	"github.com/borderzero/border0-cli/internal/api/models"
 	"github.com/jedib0t/go-pretty/table"
 
@@ -99,6 +100,8 @@ var rootCmd = &cobra.Command{
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
+	defer logger.Logger.Sync()
+
 	cc.Init(&cc.Config{
 		RootCmd:  rootCmd,
 		Headings: cc.HiCyan + cc.Underline, NoExtraNewlines: true,

@@ -12,6 +12,7 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/borderzero/border0-cli/client/preference"
+	"github.com/borderzero/border0-cli/cmd/logger"
 	"github.com/borderzero/border0-cli/internal/client"
 	"github.com/borderzero/border0-cli/internal/enum"
 	"github.com/moby/term"
@@ -73,7 +74,7 @@ var sshCmd = &cobra.Command{
 			sshType = pickedHost.SshType
 		}
 
-		token, claims, err := client.MTLSLogin(hostname)
+		token, claims, err := client.MTLSLogin(logger.Logger, hostname)
 		if err != nil {
 			return err
 		}
@@ -115,7 +116,7 @@ var sshCmd = &cobra.Command{
 			return fmt.Errorf("unable to create ssh key: %w", err)
 		}
 
-		info, err := client.GetResourceInfo(hostname)
+		info, err := client.GetResourceInfo(logger.Logger, hostname)
 		if err != nil {
 			log.Fatalf("failed to get certificate: %v", err.Error())
 		}

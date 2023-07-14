@@ -38,6 +38,6 @@ func fetchLogLevelByEnv() zapcore.Level {
 	case "error":
 		return zapcore.ErrorLevel
 	default:
-		return zapcore.WarnLevel
+		return zapcore.InfoLevel
 	}
 }

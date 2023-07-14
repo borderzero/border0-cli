@@ -92,7 +92,7 @@ func (c *ConnectorCore) TunnelConnnect(ctx context.Context, socket models.Socket
 
 	var handlerConfig *sqlauthproxy.Config
 	if socket.SocketType == "database" {
-		handlerConfig, err = sqlauthproxy.BuildHandlerConfig(socket)
+		handlerConfig, err = sqlauthproxy.BuildHandlerConfig(c.logger, socket)
 		if err != nil {
 			return fmt.Errorf("failed to create config for socket: %s", err)
 		}
@@ -100,7 +100,7 @@ func (c *ConnectorCore) TunnelConnnect(ctx context.Context, socket models.Socket
 
 	var sshProxyConfig *ssh.ProxyConfig
 	if socket.SocketType == "ssh" {
-		sshProxyConfig, err = ssh.BuildProxyConfig(socket, c.cfg.Connector.AwsRegion, c.cfg.Connector.AwsProfile)
+		sshProxyConfig, err = ssh.BuildProxyConfig(c.logger, socket, c.cfg.Connector.AwsRegion, c.cfg.Connector.AwsProfile)
 		if err != nil {
 			return fmt.Errorf("failed to create config for socket: %s", err)
 		}
@@ -114,7 +114,11 @@ func (c *ConnectorCore) TunnelConnnect(ctx context.Context, socket models.Socket
 
 	switch {
 	case socket.ConnectorLocalData != nil && socket.ConnectorLocalData.SSHServer && socket.SocketType == "ssh":
-		sshServer := ssh.NewServer(conn.Socket.Organization.Certificates["ssh_public_key"])
+		sshServer, err := ssh.NewServer(c.logger, conn.Socket.Organization.Certificates["ssh_public_key"])
+		if err != nil {
+			return err
+		}
+
 		if err := sshServer.Serve(l); err != nil {
 			return err
 		}
@@ -127,7 +131,7 @@ func (c *ConnectorCore) TunnelConnnect(ctx context.Context, socket models.Socket
 			return err
 		}
 	default:
-		if err := border0.Serve(l, socket.ConnectorData.TargetHostname, socket.ConnectorData.Port); err != nil {
+		if err := border0.Serve(c.logger, l, socket.ConnectorData.TargetHostname, socket.ConnectorData.Port); err != nil {
 			return err
 		}
 	}

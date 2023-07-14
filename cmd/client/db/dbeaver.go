@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/borderzero/border0-cli/client/preference"
+	"github.com/borderzero/border0-cli/cmd/logger"
 	"github.com/borderzero/border0-cli/internal/client"
 	"github.com/borderzero/border0-cli/internal/enum"
 	"github.com/spf13/cobra"
@@ -52,7 +53,7 @@ var dbeaverCmd = &cobra.Command{
 		socketPref.DatabaseClient = "dbeaver"
 		pref.SetSocket(socketPref)
 
-		info, err := client.GetResourceInfo(hostname)
+		info, err := client.GetResourceInfo(logger.Logger, hostname)
 		if err != nil {
 			return err
 		}
@@ -76,7 +77,7 @@ var dbeaverCmd = &cobra.Command{
 			return fmt.Errorf("failed to get home dir : %w", err)
 		}
 
-		_, claims, err := client.MTLSLogin(connectionName)
+		_, claims, err := client.MTLSLogin(logger.Logger, connectionName)
 		if err != nil {
 			return err
 		}

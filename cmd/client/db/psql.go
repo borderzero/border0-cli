@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/borderzero/border0-cli/client/preference"
+	"github.com/borderzero/border0-cli/cmd/logger"
 	"github.com/borderzero/border0-cli/internal/client"
 	"github.com/borderzero/border0-cli/internal/enum"
 	"github.com/spf13/cobra"
@@ -54,7 +55,7 @@ var psqlCmd = &cobra.Command{
 		socketPref.DatabaseClient = "psql"
 		pref.SetSocket(socketPref)
 
-		info, err := client.GetResourceInfo(hostname)
+		info, err := client.GetResourceInfo(logger.Logger, hostname)
 		if err != nil {
 			return err
 		}

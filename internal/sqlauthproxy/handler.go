@@ -7,6 +7,7 @@ import (
 
 	"github.com/borderzero/border0-cli/internal/api/models"
 	"github.com/borderzero/border0-cli/internal/cloudsql"
+	"go.uber.org/zap"
 )
 
 type handler interface {
@@ -14,6 +15,7 @@ type handler interface {
 }
 
 type Config struct {
+	Logger           *zap.Logger
 	Hostname         string
 	Port             int
 	RdsIam           bool
@@ -55,13 +57,14 @@ func Serve(l net.Listener, config Config) error {
 	}
 }
 
-func BuildHandlerConfig(socket models.Socket) (*Config, error) {
+func BuildHandlerConfig(logger *zap.Logger, socket models.Socket) (*Config, error) {
 	upstreamTLS := true
 	if socket.ConnectorLocalData.UpstreamTLS != nil {
 		upstreamTLS = *socket.ConnectorLocalData.UpstreamTLS
 	}
 
 	handlerConfig := &Config{
+		Logger:           logger,
 		Hostname:         socket.ConnectorData.TargetHostname,
 		Port:             socket.ConnectorData.Port,
 		RdsIam:           socket.ConnectorLocalData.RdsIAMAuth,

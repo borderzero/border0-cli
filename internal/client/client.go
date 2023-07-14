@@ -32,6 +32,7 @@ import (
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/moby/term"
 	"github.com/pavlo-v-chernykh/keystore-go/v4"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -53,7 +54,7 @@ func CheckIfTokenIsExpired(rawToken string) bool {
 	return true
 }
 
-func MTLSLogin(hostname string) (string, jwt.MapClaims, error) {
+func MTLSLogin(logger *zap.Logger, hostname string) (string, jwt.MapClaims, error) {
 	if hostname == "" {
 		return "", nil, errors.New("empty hostname not allowed")
 	}
@@ -95,7 +96,7 @@ func MTLSLogin(hostname string) (string, jwt.MapClaims, error) {
 
 		localPort := listener.Addr().(*net.TCPAddr).Port
 		url := fmt.Sprintf("%s/mtls-ca/socket/%s/auth?port=%d", api.APIURL(), hostname, localPort)
-		token = Launch(url, listener)
+		token = Launch(logger, url, listener)
 
 		// create dir if not exists
 		configPath := filepath.Dir(tokenFile)
@@ -286,8 +287,8 @@ func IsClientCertValid() (crtPath, keyPath string, valid bool) {
 	return
 }
 
-func FetchCertAndReturnPaths(hostname string) (crtPath, keyPath string, err error) {
-	token, claims, err := MTLSLogin(hostname)
+func FetchCertAndReturnPaths(logger *zap.Logger, hostname string) (crtPath, keyPath string, err error) {
+	token, claims, err := MTLSLogin(logger, hostname)
 	if err != nil {
 		return
 	}
@@ -320,17 +321,17 @@ func (info *ResourceInfo) SetupTLSCertificate() tls.Certificate {
 	}
 }
 
-func GetResourceInfo(hostname string) (info ResourceInfo, err error) {
+func GetResourceInfo(logger *zap.Logger, hostname string) (info ResourceInfo, err error) {
 	var claims jwt.MapClaims
 
-	token, claims, err := MTLSLogin(hostname)
+	token, claims, err := MTLSLogin(logger, hostname)
 	if err != nil {
 		return
 	}
 
 	var ok bool
 	if info.CertificatePath, info.PrivateKeyPath, ok = IsClientCertValid(); !ok {
-		info.CertificatePath, info.PrivateKeyPath, err = FetchCertAndReturnPaths(hostname)
+		info.CertificatePath, info.PrivateKeyPath, err = FetchCertAndReturnPaths(logger, hostname)
 		if err != nil {
 			return
 		}
@@ -360,7 +361,7 @@ func MTLSTokenFile() string {
 	return filepath.Join(home, ".border0/client_token")
 }
 
-func Launch(url string, listener net.Listener) string {
+func Launch(logger *zap.Logger, url string, listener net.Listener) string {
 	c := make(chan string)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

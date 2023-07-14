@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/borderzero/border0-cli/client/preference"
+	"github.com/borderzero/border0-cli/cmd/logger"
 	"github.com/borderzero/border0-cli/internal/client"
 	"github.com/borderzero/border0-cli/internal/client/mysqlworkbench"
 	"github.com/borderzero/border0-cli/internal/enum"
@@ -52,7 +53,7 @@ var mysqlWorkbenchCmd = &cobra.Command{
 		socketPref.DatabaseClient = "mysqlworkbench"
 		pref.SetSocket(socketPref)
 
-		info, err := client.GetResourceInfo(hostname)
+		info, err := client.GetResourceInfo(logger.Logger, hostname)
 		if err != nil {
 			return err
 		}

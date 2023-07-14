@@ -6,7 +6,6 @@ import (
 	"crypto/rsa"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"os/user"
@@ -16,20 +15,21 @@ import (
 	"strings"
 
 	"github.com/gliderlabs/ssh"
+	"go.uber.org/zap"
 	gossh "golang.org/x/crypto/ssh"
 )
 
-func NewServer(ca string) *ssh.Server {
+func NewServer(logger *zap.Logger, ca string) (*ssh.Server, error) {
 	handler := ssh.Handler(func(s ssh.Session) {
 		user, err := user.Lookup(s.User())
 		if err != nil {
-			log.Printf("could not find user: %s", err)
+			logger.Sugar().Errorf("could not find user: %s", err)
 			return
 		}
 
 		shell, err := getShell(user)
 		if err != nil {
-			log.Printf("could not get user shell: %s", err)
+			logger.Sugar().Errorf("could not get user shell: %s", err)
 			return
 		}
 
@@ -41,11 +41,11 @@ func NewServer(ca string) *ssh.Server {
 		pubKey := s.PublicKey()
 		cert, ok := pubKey.(*gossh.Certificate)
 		if !ok {
-			log.Printf("could not get user certificate")
+			logger.Sugar().Errorf("could not get user certificate")
 			return
 		}
 
-		log.Printf("new ssh session for %s (as user %s)\n", cert.KeyId, s.User())
+		logger.Sugar().Infof("new ssh session for %s (as user %s)", cert.KeyId, s.User())
 
 		uid, _ := strconv.ParseUint(user.Uid, 10, 32)
 		gid, _ := strconv.ParseUint(user.Gid, 10, 32)
@@ -64,12 +64,12 @@ func NewServer(ca string) *ssh.Server {
 
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		log.Fatalf("could not generate rsa key: %s", err)
+		return nil, fmt.Errorf("could not generate rsa key: %s", err)
 	}
 
 	signer, err := gossh.NewSignerFromKey(key)
 	if err != nil {
-		log.Fatalf("could not generate signer: %s", err)
+		return nil, fmt.Errorf("could not generate signer: %s", err)
 	}
 
 	requestHandlers := map[string]ssh.RequestHandler{}
@@ -94,12 +94,13 @@ func NewServer(ca string) *ssh.Server {
 		PublicKeyHandler: func(ctx ssh.Context, key ssh.PublicKey) bool {
 			pubCert, _, _, _, err := ssh.ParseAuthorizedKey([]byte(ca))
 			if err != nil {
-				log.Fatalf("ERROR parsing public cert: %s", err)
+				logger.Error("error parsing public certificate", zap.Error(err))
+				return false
 			}
 
 			cert, ok := key.(*gossh.Certificate)
 			if !ok {
-				log.Printf("ERROR: key is not a cert")
+				logger.Error("error key is not a certificate")
 				return false
 			}
 
@@ -113,7 +114,7 @@ func NewServer(ca string) *ssh.Server {
 
 			err = certChecker.CheckCert("mysocket_ssh_signed", cert)
 			if err != nil {
-				log.Println("failed validating the certificate")
+				logger.Error("error validating certificate", zap.Error(err))
 				return false
 			}
 
@@ -122,7 +123,7 @@ func NewServer(ca string) *ssh.Server {
 		RequestHandlers:   requestHandlers,
 		ChannelHandlers:   channelHandlers,
 		SubsystemHandlers: subsystemHandlers,
-	}
+	}, nil
 }
 
 func getShell(user *user.User) (string, error) {

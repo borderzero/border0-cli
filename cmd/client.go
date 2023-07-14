@@ -24,6 +24,7 @@ import (
 	"github.com/borderzero/border0-cli/client/preference"
 	"github.com/borderzero/border0-cli/cmd/client/db"
 	clientTls "github.com/borderzero/border0-cli/cmd/client/tls"
+	"github.com/borderzero/border0-cli/cmd/logger"
 
 	"github.com/borderzero/border0-cli/cmd/client/hosts"
 	"github.com/borderzero/border0-cli/cmd/client/ssh"
@@ -47,7 +48,7 @@ var clientCertFetchCmd = &cobra.Command{
 	Short: "Fetch Client certificate",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if crtPath, keyPath, ok := client.IsClientCertValid(); !ok {
-			crtPath, keyPath, err := client.FetchCertAndReturnPaths(hostname)
+			crtPath, keyPath, err := client.FetchCertAndReturnPaths(logger.Logger, hostname)
 			if err != nil {
 				return err
 			}
