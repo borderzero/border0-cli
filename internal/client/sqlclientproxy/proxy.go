@@ -18,7 +18,6 @@ type sqlClientProxy struct {
 	info      client.ResourceInfo
 	resource  models.ClientResource
 	tlsConfig *tls.Config
-	logger    *zap.Logger
 }
 
 func NewSqlClientProxy(logger *zap.Logger, port int, resource models.ClientResource) (SqlClientProxy, error) {

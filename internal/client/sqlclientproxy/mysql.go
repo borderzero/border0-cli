@@ -63,7 +63,6 @@ func newMysqlClientProxy(logger *zap.Logger, port int, resource models.ClientRes
 			info:      info,
 			resource:  resource,
 			tlsConfig: tlsConfig,
-			logger:    logger,
 		},
 		server: server.NewDefaultServer(),
 	}, nil

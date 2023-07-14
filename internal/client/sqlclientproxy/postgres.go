@@ -47,7 +47,6 @@ func newPostgresClientProxy(logger *zap.Logger, port int, resource models.Client
 			info:      info,
 			resource:  resource,
 			tlsConfig: tlsConfig,
-			logger:    logger,
 		},
 		upstreamConfig: upstreamConfig,
 	}, nil
