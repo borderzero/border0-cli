@@ -33,59 +33,86 @@ import (
 )
 
 const (
-	backoffMaxInterval = 1 * time.Hour
+	defaultInitialHeartbeatInterval = time.Second * 10
 )
 
+func defaultBackoff() backoff.BackOff {
+	bo := backoff.NewExponentialBackOff()
+	bo.MaxElapsedTime = time.Second * 0
+	bo.MaxInterval = time.Hour * 1
+	return bo
+}
+
+// ConnectorService represents the connector functionality.
 type ConnectorService struct {
-	config              *config.Configuration
-	logger              *zap.Logger
-	backoff             *backoff.ExponentialBackOff
-	version             string
-	context             context.Context
-	stream              pb.ConnectorService_ControlStreamClient
-	heartbeatInterval   int
-	plugins             map[string]plugin.Plugin
-	sockets             map[string]*border0.Socket
-	requests            sync.Map
+	context context.Context
+	config  *config.Configuration
+	logger  *zap.Logger
+
+	backoff           backoff.BackOff
+	heartbeatInterval time.Duration
+
+	stream   pb.ConnectorService_ControlStreamClient
+	plugins  map[string]plugin.Plugin
+	sockets  map[string]*border0.Socket
+	requests sync.Map
+
 	organization        *models.Organization
 	discoveryResultChan chan *plugin.PluginDiscoveryResults
 }
 
-func NewConnectorService(ctx context.Context, logger *zap.Logger, version string) *ConnectorService {
-	config, err := config.GetConfiguration(ctx)
-	if err != nil {
-		logger.Fatal("failed to get configuration", zap.Error(err))
-	}
+// ConnectorServiceOption represents a ConnectorService option.
+type ConnectorServiceOption func(*ConnectorService)
 
-	return &ConnectorService{
-		config:            config,
-		logger:            logger,
-		version:           version,
-		context:           ctx,
-		heartbeatInterval: 10,
-		plugins:           make(map[string]plugin.Plugin),
-		sockets:           make(map[string]*border0.Socket),
-		// requests:            make(map[string]chan *pb.ControlStreamReponse),
+// WithBackoff is the ConnectorServiceOption to set a non-default backoff.
+func WithBackoff(backoff backoff.BackOff) ConnectorServiceOption {
+	return func(c *ConnectorService) { c.backoff = backoff }
+}
+
+// WithInitialHeartbeatInterval is the ConnectorServiceOption to set a non-default initial heartbeat interval.
+func WithInitialHeartbeatInterval(interval time.Duration) ConnectorServiceOption {
+	return func(c *ConnectorService) { c.heartbeatInterval = interval }
+}
+
+// NewConnectorService returns a newly initialized ConnectorService.
+func NewConnectorService(
+	ctx context.Context,
+	config *config.Configuration,
+	logger *zap.Logger,
+	opts ...ConnectorServiceOption,
+) *ConnectorService {
+	cs := &ConnectorService{
+		context: ctx,
+		config:  config,
+		logger:  logger,
+
+		backoff:           defaultBackoff(),
+		heartbeatInterval: defaultInitialHeartbeatInterval,
+
+		plugins:             make(map[string]plugin.Plugin),
+		sockets:             make(map[string]*border0.Socket),
 		discoveryResultChan: make(chan *plugin.PluginDiscoveryResults, 100),
 	}
+
+	for _, opt := range opts {
+		opt(cs)
+	}
+
+	return cs
 }
 
 func (c *ConnectorService) Start() {
 	c.logger.Info("starting the connector service")
 	newCtx, cancel := context.WithCancel(c.context)
 
-	go c.StartControlStream(newCtx, cancel)
+	go c.startControlStream(newCtx, cancel)
 	go c.handleDiscoveryResult(newCtx)
 
 	<-newCtx.Done()
 }
 
-func (c *ConnectorService) StartControlStream(ctx context.Context, cancel context.CancelFunc) {
+func (c *ConnectorService) startControlStream(ctx context.Context, cancel context.CancelFunc) {
 	defer cancel()
-
-	c.backoff = backoff.NewExponentialBackOff()
-	c.backoff.MaxElapsedTime = 0
-	c.backoff.MaxInterval = backoffMaxInterval
 
 	if err := backoff.Retry(c.controlStream, c.backoff); err != nil {
 		c.logger.Error("error in control stream", zap.Error(err))
@@ -97,7 +124,7 @@ func (c *ConnectorService) heartbeat(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(time.Duration(c.heartbeatInterval) * time.Second):
+		case <-time.After(c.heartbeatInterval):
 			if err := c.sendControlStreamRequest(&pb.ControlStreamRequest{RequestType: &pb.ControlStreamRequest_Heartbeat{Heartbeat: &pb.HeartbeatRequest{}}}); err != nil {
 				c.logger.Error("failed to send heartbeat", zap.Error(err))
 			}
@@ -251,7 +278,7 @@ func (c *ConnectorService) newConnectorClient(ctx context.Context) (*grpc.Client
 }
 
 func (c *ConnectorService) handleConnectorConfig(config *pb.ConnectorConfig) error {
-	c.heartbeatInterval = int(config.HeartbeatInterval)
+	c.heartbeatInterval = time.Second * time.Duration(config.HeartbeatInterval)
 	return nil
 }
 
@@ -264,7 +291,7 @@ func (c *ConnectorService) handleInit(init *pb.Init) error {
 		return fmt.Errorf("init message is missing required fields")
 	}
 
-	c.heartbeatInterval = int(connectorConfig.GetHeartbeatInterval())
+	c.heartbeatInterval = time.Second * time.Duration(connectorConfig.GetHeartbeatInterval())
 
 	certificates := make(map[string]string)
 	if err := util.AsStruct(connectorConfig.Organization.Certificates, &certificates); err != nil {

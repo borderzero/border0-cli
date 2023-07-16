@@ -25,16 +25,17 @@ const (
 
 	defaultCredentialsFilePath = ".border0/config.yml"
 
-	defaultConnectorServer = "capi.border0.com:443"
-	defaultTunnelServer    = "tunnel.border0.com"
+	defaultConnectorServer            = "capi.border0.com:443"
+	defaultConnectorInsecureTransport = false
+	defaultTunnelServer               = "tunnel.border0.com"
 )
 
 // Configuration represents (static) connector configuration
 type Configuration struct {
-	Token                      string            `yaml:"token"`
 	ConnectorServer            string            `yaml:"connector_server"`
-	ConnectorInsecureTransport bool              `yaml:"connector_insecure"`
+	ConnectorInsecureTransport bool              `yaml:"connector_insecure_transport"`
 	TunnelServer               string            `yaml:"tunnel_server"`
+	Token                      string            `yaml:"token"`
 	Variables                  map[string]string `yaml:"variables,omitempty"`
 }
 
@@ -44,7 +45,7 @@ func GetConfiguration(ctx context.Context) (*Configuration, error) {
 	vs := varsource.NewDefaultVariableSource()
 	config := &Configuration{
 		ConnectorServer:            defaultConnectorServer,
-		ConnectorInsecureTransport: false,
+		ConnectorInsecureTransport: defaultConnectorInsecureTransport,
 		TunnelServer:               defaultTunnelServer,
 	}
 

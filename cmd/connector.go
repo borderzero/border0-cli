@@ -26,6 +26,7 @@ import (
 	"github.com/borderzero/border0-cli/internal/connector/service_daemon"
 
 	connectorv2 "github.com/borderzero/border0-cli/internal/connector_v2"
+	configv2 "github.com/borderzero/border0-cli/internal/connector_v2/config"
 	"github.com/borderzero/border0-cli/internal/http"
 	"github.com/borderzero/border0-cli/internal/logging"
 	"github.com/spf13/cobra"
@@ -239,7 +240,18 @@ var connectorStartCmd = &cobra.Command{
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
-			connectorv2.NewConnectorService(ctx, log, version).Start()
+			config, err := configv2.GetConfiguration(ctx)
+			if err != nil {
+				log.Fatal("failed to get configuration", zap.Error(err))
+			}
+
+			connectorOpts := []connectorv2.ConnectorServiceOption{
+				// ...
+			}
+
+			connector := connectorv2.NewConnectorService(ctx, config, log, connectorOpts...)
+
+			connector.Start()
 		} else {
 			var configPath string
 			configPathFromEnv := os.Getenv("BORDER0_CONFIG_FILE")
