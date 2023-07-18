@@ -89,7 +89,7 @@ func (c *connectorLogger) Write(entry zapcore.Entry, fields []zapcore.Field) err
 	})
 
 	if err != nil && err.Error() != errors.ErrStreamNotConnected {
-		c.logger.Error("Failed to send log", zap.Error(err))
+		c.logger.Error("failed to send log", zap.Error(err))
 	}
 
 	return nil
