@@ -140,7 +140,10 @@ func (a *Border0API) Request(method string, url string, target interface{}, data
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
@@ -456,13 +459,15 @@ func (a *Border0API) StartRefreshAccessTokenJob(ctx context.Context) {
 						if err.Error() == "token is not valid to refresh" {
 							return err
 						}
-					}
 
-					func() {
-						a.mutex.Lock()
-						defer a.mutex.Unlock()
-						a.Credentials = token
-					}()
+						fmt.Println("failed to refresh token:", err)
+					} else {
+						func() {
+							a.mutex.Lock()
+							defer a.mutex.Unlock()
+							a.Credentials = token
+						}()
+					}
 				}
 			}
 		})
