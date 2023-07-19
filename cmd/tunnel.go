@@ -128,7 +128,12 @@ var tunnelConnectCmd = &cobra.Command{
 			log.Fatalf("error: invalid socket_id")
 		}
 
-		socket, err := border0.NewSocket(context.Background(), api.NewAPI(api.WithVersion(version)), socketID)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		border0API := api.NewAPI(api.WithVersion(version))
+
+		socket, err := border0.NewSocket(ctx, border0API, socketID)
 		if err != nil {
 			log.Fatalf("error: %v", err)
 		}
@@ -148,6 +153,8 @@ var tunnelConnectCmd = &cobra.Command{
 		if socket.SocketType != "ssh" && localssh {
 			localssh = false
 		}
+
+		border0API.StartRefreshAccessTokenJob(ctx)
 
 		l, err := socket.Listen()
 		if err != nil {

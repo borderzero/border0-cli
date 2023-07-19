@@ -282,6 +282,11 @@ var socketConnectCmd = &cobra.Command{
 	Short:             "Connect a socket",
 	ValidArgsFunction: AutocompleteSocket,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		border0API := api.NewAPI(api.WithVersion(version))
+
 		if socketID == "" && (len(args) == 0) {
 			return fmt.Errorf("error: no socket provided")
 		}
@@ -290,7 +295,7 @@ var socketConnectCmd = &cobra.Command{
 			socketID = args[0]
 		}
 
-		socket, err := border0.NewSocket(context.Background(), api.NewAPI(api.WithVersion(version)), socketID)
+		socket, err := border0.NewSocket(ctx, border0API, socketID)
 		if err != nil {
 			log.Fatalf("error: %v", err)
 		}
@@ -347,7 +352,6 @@ var socketConnectCmd = &cobra.Command{
 			}
 
 			if cloudSqlConnector {
-				ctx := context.Background()
 				dialer, err := cloudsql.NewDialer(ctx, cloudSqlInstance, cloudSqlCredentialsFile, cloudSqlIAM)
 				if err != nil {
 					return fmt.Errorf("failed to create dialer for cloudSQL: %s", err)
@@ -425,6 +429,8 @@ var socketConnectCmd = &cobra.Command{
 				port = 22
 			}
 		}
+
+		border0API.StartRefreshAccessTokenJob(ctx)
 
 		l, err := socket.Listen()
 		if err != nil {

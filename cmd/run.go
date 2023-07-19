@@ -100,12 +100,18 @@ var runCmd = &cobra.Command{
 
 		}()
 
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		border0API := api.NewAPI(api.WithVersion(version))
+		border0API.StartRefreshAccessTokenJob(ctx)
+
 		// HTTP go routines
 		go processStats(*process)
-		go createHTTPSocketStartTunnel(cmd, quitChannelHttp, cleanupDone)
+		go createHTTPSocketStartTunnel(ctx, border0API, quitChannelHttp, cleanupDone)
 
 		// SSH go routines
-		go createSocketStartTunnel(cmd, quitChannelSsh, cleanupDone)
+		go createSocketStartTunnel(ctx, border0API, quitChannelSsh, cleanupDone)
 
 		process.Wait() // will wait until finished
 
@@ -133,15 +139,14 @@ var runCmd = &cobra.Command{
 	},
 }
 
-func createSocketStartTunnel(cmd *cobra.Command, quitChannelSsh chan bool, cleanupDone chan bool) {
+func createSocketStartTunnel(ctx context.Context, border0API *api.Border0API, quitChannelSsh chan bool, cleanupDone chan bool) {
 	socketId := ""
-	border0API := api.NewAPI(api.WithVersion(version))
 
 	go func() {
 		// This will make sure we cleanup the socket as soon as we get something on the quitChannel
 		<-quitChannelSsh
 		if socketId != "" {
-			if err := border0API.DeleteSocket(context.Background(), socketId); err != nil {
+			if err := border0API.DeleteSocket(ctx, socketId); err != nil {
 				log.Fatalf("failed to cleunup socket: %s", err)
 			}
 		}
@@ -174,7 +179,7 @@ func createSocketStartTunnel(cmd *cobra.Command, quitChannelSsh chan bool, clean
 				ConnectorAuthenticationEnabled: connectorAuthEnabled,
 			}
 
-			socketFromAPI, err := border0API.CreateSocket(context.Background(), socketToCreate)
+			socketFromAPI, err := border0API.CreateSocket(ctx, socketToCreate)
 			if err != nil {
 				return fmt.Errorf("failed to create socket: %s", err)
 			}
@@ -189,7 +194,7 @@ func createSocketStartTunnel(cmd *cobra.Command, quitChannelSsh chan bool, clean
 			fmt.Print(print_socket(*socketFromAPI, policies))
 			SetRlimit()
 
-			socket, err := border0.NewSocket(context.Background(), api.NewAPI(api.WithVersion(version)), socketFromAPI.SocketID)
+			socket, err := border0.NewSocket(ctx, border0API, socketFromAPI.SocketID)
 			if err != nil {
 				return fmt.Errorf("failed to create socket: %s", err)
 			}
@@ -219,15 +224,14 @@ func createSocketStartTunnel(cmd *cobra.Command, quitChannelSsh chan bool, clean
 
 }
 
-func createHTTPSocketStartTunnel(cmd *cobra.Command, quitChannelHttp chan bool, cleanupDone chan bool) {
+func createHTTPSocketStartTunnel(ctx context.Context, border0API *api.Border0API, quitChannelHttp chan bool, cleanupDone chan bool) {
 	socketId := ""
-	border0API := api.NewAPI(api.WithVersion(version))
 
 	go func() {
 		// This will make sure we cleanup the socket as soon as we get something on the quitChannel
 		<-quitChannelHttp
 		if socketId != "" {
-			if err := border0API.DeleteSocket(context.Background(), socketId); err != nil {
+			if err := border0API.DeleteSocket(ctx, socketId); err != nil {
 				log.Fatalf("failed to cleunup socket: %s", err)
 			}
 		}
@@ -261,7 +265,7 @@ func createHTTPSocketStartTunnel(cmd *cobra.Command, quitChannelHttp chan bool, 
 				ConnectorAuthenticationEnabled: connectorAuthEnabled,
 			}
 
-			socketFromAPI, err := border0API.CreateSocket(context.Background(), socketToCreate)
+			socketFromAPI, err := border0API.CreateSocket(ctx, socketToCreate)
 			if err != nil {
 				return fmt.Errorf("failed to create socket: %s", err)
 			}
@@ -277,7 +281,7 @@ func createHTTPSocketStartTunnel(cmd *cobra.Command, quitChannelHttp chan bool, 
 
 			SetRlimit()
 
-			socket, err := border0.NewSocket(context.Background(), api.NewAPI(api.WithVersion(version)), socketFromAPI.SocketID)
+			socket, err := border0.NewSocket(ctx, border0API, socketFromAPI.SocketID)
 			if err != nil {
 				return fmt.Errorf("failed to create socket: %s", err)
 			}

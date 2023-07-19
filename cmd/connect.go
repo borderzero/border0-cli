@@ -71,8 +71,11 @@ var connectCmd = &cobra.Command{
 			ConnectorAuthenticationEnabled: connectorAuthEnabled,
 		}
 
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
 		border0API := api.NewAPI(api.WithVersion(version))
-		socketFromAPI, err := border0API.CreateSocket(context.Background(), socketToCreate)
+		socketFromAPI, err := border0API.CreateSocket(ctx, socketToCreate)
 		if err != nil {
 			log.Fatalf("failed to create socket: %s", err)
 		}
@@ -89,7 +92,7 @@ var connectCmd = &cobra.Command{
 		go func() {
 			<-ch
 			fmt.Println("cleaning up...")
-			if err := border0API.DeleteSocket(context.Background(), socketFromAPI.SocketID); err != nil {
+			if err := border0API.DeleteSocket(ctx, socketFromAPI.SocketID); err != nil {
 				log.Fatalf("failed to cleunup socket: %s", err)
 			}
 			os.Exit(0)
@@ -105,7 +108,7 @@ var connectCmd = &cobra.Command{
 			httpserver = false
 		}
 
-		socket, err := border0.NewSocket(context.Background(), api.NewAPI(api.WithVersion(version)), socketFromAPI.SocketID)
+		socket, err := border0.NewSocket(context.Background(), border0API, socketFromAPI.SocketID)
 		if err != nil {
 			log.Fatalf("error: %v", err)
 		}
@@ -117,6 +120,8 @@ var connectCmd = &cobra.Command{
 				log.Fatalf("error: %v", err)
 			}
 		}
+
+		border0API.StartRefreshAccessTokenJob(ctx)
 
 		l, err := socket.Listen()
 		if err != nil {

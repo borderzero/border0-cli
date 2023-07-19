@@ -169,44 +169,6 @@ func (c *Client) Request(method string, url string, target interface{}, data int
 	return nil
 }
 
-func RefreshLogin() (string, error) {
-
-	client, err := NewClient()
-	if err != nil {
-		return "", err
-	}
-	loginRefresh := models.LoginRefresh{}
-	res := models.TokenForm{}
-
-	err = client.Request(http.MethodPost, "login/refresh", &res, loginRefresh)
-	if err != nil {
-		return "", err
-	}
-
-	// create dir if not exists
-	configPath := filepath.Dir(tokenfile())
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		if err := os.Mkdir(configPath, 0700); err != nil {
-			return "", fmt.Errorf("failed to create directory %s : %s", configPath, err)
-		}
-	}
-
-	f, err := os.Create(tokenfile())
-	if err != nil {
-		return "", err
-	}
-	if err := os.Chmod(tokenfile(), 0600); err != nil {
-		return "", err
-	}
-	defer f.Close()
-
-	_, err = f.WriteString(fmt.Sprintf("%s\n", res.Token))
-	if err != nil {
-		return "", err
-	}
-	return res.Token, nil
-}
-
 func MFAChallenge(code string) error {
 	c, err := NewClient()
 	if err != nil {

@@ -64,10 +64,9 @@ func WithVersion(version string) APIOption {
 }
 
 type Border0API struct {
-	Credentials       *models.Credentials
-	Version           string
-	mutex             *sync.Mutex
-	refreshJobStarted bool
+	Credentials *models.Credentials
+	Version     string
+	mutex       *sync.Mutex
 }
 
 type ErrorMessage struct {
@@ -430,15 +429,14 @@ func (a *Border0API) RefreshAccessToken() (*models.Credentials, error) {
 }
 
 func (a *Border0API) StartRefreshAccessTokenJob(ctx context.Context) {
-	if a.refreshJobStarted {
-		return
-	}
-
-	a.refreshJobStarted = true
-
 	if a.Credentials == nil {
-		fmt.Println("no credentials found, no need to refresh token")
-		return
+		token, err := getToken()
+		if err != nil {
+			fmt.Println("no credentials found:", err)
+			return
+		}
+
+		a.Credentials = token
 	}
 
 	if !a.Credentials.ShouldRefresh() {
