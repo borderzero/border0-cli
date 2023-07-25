@@ -80,7 +80,6 @@ func (c *ConnectorService) Start() {
 
 	go c.StartControlStream(newCtx, cancel)
 	go c.handleDiscoveryResult(newCtx)
-	go c.uploadConnectorMetadata(newCtx)
 
 	<-newCtx.Done()
 }
@@ -136,6 +135,7 @@ func (c *ConnectorService) controlStream() error {
 
 	defer func() { c.stream = nil }()
 	go c.heartbeat(ctx)
+	go c.uploadConnectorMetadata(ctx)
 
 	for {
 		msgChan := make(chan struct {
