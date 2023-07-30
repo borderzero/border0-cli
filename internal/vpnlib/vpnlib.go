@@ -1,6 +1,7 @@
 package vpnlib
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -12,10 +13,14 @@ import (
 	"time"
 
 	"github.com/songgao/water"
+	"golang.org/x/sync/semaphore"
 )
 
 const (
-	controlMessageHeaderByteSize = 2
+	controlHeaderByteSize       = 2
+	packetHeaderBufferByteSize  = 2
+	packetBufferByteSize        = 9000
+	packetWritersMaxConcurrency = 50
 )
 
 // ControlMessage represents a message used to tell clients
@@ -33,7 +38,7 @@ func (m *ControlMessage) Build() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode control message to json: %v", err)
 	}
-	controlMessageHeader := make([]byte, controlMessageHeaderByteSize)
+	controlMessageHeader := make([]byte, controlHeaderByteSize)
 	binary.BigEndian.PutUint16(controlMessageHeader, uint16(len(controlMessageBytes)))
 	return append(controlMessageHeader, controlMessageBytes...), nil
 }
@@ -43,7 +48,7 @@ func GetControlMessage(conn net.Conn, timeout time.Duration) (*ControlMessage, e
 	conn.SetReadDeadline(time.Now().Add(timeout)) // note: ignored error
 	defer conn.SetDeadline(time.Time{})           // note: ignored error
 
-	controlMessageHeaderBuffer := make([]byte, controlMessageHeaderByteSize)
+	controlMessageHeaderBuffer := make([]byte, controlHeaderByteSize)
 
 	// read first ${headerByteSize} bytes from the connection
 	// to know how big the next incoming packet is
@@ -51,8 +56,8 @@ func GetControlMessage(conn net.Conn, timeout time.Duration) (*ControlMessage, e
 	if err != nil {
 		return nil, fmt.Errorf("Failed to read header: %v", err)
 	}
-	if headerN < controlMessageHeaderByteSize {
-		return nil, fmt.Errorf("Read less than controlMessageHeaderByteSize bytes (%d): %d", controlMessageHeaderByteSize, headerN)
+	if headerN < controlHeaderByteSize {
+		return nil, fmt.Errorf("Read less than controlMessageHeaderByteSize bytes (%d): %d", controlHeaderByteSize, headerN)
 	}
 
 	// convert binary header to the size uint16
@@ -172,11 +177,11 @@ func addIpToIfaceWindows(iface, localIp string) error {
 
 // PacketCopy copies packets between a net.Conn and a TUN interface.
 func PacketCopy(conn net.Conn, iface *water.Interface) error {
-	headerByteSize := 2
-	headerBuffer := make([]byte, headerByteSize)
+	ctx := context.TODO()
+	headerBuffer := make([]byte, packetHeaderBufferByteSize)
+	packetbuffer := make([]byte, packetBufferByteSize)
 
-	packetBufferSize := 9000
-	packetbuffer := make([]byte, packetBufferSize)
+	sem := semaphore.NewWeighted(packetWritersMaxConcurrency)
 
 	go func() {
 		for {
@@ -191,8 +196,8 @@ func PacketCopy(conn net.Conn, iface *water.Interface) error {
 				fmt.Printf("Failed to read header: %v\n", err)
 				continue
 			}
-			if headerN < headerByteSize {
-				fmt.Printf("Read less than headerByteSize bytes (%d): %d\n", headerByteSize, headerN)
+			if headerN < packetHeaderBufferByteSize {
+				fmt.Printf("Read less than packetHeaderBufferByteSize bytes (%d < %d)\n", packetHeaderBufferByteSize, headerN)
 				continue
 			}
 
@@ -213,11 +218,16 @@ func PacketCopy(conn net.Conn, iface *water.Interface) error {
 				continue
 			}
 
-			// write the packate to the TUN iface
-			if _, err = iface.Write(packetBuffer); err != nil {
-				fmt.Printf("Failed to write packet to the TUN iface: %v\n", err)
-				continue
-			}
+			sem.Acquire(ctx, 1)
+			go func() {
+				defer sem.Release(1)
+
+				// write the packate to the TUN iface
+				if _, err = iface.Write(packetBuffer); err != nil {
+					fmt.Printf("Failed to write packet to the TUN iface: %v\n", err)
+					return
+				}
+			}()
 		}
 	}()
 
@@ -230,7 +240,7 @@ func PacketCopy(conn net.Conn, iface *water.Interface) error {
 		}
 
 		// compute the header to prepend to the packet before writing to net conn
-		sizeBuf := make([]byte, headerByteSize)
+		sizeBuf := make([]byte, packetHeaderBufferByteSize)
 		binary.BigEndian.PutUint16(sizeBuf, uint16(n))
 
 		// write the encapsulated packet to the net conn
