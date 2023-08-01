@@ -1,6 +1,7 @@
 package http
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -407,10 +408,16 @@ func connect(destConn, clientConn net.Conn) {
 }
 
 func copy(dst io.Writer, src io.Reader) {
-	_, _ = io.Copy(dst, src)
+	if _, err := io.Copy(dst, src); err != nil {
+		log.Printf("something went wrong: %v", err)
+	}
 }
 
 func StartHttpProxy(listener net.Listener) error {
+	nl, err := net.Listen("tcp", ":8082")
+	if err != nil {
+		return fmt.Errorf("failed to listen for TCP: %v", err)
+	}
 	server := &http.Server{
 		//Addr: ":8080",
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -422,7 +429,50 @@ func StartHttpProxy(listener net.Listener) error {
 			}
 		}),
 	}
+	go server.Serve(nl)
 
-	//log.Fatal(server.ListenAndServe())
-	return server.Serve(listener)
+	// here we accept connections over the tls socket and for each of them
+	// dial and proxy to the other local listener
+	for {
+		rconn, err := listener.Accept()
+		if err != nil {
+			fmt.Printf("failed to accept new conn: %v", err)
+			continue
+		}
+
+		go func() {
+			defer rconn.Close()
+
+			lconn, err := net.DialTimeout("tcp", "127.0.0.1:8082", 5*time.Second)
+			if err != nil {
+				fmt.Printf("failed to dial to 8082: %v", err)
+				return
+			}
+			defer lconn.Close()
+
+			done := make(chan struct{}, 1)
+			defer close(done)
+
+			go func() {
+				if _, err := io.Copy(rconn, lconn); err != nil {
+					fmt.Printf("failed to iocopy rconn -> lconn: %v", err)
+					if errors.Is(err, io.EOF) {
+						done <- struct{}{}
+						return
+					}
+				}
+			}()
+			go func() {
+				if _, err := io.Copy(lconn, rconn); err != nil {
+					fmt.Printf("failed to iocopy lconn -> rconn: %v", err)
+					if errors.Is(err, io.EOF) {
+						done <- struct{}{}
+						return
+					}
+				}
+			}()
+
+			<-done
+		}()
+	}
 }
