@@ -95,6 +95,30 @@ build-linux:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GOBUILD) $(FLAGS) -o $(BINARY_NAME) -v
 	cp $(BINARY_NAME) border0
 
+build-linux-multiarch:
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(FLAGS) -o $(BINARY_NAME)_linux_amd64
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(FLAGS) -o $(BINARY_NAME)_linux_arm64
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm go build $(FLAGS) -o $(BINARY_NAME)_linux_arm
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=6 go build $(FLAGS) -o $(BINARY_NAME)_linux_armv6
+
+deb-package-multiarch:
+	./build-deb.sh $(VERSION) amd64
+	./build-deb.sh $(VERSION) arm64
+	./build-deb.sh $(VERSION) arm
+	./build-deb.sh $(VERSION) armv6
+
+deb-package-amd64:
+	./build-deb.sh $(VERSION) amd64
+
+deb-package-arm64:
+	./build-deb.sh $(VERSION) arm64
+
+deb-package-arm:
+	./build-deb.sh $(VERSION) arm
+
+deb-package-armv6:
+	./build-deb.sh $(VERSION) armv6
+
 build-all:
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build $(FLAGS) -o $(BINARY_NAME)_windows_amd64
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(FLAGS) -o $(BINARY_NAME)_linux_amd64
