@@ -24,6 +24,7 @@ release:
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_arm64
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_arm
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=6 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_armv6
+	CGO_ENABLED=0 GOOS=linux GOARCH=386 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_386
 	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_darwin_amd64
 	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_darwin_arm64
 	CGO_ENABLED=0 GOOS=openbsd GOARCH=amd64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_openbsd_amd64
@@ -59,6 +60,11 @@ release:
 	python3 ./s3upload.py ./bin/mysocketctl_linux_armv6-sha256-checksum.txt ${BUCKET} linux_armv6/sha256-checksum.txt
 	python3 ./s3upload.py ./bin/mysocketctl_linux_armv6 ${BUCKET} linux_armv6/mysocketctl
 
+	#This is for 32bit linux
+	shasum -a 256 ./bin/mysocketctl_linux_386 | awk '{print $$1}' > ./bin/mysocketctl_linux_386-sha256-checksum.txt
+	python3 ./s3upload.py ./bin/mysocketctl_linux_386-sha256-checksum.txt ${BUCKET} linux_386/sha256-checksum.txt
+	python3 ./s3upload.py ./bin/mysocketctl_linux_386 ${BUCKET} linux_386/mysocketctl
+
 	shasum -a 256 ./bin/mysocketctl_windows_amd64 | awk '{print $$1}' > ./bin/mysocketctl_windows_amd64-sha256-checksum.txt
 	python3 ./s3upload.py ./bin/mysocketctl_windows_amd64-sha256-checksum.txt ${BUCKET} windows_amd64/sha256-checksum.txt
 	python3 ./s3upload.py ./bin/mysocketctl_windows_amd64 ${BUCKET} windows_amd64/mysocketctl.exe
@@ -85,6 +91,9 @@ release-border0:
 	#This is for Raspberrypi armv6 32bit
 	python3 ./s3upload.py ./bin/mysocketctl_linux_armv6 ${BUCKET} linux_armv6/border0
 
+	#This is for 32bit linux
+	python3 ./s3upload.py ./bin/mysocketctl_linux_386 ${BUCKET} linux_386/border0
+
 moddownload:
 	go mod tidy
 	go mod download
@@ -104,6 +113,7 @@ build-all:
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(FLAGS) -o $(BINARY_NAME)_linux_arm64
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm go build $(FLAGS) -o $(BINARY_NAME)_linux_arm
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=6 go build $(FLAGS) -o $(BINARY_NAME)_linux_armv6
+	CGO_ENABLED=0 GOOS=linux GOARCH=386 go build $(FLAGS) -o $(BINARY_NAME)_linux_386
 	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build $(FLAGS) -o $(BINARY_NAME)_darwin_amd64
 	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build $(FLAGS) -o $(BINARY_NAME)_darwin_arm64
 	CGO_ENABLED=0 GOOS=openbsd GOARCH=amd64 go build $(FLAGS) -o $(BINARY_NAME)_openbsd_amd64
