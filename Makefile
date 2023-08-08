@@ -11,7 +11,10 @@ DATE := $(shell git log -1 --format=%cd --date=format:"%Y%m%d")
 # BORDER0_VERSION is supplied by the build script
 BORDER0_VERSION ?= $(git describe --long --dirty --tags)
 VERSION=$(BORDER0_VERSION)
-FLAGS := -ldflags "-X github.com/borderzero/border0-cli/cmd.version=$(VERSION) -X github.com/borderzero/border0-cli/cmd.date=$(DATE)"
+# strip debugging information with -s and -w linker flags
+# -s: disable symbol table
+# -w: disable DWARF generation
+FLAGS := -ldflags "-s -w -X github.com/borderzero/border0-cli/cmd.version=$(VERSION) -X github.com/borderzero/border0-cli/cmd.date=$(DATE)"
 
 all: lint moddownload test build
 
