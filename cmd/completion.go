@@ -1,12 +1,12 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
 
+	"github.com/borderzero/border0-cli/internal/command"
 	"github.com/spf13/cobra"
 )
 
@@ -35,14 +35,13 @@ var completionCmd = &cobra.Command{
 }
 
 func completionUsage() string {
-	brewPrefix := "/usr/local"
-	if runtime.GOOS == "darwin" {
+	macOSPrefix := "/usr/local"
+	if runtime.GOOS == "darwin" && command.Exists("brew") {
 		out, err := exec.Command("brew", "--prefix").CombinedOutput()
-		trimmed := strings.TrimSpace(string(out))
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: cannot execute `brew --prefix` %s, %s\n\n", trimmed, err)
+			// do nothing, just use default prefix
 		} else {
-			brewPrefix = trimmed
+			macOSPrefix = strings.TrimSpace(string(out))
 		}
 	}
 	return `To load completions:
@@ -55,7 +54,7 @@ Bash:
   # Linux:
   $ border0 completion bash > /etc/bash_completion.d/border0
   # macOS:
-  $ border0 completion bash > ` + brewPrefix + `/etc/bash_completion.d/border0
+  $ border0 completion bash > ` + macOSPrefix + `/etc/bash_completion.d/border0
 
 Zsh:
 
