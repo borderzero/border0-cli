@@ -4,135 +4,145 @@ run-name: Build and release (${{ github.ref_type }}=${{ github.ref_name }})
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
-    paths:
-      - client/**
-      - cmd/**
-      - internal/**
-      - lib/**
-
-permissions:
-  id-token: write
-  contents: read
-  packages: write
+    #branches: [ main ]
+    #paths:
+    #  - client/**
+    #  - cmd/**
+    #  - internal/**
+    #  - lib/**
 
 jobs:
-  build-and-release:
+  build:
     runs-on: ubuntu-latest
-    env:
-      ENV: "prod"
-      CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
-
+    strategy:
+      matrix:
+        target: ["windows-amd64", "linux-amd64", "linux-arm64", "linux-arm", "linux-armv6", "linux-386", "darwin-amd64", "darwin-arm64", "openbsd-amd64"]
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
+      - uses: actions/setup-go@v3
+        with:
+          go-version: '1.20.7' # The Go version to download (if necessary) and use.
+      - run: go version
+      - name: Print Versions
+        run: |
+           go version
+      - name: Build for ${{ matrix.target }}
+        run: |
+          make moddownload
+          make build-${{ matrix.target }}
+      - name: Figure out border0 file name
+        run: |
+          BORDER0_BIN=${{ matrix.target }}
+          BORDER0_BIN=${BORDER0_BIN/-/_}
+          echo ${BORDER0_BIN}
+          echo "BORDER0_BIN=border0_${BORDER0_BIN}" >> $GITHUB_ENV
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.target }}
+          path: |
+            bin/${{ env.BORDER0_BIN }}
+          retention-days: 1
 
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      ENV: "prod"
+      CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+    permissions:
+      id-token: write
+      contents: read
+      actions: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+      - name: List files
+        run: |
+          ls -ahl --color
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-region: us-east-2
           role-to-assume: ${{ secrets.PROD_BUILD_AND_DEPLOY_ROLE }}
           role-session-name: BuildAndDeploy4border0cli
-          role-duration-seconds: 2400 # 40 minutes
-
-      - uses: actions/setup-go@v3
-        with:
-          go-version: '1.20.1' # The Go version to download (if necessary) and use.
-      - run: go version
-
+          role-duration-seconds: 900 # 15 minutes
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y python3 python3-boto3
-
-      - name: Print Versions
-        run: |
-           go version
-
       - name: Generate git repo version string
         run: |
           BORDER0_VERSION=$(git describe --long --dirty --tags)
           echo ${BORDER0_VERSION}
           echo "BORDER0_VERSION=${BORDER0_VERSION}" >> $GITHUB_ENV
-
-      - name: where am i?
+      - name: Run make release
         run: |
-          pwd
-          ls
-
-      - name: Run Make release
-        run: |
-          make all
           make release
-          make release-border0
+      #- name: Invalidate CloudFront cache for download.border0.com
+      #  run: |
+      #    aws cloudfront create-invalidation --distribution-id ${CLOUDFRONT_DISTRIBUTION_ID} --paths "/*"
+      #- name: Login to GitHub Container Registry
+      #  uses: docker/login-action@v2
+      #  with:
+      #    registry: ghcr.io
+      #    username: ${{ github.actor }}
+      #    password: ${{ secrets.GITHUB_TOKEN }}
+      #- name: Configure the image tag variables
+      #  run: |
+      #    BRANCH="${{ github.ref_name }}"
+      #    if [[ "$BRANCH" == "main" ]] ; then RELEASE="latest" ; else RELEASE="rc" ; fi
+      #    echo -e "RELEASE=${RELEASE}\nBRANCH=${BRANCH}" >> $GITHUB_ENV
+      #- name: Build and push
+      #  run: |
+      #    docker buildx create --use
+      #    docker buildx build \
+      #    --platform windows/amd64,darwin/amd64,darwin/arm64,linux/amd64,linux/arm64,linux/arm \
+      #    -t ghcr.io/${{ github.repository_owner }}/border0:${BORDER0_VERSION} \
+      #    -t ghcr.io/${{ github.repository_owner }}/border0:${BRANCH} \
+      #    -t ghcr.io/${{ github.repository_owner }}/border0:${RELEASE} \
+      #    --push .
+      #    docker buildx ls
 
-      - name: Invalidate CloudFront cache for download.border0.com
-        run: |
-          aws cloudfront create-invalidation --distribution-id ${CLOUDFRONT_DISTRIBUTION_ID} --paths "/*"
+  #trigger-app-build:
+  #  needs: release
+  #  runs-on: ubuntu-latest
+  #  steps:
+  #    # cross repo workflow trigger
+  #    # it tells mysocketio/client repo to run build_and_release.yml workflow, which re-download cli and
+  #    # packs the latest cli into the desktop app installer bundles, this trigger does not bump the version,
+  #    # so it only ensures new desktop app downloads include the updated cli binary
+  #    - name: Trigger client repo to rebuild
+  #      uses: actions/github-script@v6
+  #      with:
+  #        github-token: ${{ secrets.CLIENT_REPO_ACTIONS_TOKEN }}
+  #        script: |
+  #          await github.rest.actions.createWorkflowDispatch({
+  #            owner: 'mysocketio',
+  #            repo: 'client',
+  #            workflow_id: 'build_and_release.yml',
+  #            ref: 'main'
+  #          })
 
-      - name: See dist bin directory
-        run: |
-          ls -la bin
-          pwd
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure the image tag variables
-        run: |
-          BRANCH="${{ github.ref_name }}"
-          if [[ "$BRANCH" == "main" ]] ; then RELEASE="latest" ; else RELEASE="rc" ; fi
-          echo -e "RELEASE=${RELEASE}\nBRANCH=${BRANCH}" >> $GITHUB_ENV
-
-      - name: Build and push
-        run: |
-          docker buildx create --use
-          docker buildx build \
-          --platform windows/amd64,darwin/amd64,darwin/arm64,linux/amd64,linux/arm64,linux/arm \
-          -t ghcr.io/${{ github.repository_owner }}/border0:${BORDER0_VERSION} \
-          -t ghcr.io/${{ github.repository_owner }}/border0:${BRANCH} \
-          -t ghcr.io/${{ github.repository_owner }}/border0:${RELEASE} \
-          --push .
-          docker buildx ls
-
-  trigger-app-build:
-    needs: build-and-release
-    runs-on: ubuntu-latest
-    steps:
-      # cross repo workflow trigger
-      # it tells mysocketio/client repo to run build_and_release.yml workflow, which re-download cli and
-      # packs the latest cli into the desktop app installer bundles, this trigger does not bump the version,
-      # so it only ensures new desktop app downloads include the updated cli binary
-      - name: Trigger client repo to rebuild
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{ secrets.CLIENT_REPO_ACTIONS_TOKEN }}
-          script: |
-            await github.rest.actions.createWorkflowDispatch({
-              owner: 'mysocketio',
-              repo: 'client',
-              workflow_id: 'build_and_release.yml',
-              ref: 'main'
-            })
-
-      # cross repo workflow trigger
-      # it tells mysocketio/client repo to run bump_version_and_create_pr.yml workflow, which automatically
-      # bump the version in wails.json, and create a PR, this trigger bumps version in desktop app repo, once
-      # the PR is merged, a new build and release will be triggered, existing users will be notified for the
-      # new version, and new downloads will also include the updated cli binary
-      - name: Trigger client repo to create PR
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{ secrets.CLIENT_REPO_ACTIONS_TOKEN }}
-          script: |
-            await github.rest.actions.createWorkflowDispatch({
-              owner: 'mysocketio',
-              repo: 'client',
-              workflow_id: 'bump_version_and_create_pr.yml',
-              ref: 'main'
-            })
+  #    # cross repo workflow trigger
+  #    # it tells mysocketio/client repo to run bump_version_and_create_pr.yml workflow, which automatically
+  #    # bump the version in wails.json, and create a PR, this trigger bumps version in desktop app repo, once
+  #    # the PR is merged, a new build and release will be triggered, existing users will be notified for the
+  #    # new version, and new downloads will also include the updated cli binary
+  #    - name: Trigger client repo to create PR
+  #      uses: actions/github-script@v6
+  #      with:
+  #        github-token: ${{ secrets.CLIENT_REPO_ACTIONS_TOKEN }}
+  #        script: |
+  #          await github.rest.actions.createWorkflowDispatch({
+  #            owner: 'mysocketio',
+  #            repo: 'client',
+  #            workflow_id: 'bump_version_and_create_pr.yml',
+  #            ref: 'main'
+  #          })
