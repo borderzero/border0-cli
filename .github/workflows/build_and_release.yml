@@ -11,84 +11,149 @@ on:
       - internal/**
       - lib/**
 
-permissions:
-  id-token: write
-  contents: read
-  packages: write
-
 jobs:
-  build-and-release:
+  build:
+    name: Build CLI
     runs-on: ubuntu-latest
-    env:
-      ENV: "prod"
-      CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
-
+    strategy:
+      matrix:
+        target: ["windows-amd64", "linux-amd64", "linux-arm64", "linux-arm", "linux-armv6", "linux-386", "darwin-amd64", "darwin-arm64", "openbsd-amd64"]
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: go.mod
+      - name: Print Versions
+        run: |
+           go version
+      - name: Build for ${{ matrix.target }}
+        run: |
+          make moddownload
+          make build-${{ matrix.target }}
+      - name: Figure out border0 file name
+        run: |
+          BORDER0_BIN=${{ matrix.target }}
+          BORDER0_BIN=${BORDER0_BIN/-/_}
+          echo ${BORDER0_BIN}
+          echo "BORDER0_BIN=border0_${BORDER0_BIN}" >> $GITHUB_ENV
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.target }}
+          path: |
+            bin/${{ env.BORDER0_BIN }}
+          retention-days: 1
 
+  release:
+    needs: build
+    name: Release CLI
+    runs-on: ubuntu-latest
+    env:
+      ENV: "prod"
+      CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+    permissions:
+      id-token: write
+      contents: read
+      actions: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+      - name: List artifacts
+        run: |
+          tree ./artifacts
+      - name: Move to files around
+        run: |
+          mkdir -p ./bin
+          for file in $(find ./artifacts -name "border0_*" -type f); do mv $file ./bin; done
+          tree ./bin
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v3
         with:
           aws-region: us-east-2
           role-to-assume: ${{ secrets.PROD_BUILD_AND_DEPLOY_ROLE }}
           role-session-name: BuildAndDeploy4border0cli
-          role-duration-seconds: 2400 # 40 minutes
-
-      - uses: actions/setup-go@v3
-        with:
-          go-version: '1.20.1' # The Go version to download (if necessary) and use.
-      - run: go version
-
+          role-duration-seconds: 900 # 15 minutes
+          mask-aws-account-id: true
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y python3 python3-boto3
-
-      - name: Print Versions
-        run: |
-           go version
-
       - name: Generate git repo version string
         run: |
           BORDER0_VERSION=$(git describe --long --dirty --tags)
           echo ${BORDER0_VERSION}
           echo "BORDER0_VERSION=${BORDER0_VERSION}" >> $GITHUB_ENV
-
-      - name: where am i?
+      - name: Run make release
         run: |
-          pwd
-          ls
-
-      - name: Run Make release
-        run: |
-          make all
           make release
-          make release-border0
-
       - name: Invalidate CloudFront cache for download.border0.com
         run: |
           aws cloudfront create-invalidation --distribution-id ${CLOUDFRONT_DISTRIBUTION_ID} --paths "/*"
+      - name: Send slack notification
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          fields: workflow,repo,message,author,ref,job,took # (default: repo,message)
+          job_name: Release CLI
+          custom_payload: |
+            {
+              text: "Continuous Deployment - Border0 CLI",
+              attachments: [{
+                color: '${{ job.status }}' === 'success' ? 'good' : '${{ job.status }}' === 'failure' ? 'danger' : 'warning',
+                text: `${process.env.AS_WORKFLOW} - ${process.env.AS_JOB} (${process.env.AS_MESSAGE}) of ${process.env.AS_REPO} @${process.env.AS_REF} by ${process.env.AS_AUTHOR} ${{ job.status }} in ${process.env.AS_TOOK}`,
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }} # required
+          MATRIX_CONTEXT: ${{ toJson(matrix) }} # required
+        if: always() # pick up events even if the job failed or canceled.
 
-      - name: See dist bin directory
+  docker:
+    needs: build
+    name: Release Docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+      - name: List artifacts
         run: |
-          ls -la bin
-          pwd
-
+          tree ./artifacts
+      - name: Move to files around
+        run: |
+          mkdir -p ./bin
+          for file in $(find ./artifacts -name "border0_*" -type f); do mv $file ./bin; done
+          tree ./bin
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
+      - name: Generate git repo version string
+        run: |
+          BORDER0_VERSION=$(git describe --long --dirty --tags)
+          echo ${BORDER0_VERSION}
+          echo "BORDER0_VERSION=${BORDER0_VERSION}" >> $GITHUB_ENV
       - name: Configure the image tag variables
         run: |
           BRANCH="${{ github.ref_name }}"
+          BRANCH=${BRANCH//\//_} # replace slash (/) with underscore (_) in branch name
           if [[ "$BRANCH" == "main" ]] ; then RELEASE="latest" ; else RELEASE="rc" ; fi
           echo -e "RELEASE=${RELEASE}\nBRANCH=${BRANCH}" >> $GITHUB_ENV
-
       - name: Build and push
         run: |
           docker buildx create --use
@@ -99,9 +164,27 @@ jobs:
           -t ghcr.io/${{ github.repository_owner }}/border0:${RELEASE} \
           --push .
           docker buildx ls
+      - name: Send slack notification
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          fields: workflow,repo,message,author,ref,job,took # (default: repo,message)
+          job_name: Release Docker
+          custom_payload: |
+            {
+              text: "Continuous Deployment - Border0 CLI Docker Image",
+              attachments: [{
+                color: '${{ job.status }}' === 'success' ? 'good' : '${{ job.status }}' === 'failure' ? 'danger' : 'warning',
+                text: `${process.env.AS_WORKFLOW} - ${process.env.AS_JOB} (${process.env.AS_MESSAGE}) of ${process.env.AS_REPO} @${process.env.AS_REF} by ${process.env.AS_AUTHOR} ${{ job.status }} in ${process.env.AS_TOOK}`,
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }} # required
+          MATRIX_CONTEXT: ${{ toJson(matrix) }} # required
+        if: always() # pick up events even if the job failed or canceled.
 
   trigger-app-build:
-    needs: build-and-release
+    needs: [release, docker]
     runs-on: ubuntu-latest
     steps:
       # cross repo workflow trigger

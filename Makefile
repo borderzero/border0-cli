@@ -4,7 +4,7 @@ GOFMT=$(GOCMD)fmt
 GOCLEAN=$(GOCMD) clean
 GOTEST=$(GOCMD) test
 GOGET=$(GOCMD) get
-BINARY_NAME=mysocketctl
+BINARY_NAME=border0
 BUCKET=pub-mysocketctl-bin
 
 DATE := $(shell git log -1 --format=%cd --date=format:"%Y%m%d")
@@ -18,81 +18,48 @@ FLAGS := -ldflags "-s -w -X github.com/borderzero/border0-cli/cmd.version=$(VERS
 
 all: lint moddownload test build
 
+# Release for all platforms.
 release:
-	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_windows_amd64
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_amd64
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_arm64
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_arm
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=6 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_armv6
-	CGO_ENABLED=0 GOOS=linux GOARCH=386 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_386
-	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_darwin_amd64
-	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_darwin_arm64
-	CGO_ENABLED=0 GOOS=openbsd GOARCH=amd64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_openbsd_amd64
-
-	shasum -a 256 ./bin/mysocketctl_darwin_amd64 | awk '{print $$1}' > ./bin/mysocketctl_darwin_amd64-sha256-checksum.txt
-	python3 ./s3upload.py ./bin/mysocketctl_darwin_amd64-sha256-checksum.txt ${BUCKET} darwin_amd64/sha256-checksum.txt
-	python3 ./s3upload.py ./bin/mysocketctl_darwin_amd64 ${BUCKET} darwin_amd64/mysocketctl
-
-	shasum -a 256 ./bin/mysocketctl_darwin_arm64 | awk '{print $$1}' > ./bin/mysocketctl_darwin_arm64-sha256-checksum.txt
-	python3 ./s3upload.py ./bin/mysocketctl_darwin_arm64-sha256-checksum.txt ${BUCKET} darwin_arm64/sha256-checksum.txt
-	python3 ./s3upload.py ./bin/mysocketctl_darwin_arm64 ${BUCKET} darwin_arm64/mysocketctl
-
-	shasum -a 256 ./bin/mysocketctl_openbsd_amd64 | awk '{print $$1}' > ./bin/mysocketctl_openbsd_amd64-sha256-checksum.txt
-	python3 ./s3upload.py ./bin/mysocketctl_openbsd_amd64-sha256-checksum.txt ${BUCKET} openbsd_amd64/sha256-checksum.txt
-	python3 ./s3upload.py ./bin/mysocketctl_openbsd_amd64 ${BUCKET} openbsd_amd64/mysocketctl
-
-	shasum -a 256 ./bin/mysocketctl_linux_amd64 | awk '{print $$1}' > ./bin/mysocketctl_linux_amd64-sha256-checksum.txt
-	python3 ./s3upload.py ./bin/mysocketctl_linux_amd64-sha256-checksum.txt ${BUCKET} linux_amd64/sha256-checksum.txt
-	python3 ./s3upload.py ./bin/mysocketctl_linux_amd64 ${BUCKET} linux_amd64/mysocketctl
-
-	#This is for Raspberrypi
-	shasum -a 256 ./bin/mysocketctl_linux_arm64 | awk '{print $$1}' > ./bin/mysocketctl_linux_arm64-sha256-checksum.txt
-	python3 ./s3upload.py ./bin/mysocketctl_linux_arm64-sha256-checksum.txt ${BUCKET} linux_arm64/sha256-checksum.txt
-	python3 ./s3upload.py ./bin/mysocketctl_linux_arm64 ${BUCKET} linux_arm64/mysocketctl
-
-	#This is for Raspberrypi 32bit
-	shasum -a 256 ./bin/mysocketctl_linux_arm | awk '{print $$1}' > ./bin/mysocketctl_linux_arm-sha256-checksum.txt
-	python3 ./s3upload.py ./bin/mysocketctl_linux_arm-sha256-checksum.txt ${BUCKET} linux_arm/sha256-checksum.txt
-	python3 ./s3upload.py ./bin/mysocketctl_linux_arm ${BUCKET} linux_arm/mysocketctl
-
-	#This is for Raspberrypi arm v6 32bit
-	shasum -a 256 ./bin/mysocketctl_linux_armv6 | awk '{print $$1}' > ./bin/mysocketctl_linux_armv6-sha256-checksum.txt
-	python3 ./s3upload.py ./bin/mysocketctl_linux_armv6-sha256-checksum.txt ${BUCKET} linux_armv6/sha256-checksum.txt
-	python3 ./s3upload.py ./bin/mysocketctl_linux_armv6 ${BUCKET} linux_armv6/mysocketctl
-
-	#This is for 32bit linux
-	shasum -a 256 ./bin/mysocketctl_linux_386 | awk '{print $$1}' > ./bin/mysocketctl_linux_386-sha256-checksum.txt
-	python3 ./s3upload.py ./bin/mysocketctl_linux_386-sha256-checksum.txt ${BUCKET} linux_386/sha256-checksum.txt
-	python3 ./s3upload.py ./bin/mysocketctl_linux_386 ${BUCKET} linux_386/mysocketctl
-
-	shasum -a 256 ./bin/mysocketctl_windows_amd64 | awk '{print $$1}' > ./bin/mysocketctl_windows_amd64-sha256-checksum.txt
-	python3 ./s3upload.py ./bin/mysocketctl_windows_amd64-sha256-checksum.txt ${BUCKET} windows_amd64/sha256-checksum.txt
-	python3 ./s3upload.py ./bin/mysocketctl_windows_amd64 ${BUCKET} windows_amd64/mysocketctl.exe
-
+	# Release for Windows 64bit
+	shasum -a 256 ./bin/$(BINARY_NAME)_windows_amd64 | awk '{print $$1}' > ./bin/$(BINARY_NAME)_windows_amd64-sha256-checksum.txt
+	python3 ./s3upload.py ./bin/$(BINARY_NAME)_windows_amd64-sha256-checksum.txt ${BUCKET} windows_amd64/sha256-checksum.txt
+	python3 ./s3upload.py ./bin/$(BINARY_NAME)_windows_amd64 ${BUCKET} windows_amd64/$(BINARY_NAME).exe
+	# Release for Linux 64bit
+	shasum -a 256 ./bin/$(BINARY_NAME)_linux_amd64 | awk '{print $$1}' > ./bin/$(BINARY_NAME)_linux_amd64-sha256-checksum.txt
+	python3 ./s3upload.py ./bin/$(BINARY_NAME)_linux_amd64-sha256-checksum.txt ${BUCKET} linux_amd64/sha256-checksum.txt
+	python3 ./s3upload.py ./bin/$(BINARY_NAME)_linux_amd64 ${BUCKET} linux_amd64/$(BINARY_NAME)
+	# Release for Linux 32bit
+	shasum -a 256 ./bin/$(BINARY_NAME)_linux_386 | awk '{print $$1}' > ./bin/$(BINARY_NAME)_linux_386-sha256-checksum.txt
+	python3 ./s3upload.py ./bin/$(BINARY_NAME)_linux_386-sha256-checksum.txt ${BUCKET} linux_386/sha256-checksum.txt
+	python3 ./s3upload.py ./bin/$(BINARY_NAME)_linux_386 ${BUCKET} linux_386/$(BINARY_NAME)
+	# Release for Raspberry Pi 64bit
+	shasum -a 256 ./bin/$(BINARY_NAME)_linux_arm64 | awk '{print $$1}' > ./bin/$(BINARY_NAME)_linux_arm64-sha256-checksum.txt
+	python3 ./s3upload.py ./bin/$(BINARY_NAME)_linux_arm64-sha256-checksum.txt ${BUCKET} linux_arm64/sha256-checksum.txt
+	python3 ./s3upload.py ./bin/$(BINARY_NAME)_linux_arm64 ${BUCKET} linux_arm64/$(BINARY_NAME)
+	# Release for Raspberry Pi 32bit
+	shasum -a 256 ./bin/$(BINARY_NAME)_linux_arm | awk '{print $$1}' > ./bin/$(BINARY_NAME)_linux_arm-sha256-checksum.txt
+	python3 ./s3upload.py ./bin/$(BINARY_NAME)_linux_arm-sha256-checksum.txt ${BUCKET} linux_arm/sha256-checksum.txt
+	python3 ./s3upload.py ./bin/$(BINARY_NAME)_linux_arm ${BUCKET} linux_arm/$(BINARY_NAME)
+	# Release for Raspberry Pi ARM v6 32bit
+	shasum -a 256 ./bin/$(BINARY_NAME)_linux_armv6 | awk '{print $$1}' > ./bin/$(BINARY_NAME)_linux_armv6-sha256-checksum.txt
+	python3 ./s3upload.py ./bin/$(BINARY_NAME)_linux_armv6-sha256-checksum.txt ${BUCKET} linux_armv6/sha256-checksum.txt
+	python3 ./s3upload.py ./bin/$(BINARY_NAME)_linux_armv6 ${BUCKET} linux_armv6/$(BINARY_NAME)
+	# Release for Intel Mac
+	shasum -a 256 ./bin/$(BINARY_NAME)_darwin_amd64 | awk '{print $$1}' > ./bin/$(BINARY_NAME)_darwin_amd64-sha256-checksum.txt
+	python3 ./s3upload.py ./bin/$(BINARY_NAME)_darwin_amd64-sha256-checksum.txt ${BUCKET} darwin_amd64/sha256-checksum.txt
+	python3 ./s3upload.py ./bin/$(BINARY_NAME)_darwin_amd64 ${BUCKET} darwin_amd64/$(BINARY_NAME)
+	# Release for Apple Silicon Mac
+	shasum -a 256 ./bin/$(BINARY_NAME)_darwin_arm64 | awk '{print $$1}' > ./bin/$(BINARY_NAME)_darwin_arm64-sha256-checksum.txt
+	python3 ./s3upload.py ./bin/$(BINARY_NAME)_darwin_arm64-sha256-checksum.txt ${BUCKET} darwin_arm64/sha256-checksum.txt
+	python3 ./s3upload.py ./bin/$(BINARY_NAME)_darwin_arm64 ${BUCKET} darwin_arm64/$(BINARY_NAME)
+	# Release for OpenBSD 64bit
+	shasum -a 256 ./bin/$(BINARY_NAME)_openbsd_amd64 | awk '{print $$1}' > ./bin/$(BINARY_NAME)_openbsd_amd64-sha256-checksum.txt
+	python3 ./s3upload.py ./bin/$(BINARY_NAME)_openbsd_amd64-sha256-checksum.txt ${BUCKET} openbsd_amd64/sha256-checksum.txt
+	python3 ./s3upload.py ./bin/$(BINARY_NAME)_openbsd_amd64 ${BUCKET} openbsd_amd64/$(BINARY_NAME)
+	# Publish the latest version checksum file
 	echo ${VERSION} > latest_version.txt
 	python3 ./s3upload.py latest_version.txt ${BUCKET} latest_version.txt
 	rm latest_version.txt
-
-release-border0:
-	python3 ./s3upload.py ./bin/mysocketctl_darwin_amd64 ${BUCKET} darwin_amd64/border0
-	python3 ./s3upload.py ./bin/mysocketctl_darwin_arm64 ${BUCKET} darwin_arm64/border0
-	python3 ./s3upload.py ./bin/mysocketctl_linux_amd64 ${BUCKET} linux_amd64/border0
-	python3 ./s3upload.py ./bin/mysocketctl_openbsd_amd64 ${BUCKET} openbsd_amd64/border0
-
-	#This is for Raspberrypi
-	python3 ./s3upload.py ./bin/mysocketctl_linux_arm64 ${BUCKET} linux_arm64/border0
-
-	#This is for Raspberrypi 32bit
-	python3 ./s3upload.py ./bin/mysocketctl_linux_arm ${BUCKET} linux_arm/border0
-
-	#This is for Windows
-	python3 ./s3upload.py ./bin/mysocketctl_windows_amd64 ${BUCKET} windows_amd64/border0.exe
-
-	#This is for Raspberrypi armv6 32bit
-	python3 ./s3upload.py ./bin/mysocketctl_linux_armv6 ${BUCKET} linux_armv6/border0
-
-	#This is for 32bit linux
-	python3 ./s3upload.py ./bin/mysocketctl_linux_386 ${BUCKET} linux_386/border0
 
 moddownload:
 	go mod tidy
@@ -107,27 +74,37 @@ build-linux:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GOBUILD) $(FLAGS) -o $(BINARY_NAME) -v
 	cp $(BINARY_NAME) border0
 
-build-all:
-	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_windows_amd64
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_amd64
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_arm64
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_arm
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=6 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_armv6
-	CGO_ENABLED=0 GOOS=linux GOARCH=386 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_386
-	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_darwin_amd64
-	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_darwin_arm64
-	CGO_ENABLED=0 GOOS=openbsd GOARCH=amd64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_openbsd_amd64
+# Cross compile for all supported platforms in parallel
+build-all: build-windows-amd64 build-linux-amd64 build-linux-arm64 build-linux-arm build-linux-armv6 build-linux-386 build-darwin-amd64 build-darwin-arm64 build-openbsd-amd64
 
-build-linux-multiarch:
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_amd64
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_arm64
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_arm
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=6 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_armv6
-	CGO_ENABLED=0 GOOS=linux GOARCH=386 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_386
+build-windows-amd64:
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_windows_amd64
 
 build-linux-amd64:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_amd64
 
+build-linux-arm64:
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_arm64
+
+build-linux-arm:
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_arm
+
+build-linux-armv6:
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=6 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_armv6
+
+build-linux-386:
+	CGO_ENABLED=0 GOOS=linux GOARCH=386 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_386
+
+build-darwin-amd64:
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_darwin_amd64
+
+build-darwin-arm64:
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_darwin_arm64
+
+build-openbsd-amd64:
+	CGO_ENABLED=0 GOOS=openbsd GOARCH=amd64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_openbsd_amd64
+
+build-linux-multiarch: build-linux-amd64 build-linux-arm64 build-linux-arm build-linux-armv6 build-linux-386
 
 deb-package-amd64:
 	./build-deb.sh $(VERSION) amd64
@@ -183,7 +160,6 @@ rpm-repository:
 	@echo "Creating repo for RPM"
 	./generate-rpm-repo.sh
 
-
 lint:
 	@echo "running go fmt"
 	$(GOFMT) -w .
@@ -199,4 +175,3 @@ clean:
 run:
 	$(GOBUILD) $(FLAGS) -o $(BINARY_NAME) -v ./...
 	./$(BINARY_NAME)
-
