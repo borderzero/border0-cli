@@ -83,7 +83,7 @@ func (s *K8Discover) buildSocket(connectorName string, group config.K8Plugin, se
 			socket.UpstreamType = upstreamType
 		}
 		if upstreamHttpHostname, exists := service.Annotations["border0.com/upstreamHttpHostname"]; exists {
-			socket.UpstreamHttpHostname = upstreamHttpHostname
+			socket.UpstreamHttpHostname = &upstreamHttpHostname
 		}
 	case "ssh":
 		socket.SocketType = "ssh"

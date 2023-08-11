@@ -190,7 +190,7 @@ var socketCreateCmd = &cobra.Command{
 			AllowedEmailDomains:            allowedEmailDomains,
 			UpstreamUsername:               &upstream_username,
 			UpstreamPassword:               &upstream_password,
-			UpstreamHttpHostname:           upstream_http_hostname,
+			UpstreamHttpHostname:           &upstream_http_hostname,
 			UpstreamType:                   upstreamType,
 			CloudAuthEnabled:               true,
 			ConnectorAuthenticationEnabled: connectorAuthEnabled,

@@ -34,7 +34,7 @@ func (s *StaticSocketFinder) Find(ctx context.Context, cfg config.Config, state 
 			socket.TargetHostname = v.Host
 			socket.TargetPort = v.Port
 			socket.ConnectorAuthenticationEnabled = v.ConnectorAuthenticationEnabled
-			socket.UpstreamHttpHostname = v.UpstreamHttpHostname
+			socket.UpstreamHttpHostname = &v.UpstreamHttpHostname
 			socket.CloudAuthEnabled = true
 			socket.PolicyNames = v.Policies
 			socket.UpstreamType = v.UpstreamType

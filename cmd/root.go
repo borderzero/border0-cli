@@ -179,7 +179,7 @@ func print_socket(s models.Socket, policies []models.Policy) string {
 		th.AppendHeader(table.Row{"Upstream Type", "Upstream Hostname"})
 		th.AppendRow(table.Row{s.UpstreamType, s.UpstreamHttpHostname})
 		th.SetStyle(table.StyleLight)
-		if s.UpstreamType != "" || s.UpstreamHttpHostname != "" {
+		if s.UpstreamType != "" || s.UpstreamHttpHostname != nil && *s.UpstreamHttpHostname != "" {
 			socket_output = socket_output + fmt.Sprintf("\nHTTP Options:\n%s\n", th.Render())
 		}
 	}

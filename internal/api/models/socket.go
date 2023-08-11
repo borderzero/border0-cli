@@ -107,7 +107,7 @@ type Socket struct {
 	UpstreamCert                   *string           `json:"upstream_cert,omitempty"`
 	UpstreamKey                    *string           `json:"upstream_key,omitempty"`
 	UpstreamCa                     *string           `json:"upstream_ca,omitempty"`
-	UpstreamHttpHostname           string            `json:"upstream_http_hostname,omitempty"`
+	UpstreamHttpHostname           *string           `json:"upstream_http_hostname,omitempty"`
 	UpstreamType                   string            `json:"upstream_type,omitempty"`
 	CloudAuthEnabled               bool              `json:"cloud_authentication_enabled,omitempty"`
 	ConnectorAuthenticationEnabled bool              `json:"connector_authentication_enabled,omitempty"`
