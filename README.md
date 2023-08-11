@@ -14,7 +14,7 @@ For DEB based Linux distributions (Debian, Ubuntu, etc):
 Add the Border0 GPG key to your system
 ```
 sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://border0-dev-rnd-bucket.s3.us-east-2.amazonaws.com/repos/border0.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/border0.gpg
+curl -fsSL https://border0-dev-rnd-bucket.s3.us-east-2.amazonaws.com/repos/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/border0.gpg
 ```
 
 Add the repository to your sources list

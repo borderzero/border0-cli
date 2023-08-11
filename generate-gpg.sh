@@ -12,4 +12,4 @@ gpg --no-tty --batch --gen-key border0-pgp-key.batch
 gpg --armor --export border0 > border0-pgp-key.public
 gpg --armor --export-secret-keys border0 > border0-pgp-key.private
 
-echo "Done! Your PGP key is in border0-pgp-key.public and border0-pgp-key.private"
+echo -e "Done! Your PGP key is in border0-pgp-key.public and border0-pgp-key.private/n"
