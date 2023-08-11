@@ -9,7 +9,26 @@ Please check the full documentation here: [https://docs.border0.com/](https://do
 
 Installation
 --------------------
-Please download the binaries at https://download.border0.com
+For DEB based Linux distributions (Debian, Ubuntu, etc):
+
+Add the Border0 GPG key to your system
+```
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://border0-dev-rnd-bucket.s3.us-east-2.amazonaws.com/repos/border0.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/border0.gpg
+```
+
+Add the repository to your sources list
+```
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/border0.gpg] https://border0-dev-rnd-bucket.s3.us-east-2.amazonaws.com/repos/ stable main" | sudo tee /etc/apt/sources.list.d/border0.list
+```
+
+Install the border0 package
+```
+sudo apt-get update
+sudo apt-get install border0
+```
+
+Binary releases can be found at https://download.border0.com
 
 
 Shell auto-completion
