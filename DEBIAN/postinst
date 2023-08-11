@@ -1,0 +1,36 @@
+#!/bin/bash
+# postinst
+
+#!/bin/sh
+# Check if we are running in a non-interactive environment
+if [ "$DEBIAN_FRONTEND" = "noninteractive" ]; then
+  # Non-interactive behavior here
+  echo "Running in non-interactive mode."
+  # check if BORDER0_CONNECTOR_TOKEN variable is set
+  if [ "$BORDER0_CONNECTOR_TOKEN" ! -z ]; then
+    border0 connector install --v2
+  else
+    echo "BORDER0_CONNECTOR_TOKEN is not set. please run the install manually..."
+  fi
+else
+  echo "Running Border0 Connector Install."
+  # Interactive behavior here (e.g., ask questions using 'read')
+  while true; do
+    read -p "Do you want to proceed? (y/n) " choice
+    case "$choice" in
+    y | Y)
+      echo "Running 'border0 connector install --v2'"
+      border0 connector install --v2
+      break
+      ;;
+    n | N)
+      echo "You can always execute 'border0 connector install --v2' to install the connector later."
+      break
+      ;;
+    *)
+      echo -e "Invalid choice. \nYou can always execute 'border0 connector install --v2' to install the connector later."
+      continue
+      ;;
+    esac
+  done
+fi

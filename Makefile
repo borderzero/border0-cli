@@ -119,6 +119,9 @@ deb-package-arm:
 deb-package-armv6:
 	./build-deb.sh $(VERSION) armv6
 
+deb-repo:
+	./generate-release.sh
+
 build-all:
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build $(FLAGS) -o $(BINARY_NAME)_windows_amd64
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(FLAGS) -o $(BINARY_NAME)_linux_amd64
