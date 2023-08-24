@@ -31,7 +31,7 @@ import (
 	"github.com/borderzero/border0-cli/internal/sqlauthproxy"
 	"github.com/borderzero/border0-cli/internal/ssh"
 	sshConfig "github.com/borderzero/border0-cli/internal/ssh/config"
-	"github.com/borderzero/border0-cli/internal/ssh/server"
+	"github.com/borderzero/border0-cli/internal/ssh_backends/k8s"
 	b0Util "github.com/borderzero/border0-cli/internal/util"
 	"github.com/borderzero/border0-go/lib/types/set"
 	"github.com/borderzero/border0-go/types/connector"
@@ -692,14 +692,39 @@ func (c *ConnectorService) Listen(socket *border0.Socket) {
 
 	switch {
 	case socket.Socket.SSHServer && socket.SocketType == "ssh" && !socket.EndToEndEncryptionEnabled:
-		opts := []server.Option{}
-		if socket.Socket != nil &&
-			socket.Socket.ConnectorLocalData != nil &&
-			socket.Socket.ConnectorLocalData.UpstreamUsername != "" {
-			opts = append(opts, server.WithUsername(socket.Socket.ConnectorLocalData.UpstreamUsername))
-		}
+		// opts := []server.Option{}
+		// if socket.Socket != nil &&
+		// 	socket.Socket.ConnectorLocalData != nil &&
+		// 	socket.Socket.ConnectorLocalData.UpstreamUsername != "" {
+		// 	opts = append(opts, server.WithUsername(socket.Socket.ConnectorLocalData.UpstreamUsername))
+		// }
+		// sshServer, err := server.NewServer(logger, c.organization.Certificates["ssh_public_key"], opts...)
+		// if err != nil {
+		// 	logger.Error("failed to create ssh server", zap.String("socket", socket.SocketID), zap.Error(err))
+		// 	return
+		// }
 
-		sshServer, err := server.NewServer(logger, c.organization.Certificates["ssh_public_key"], opts...)
+		// sshServer, err := docker.GetSshServer(
+		// 	context.Background(),
+		// 	logger,
+		// 	"mysocket_ssh_signed",
+		// 	[]byte(c.organization.Certificates["ssh_public_key"]),
+		// 	"my_ssh_container",
+		// 	"root",
+		// 	"/bin/bash",
+		// )
+
+		sshServer, err := k8s.GetSshServer(
+			context.Background(),
+			logger,
+			"mysocket_ssh_signed",
+			[]byte(c.organization.Certificates["ssh_public_key"]),
+			"default",
+			"border0-connector-6c44d945db-2hvd2",
+			"root",
+			"/bin/sh",
+		)
+
 		if err != nil {
 			logger.Error("failed to create ssh server", zap.String("socket", socket.SocketID), zap.Error(err))
 			return
