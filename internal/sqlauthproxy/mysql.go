@@ -60,7 +60,14 @@ func newMysqlHandler(c Config) (*mysqlHandler, error) {
 	if c.UpstreamTLS && c.DialerFunc == nil {
 		tlsConfig := &tls.Config{}
 
-		if c.UpstreamCAFile != "" {
+		if len(c.UpstreamCABlock) > 0 {
+			caPool, err := cert.NewPoolFromBytes(c.UpstreamCABlock)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load upstream CA: %s", err)
+			}
+			tlsConfig.RootCAs = caPool
+			tlsConfig.ServerName = c.Hostname
+		} else if c.UpstreamCAFile != "" {
 			caPool, err := cert.NewPool(c.UpstreamCAFile)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load upstream CA: %s", err)
@@ -71,7 +78,13 @@ func newMysqlHandler(c Config) (*mysqlHandler, error) {
 			tlsConfig.InsecureSkipVerify = true
 		}
 
-		if c.UpstreamCertFile != "" && c.UpstreamKeyFile != "" {
+		if len(c.UpstreamCertBlock) > 0 && len(c.UpstreamKeyBlock) > 0 {
+			cert, err := tls.X509KeyPair(c.UpstreamCertBlock, c.UpstreamKeyBlock)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load upstream cert: %s", err)
+			}
+			tlsConfig.Certificates = []tls.Certificate{cert}
+		} else if c.UpstreamCertFile != "" && c.UpstreamKeyFile != "" {
 			cert, err := tls.LoadX509KeyPair(c.UpstreamCertFile, c.UpstreamKeyFile)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load upstream cert: %s", err)

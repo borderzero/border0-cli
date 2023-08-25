@@ -10,9 +10,9 @@ import (
 	"github.com/borderzero/border0-cli/internal/border0"
 )
 
-func Serve(l net.Listener, instanceName, credentialsFile string, withIAM bool) error {
+func Serve(l net.Listener, instanceName, credentialsFile string, credentialsJSON []byte, withIAM bool) error {
 	ctx := context.Background()
-	dialer, err := NewDialer(ctx, instanceName, credentialsFile, withIAM)
+	dialer, err := NewDialer(ctx, instanceName, credentialsFile, credentialsJSON, withIAM)
 	if err != nil {
 		return fmt.Errorf("failed to create dialer for cloudSQL: %s", err)
 	}
@@ -35,10 +35,13 @@ func Serve(l net.Listener, instanceName, credentialsFile string, withIAM bool) e
 	}
 }
 
-func NewDialer(ctx context.Context, instanceName, credentialsFile string, withIAM bool) (*cloudsqlconn.Dialer, error) {
+func NewDialer(ctx context.Context, instanceName, credentialsFile string, credentialsJSON []byte, withIAM bool) (*cloudsqlconn.Dialer, error) {
 	var opts []cloudsqlconn.Option
 	if credentialsFile != "" {
 		opts = append(opts, cloudsqlconn.WithCredentialsFile(credentialsFile))
+	}
+	if len(credentialsJSON) > 0 {
+		opts = append(opts, cloudsqlconn.WithCredentialsJSON(credentialsJSON))
 	}
 
 	if withIAM {

@@ -42,6 +42,9 @@ type ConnectorLocalData struct {
 	UpstreamCertFile             string
 	UpstreamKeyFile              string
 	UpstreamCACertFile           string
+	UpstreamCertBlock            []byte
+	UpstreamKeyBlock             []byte
+	UpstreamCACertBlock          []byte
 	UpstreamTLS                  *bool
 	UpstreamIdentifyFile         string
 	UpstreamIdentityPrivateKey   []byte
@@ -52,6 +55,7 @@ type ConnectorLocalData struct {
 	CloudSQLIAMAuth              bool
 	CloudSQLInstance             string
 	GoogleCredentialsFile        string
+	GoogleCredentialsJSON        []byte
 	SSHServer                    bool
 	AWSECSCluster                string
 	AWSECSServices               []string

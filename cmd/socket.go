@@ -548,7 +548,7 @@ var socketConnectCmd = &cobra.Command{
 			}
 
 			if cloudSqlConnector {
-				dialer, err := cloudsql.NewDialer(ctx, cloudSqlInstance, cloudSqlCredentialsFile, cloudSqlIAM)
+				dialer, err := cloudsql.NewDialer(ctx, cloudSqlInstance, cloudSqlCredentialsFile, nil, cloudSqlIAM)
 				if err != nil {
 					return fmt.Errorf("failed to create dialer for cloudSQL: %s", err)
 				}
@@ -666,7 +666,7 @@ var socketConnectCmd = &cobra.Command{
 				return err
 			}
 		case cloudSqlConnector:
-			if err := cloudsql.Serve(l, cloudSqlInstance, cloudSqlCredentialsFile, cloudSqlIAM); err != nil {
+			if err := cloudsql.Serve(l, cloudSqlInstance, cloudSqlCredentialsFile, nil, cloudSqlIAM); err != nil {
 				return err
 			}
 		case sshAuthProxy:

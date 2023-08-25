@@ -16,20 +16,23 @@ type handler interface {
 }
 
 type Config struct {
-	Logger           *zap.Logger
-	Hostname         string
-	Port             int
-	RdsIam           bool
-	Username         string
-	Password         string
-	UpstreamType     string
-	UpstreamCAFile   string
-	UpstreamCertFile string
-	UpstreamKeyFile  string
-	UpstreamTLS      bool
-	AwsRegion        string
-	AwsCredentials   *common.AwsCredentials
-	DialerFunc       func(context.Context, string, string) (net.Conn, error)
+	Logger            *zap.Logger
+	Hostname          string
+	Port              int
+	RdsIam            bool
+	Username          string
+	Password          string
+	UpstreamType      string
+	UpstreamCAFile    string
+	UpstreamCertFile  string
+	UpstreamKeyFile   string
+	UpstreamCABlock   []byte
+	UpstreamCertBlock []byte
+	UpstreamKeyBlock  []byte
+	UpstreamTLS       bool
+	AwsRegion         string
+	AwsCredentials    *common.AwsCredentials
+	DialerFunc        func(context.Context, string, string) (net.Conn, error)
 }
 
 func Serve(l net.Listener, config Config) error {
@@ -66,19 +69,22 @@ func BuildHandlerConfig(logger *zap.Logger, socket models.Socket) (*Config, erro
 	}
 
 	handlerConfig := &Config{
-		Logger:           logger,
-		Hostname:         socket.ConnectorData.TargetHostname,
-		Port:             socket.ConnectorData.Port,
-		RdsIam:           socket.ConnectorLocalData.RdsIAMAuth,
-		Username:         socket.ConnectorLocalData.UpstreamUsername,
-		Password:         socket.ConnectorLocalData.UpstreamPassword,
-		UpstreamType:     socket.UpstreamType,
-		AwsRegion:        socket.ConnectorLocalData.AWSRegion,
-		AwsCredentials:   socket.ConnectorLocalData.AwsCredentials,
-		UpstreamCAFile:   socket.ConnectorLocalData.UpstreamCACertFile,
-		UpstreamCertFile: socket.ConnectorLocalData.UpstreamCertFile,
-		UpstreamKeyFile:  socket.ConnectorLocalData.UpstreamKeyFile,
-		UpstreamTLS:      upstreamTLS,
+		Logger:            logger,
+		Hostname:          socket.ConnectorData.TargetHostname,
+		Port:              socket.ConnectorData.Port,
+		RdsIam:            socket.ConnectorLocalData.RdsIAMAuth,
+		Username:          socket.ConnectorLocalData.UpstreamUsername,
+		Password:          socket.ConnectorLocalData.UpstreamPassword,
+		UpstreamType:      socket.UpstreamType,
+		AwsRegion:         socket.ConnectorLocalData.AWSRegion,
+		AwsCredentials:    socket.ConnectorLocalData.AwsCredentials,
+		UpstreamCAFile:    socket.ConnectorLocalData.UpstreamCACertFile,
+		UpstreamCertFile:  socket.ConnectorLocalData.UpstreamCertFile,
+		UpstreamKeyFile:   socket.ConnectorLocalData.UpstreamKeyFile,
+		UpstreamCABlock:   socket.ConnectorLocalData.UpstreamCACertBlock,
+		UpstreamCertBlock: socket.ConnectorLocalData.UpstreamCertBlock,
+		UpstreamKeyBlock:  socket.ConnectorLocalData.UpstreamKeyBlock,
+		UpstreamTLS:       upstreamTLS,
 	}
 
 	if socket.ConnectorLocalData.CloudSQLConnector {
@@ -87,7 +93,13 @@ func BuildHandlerConfig(logger *zap.Logger, socket models.Socket) (*Config, erro
 		}
 
 		ctx := context.Background()
-		dialer, err := cloudsql.NewDialer(ctx, socket.ConnectorLocalData.CloudSQLInstance, socket.ConnectorLocalData.GoogleCredentialsFile, socket.ConnectorLocalData.CloudSQLIAMAuth)
+		dialer, err := cloudsql.NewDialer(
+			ctx,
+			socket.ConnectorLocalData.CloudSQLInstance,
+			socket.ConnectorLocalData.GoogleCredentialsFile,
+			socket.ConnectorLocalData.GoogleCredentialsJSON,
+			socket.ConnectorLocalData.CloudSQLIAMAuth,
+		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create dialer for cloudSQL: %s", err)
 		}

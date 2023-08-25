@@ -21,6 +21,7 @@ import (
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgproto3/v2"
 	"go.uber.org/zap"
+	"k8s.io/client-go/util/cert"
 )
 
 type postgresHandler struct {
@@ -40,28 +41,48 @@ func newPostgresHandler(c Config) (*postgresHandler, error) {
 		awsCredentials = cfg.Credentials
 	}
 
-	cert, err := generateX509KeyPair()
+	generatedCert, err := generateX509KeyPair()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate tls certificate: %s", err)
 	}
 
 	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{cert},
+		Certificates: []tls.Certificate{generatedCert},
 	}
 
-	var sslSettings []string
+	var (
+		sslSettings       []string
+		upstreamTLSConfig *tls.Config
+	)
 	if c.UpstreamTLS && c.DialerFunc == nil {
-		if c.UpstreamCAFile != "" {
+		if len(c.UpstreamCABlock) > 0 {
+			upstreamTLSConfig = &tls.Config{}
+			caPool, err := cert.NewPoolFromBytes(c.UpstreamCABlock)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load upstream CA: %s", err)
+			}
+			upstreamTLSConfig.RootCAs = caPool
+			upstreamTLSConfig.ServerName = c.Hostname
+		} else if c.UpstreamCAFile != "" {
 			sslSettings = append(sslSettings, fmt.Sprintf("sslrootcert=%s", c.UpstreamCAFile))
 			sslSettings = append(sslSettings, "sslmode=verify-ca")
 		} else {
 			sslSettings = append(sslSettings, "sslmode=require")
 		}
 
+		if len(c.UpstreamCertBlock) > 0 && len(c.UpstreamKeyBlock) > 0 {
+			if upstreamTLSConfig == nil {
+				upstreamTLSConfig = &tls.Config{}
+			}
+			cert, err := tls.X509KeyPair(c.UpstreamCertBlock, c.UpstreamKeyBlock)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load upstream certificate: %s", err)
+			}
+			upstreamTLSConfig.Certificates = []tls.Certificate{cert}
+		}
 		if c.UpstreamCertFile != "" {
 			sslSettings = append(sslSettings, fmt.Sprintf("sslcert=%s", c.UpstreamCertFile))
 		}
-
 		if c.UpstreamKeyFile != "" {
 			sslSettings = append(sslSettings, fmt.Sprintf("sslkey=%s", c.UpstreamKeyFile))
 		}
@@ -78,6 +99,9 @@ func newPostgresHandler(c Config) (*postgresHandler, error) {
 	config, err := pgconn.ParseConfig(dsn)
 	if err != nil {
 		return nil, err
+	}
+	if upstreamTLSConfig != nil {
+		config.TLSConfig = upstreamTLSConfig
 	}
 
 	if c.DialerFunc != nil {
