@@ -454,14 +454,15 @@ func (c *ConnectorService) handleSocketConfig(action pb.Action, config *pb.Socke
 }
 
 func (c *ConnectorService) newSocket(config *pb.SocketConfig) (*border0.Socket, error) {
-	var configMap service.Configuration
-	if err := util.AsStruct(config.GetConfig(), &configMap); err != nil {
+	var connectorSocketConfig service.ConnectorServiceConfiguration
+	if err := util.AsStruct(config.GetConfig(), &connectorSocketConfig); err != nil {
 		return nil, fmt.Errorf("failed to parse socket config: %w", err)
 	}
 
 	s := &models.Socket{
-		SocketID:   config.GetId(),
-		SocketType: config.GetType(),
+		SocketID:                       config.GetId(),
+		SocketType:                     config.GetType(),
+		ConnectorAuthenticationEnabled: connectorSocketConfig.ConnectorAuthenticationEnabled,
 	}
 
 	if s.ConnectorLocalData == nil {
@@ -472,7 +473,7 @@ func (c *ConnectorService) newSocket(config *pb.SocketConfig) (*border0.Socket, 
 		s.ConnectorData = &models.ConnectorData{}
 	}
 
-	if err := upstreamdata.NewUpstreamDataBuilder(c.logger).Build(s, configMap); err != nil {
+	if err := upstreamdata.NewUpstreamDataBuilder(c.logger).Build(s, connectorSocketConfig.Upstream); err != nil {
 		return nil, fmt.Errorf("failed to build upstream data: %w", err)
 	}
 
