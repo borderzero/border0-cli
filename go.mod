@@ -37,6 +37,7 @@ require (
 	github.com/ivanpirog/coloredcobra v1.0.1
 	github.com/jackc/pgconn v1.14.0
 	github.com/jackc/pgproto3/v2 v2.3.2
+	github.com/jacobsa/go-serial v0.0.0-20180131005756-15cf729a72d4
 	github.com/jbenet/go-os-rename v0.0.0-20150428075126-3ac97f61ef67
 	github.com/jedib0t/go-pretty v4.3.0+incompatible
 	github.com/kardianos/service v1.2.2

@@ -486,6 +486,9 @@ github.com/jackc/pgproto3/v2
 # github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a
 ## explicit; go 1.14
 github.com/jackc/pgservicefile
+# github.com/jacobsa/go-serial v0.0.0-20180131005756-15cf729a72d4
+## explicit
+github.com/jacobsa/go-serial/serial
 # github.com/jbenet/go-os-rename v0.0.0-20150428075126-3ac97f61ef67
 ## explicit
 github.com/jbenet/go-os-rename

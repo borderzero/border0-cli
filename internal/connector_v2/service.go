@@ -31,7 +31,7 @@ import (
 	"github.com/borderzero/border0-cli/internal/sqlauthproxy"
 	"github.com/borderzero/border0-cli/internal/ssh"
 	sshConfig "github.com/borderzero/border0-cli/internal/ssh/config"
-	"github.com/borderzero/border0-cli/internal/ssh_backends/k8s"
+	"github.com/borderzero/border0-cli/internal/ssh_backends/serial"
 	b0Util "github.com/borderzero/border0-cli/internal/util"
 	"github.com/borderzero/border0-go/lib/types/set"
 	"github.com/borderzero/border0-go/types/connector"
@@ -714,15 +714,24 @@ func (c *ConnectorService) Listen(socket *border0.Socket) {
 		// 	"/bin/bash",
 		// )
 
-		sshServer, err := k8s.GetSshServer(
+		// sshServer, err := k8s.GetSshServer(
+		// 	context.Background(),
+		// 	logger,
+		// 	"mysocket_ssh_signed",
+		// 	[]byte(c.organization.Certificates["ssh_public_key"]),
+		// 	"default",
+		// 	"border0-connector-6c44d945db-2hvd2",
+		// 	"root",
+		// 	"/bin/sh",
+		// )
+
+		sshServer, err := serial.GetSshServer(
 			context.Background(),
 			logger,
 			"mysocket_ssh_signed",
 			[]byte(c.organization.Certificates["ssh_public_key"]),
-			"default",
-			"border0-connector-6c44d945db-2hvd2",
-			"root",
-			"/bin/sh",
+			"/dev/cu.usbmodem2101",
+			9600,
 		)
 
 		if err != nil {
