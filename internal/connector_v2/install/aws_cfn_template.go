@@ -81,6 +81,14 @@ Resources:
                   - 'ssm:GetParameter'
                   - 'ssm:GetParameters'
                 Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${Border0TokenSsmParameter}'
+        # Allow generating temporary user credentials for database IAM access.
+        - PolicyName: GenerateTemporaryDatabaseCredsForRds
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: 'rds-db:connect'
+                Resource: !Sub 'arn:aws:rds-db:*:${AWS::AccountId}:dbuser:*'
         # Allow sending public keys to any ec2 instance (for ec2 instance connect).
         - PolicyName: SendSshPublicKeysToEc2Instances
           PolicyDocument:
