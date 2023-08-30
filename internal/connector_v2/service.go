@@ -19,6 +19,7 @@ import (
 	"github.com/borderzero/border0-cli/internal/connector_v2/util"
 	"github.com/borderzero/border0-cli/internal/sqlauthproxy"
 	"github.com/borderzero/border0-cli/internal/ssh"
+	"github.com/borderzero/border0-cli/internal/vpnlib"
 	"github.com/borderzero/border0-go/lib/types/set"
 	"github.com/borderzero/border0-go/types/connector"
 	"github.com/borderzero/border0-go/types/service"
@@ -556,10 +557,11 @@ func (c *ConnectorService) Listen(socket *border0.Socket) {
 		logger.Error("failed to start listener", zap.String("socket", socket.SocketID), zap.Error(err))
 		return
 	}
+	defer l.Close()
 
-	var handlerConfig *sqlauthproxy.Config
+	var databaseProxyConfig *sqlauthproxy.Config
 	if socket.SocketType == "database" {
-		handlerConfig, err = sqlauthproxy.BuildHandlerConfig(logger, *socket.Socket)
+		databaseProxyConfig, err = sqlauthproxy.BuildHandlerConfig(logger, *socket.Socket)
 		if err != nil {
 			logger.Error("failed to create config for socket", zap.String("socket", socket.SocketID), zap.Error(err))
 		}
@@ -570,6 +572,15 @@ func (c *ConnectorService) Listen(socket *border0.Socket) {
 		sshProxyConfig, err = ssh.BuildProxyConfig(logger, *socket.Socket, socket.Socket.AWSRegion, "")
 		if err != nil {
 			logger.Error("failed to create config for socket", zap.String("socket", socket.SocketID), zap.Error(err))
+		}
+	}
+
+	if socket.SocketType == "tls" {
+		if socket.UpstreamType == "vpn" {
+			if err := vpnlib.RunVpn(l, socket.Socket.ConnectorLocalData.VpnSubnet, socket.Socket.ConnectorLocalData.VpnRoutes); err != nil {
+				logger.Error("failed to run vpn", zap.String("socket", socket.SocketID), zap.Error(err))
+			}
+			return
 		}
 	}
 
@@ -593,8 +604,8 @@ func (c *ConnectorService) Listen(socket *border0.Socket) {
 		if err := ssh.Proxy(l, *sshProxyConfig); err != nil {
 			logger.Error("ssh proxy failed", zap.String("socket", socket.SocketID), zap.Error(err))
 		}
-	case handlerConfig != nil:
-		if err := sqlauthproxy.Serve(l, *handlerConfig); err != nil {
+	case databaseProxyConfig != nil:
+		if err := sqlauthproxy.Serve(l, *databaseProxyConfig); err != nil {
 			logger.Error("sql proxy failed", zap.String("socket", socket.SocketID), zap.Error(err))
 		}
 	default:

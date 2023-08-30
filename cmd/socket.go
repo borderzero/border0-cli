@@ -17,15 +17,12 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"os"
 	"os/signal"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 
@@ -41,9 +38,7 @@ import (
 	"github.com/borderzero/border0-cli/internal/util"
 	"github.com/borderzero/border0-cli/internal/vpnlib"
 	"github.com/jedib0t/go-pretty/table"
-	"github.com/songgao/water"
 	"github.com/spf13/cobra"
-	"go.uber.org/zap"
 )
 
 // socketCmd represents the socket command
@@ -367,108 +362,9 @@ var socketConnectVpnCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("error: %v", err)
 		}
-
 		defer l.Close()
 
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt)
-		go func() {
-			for {
-				<-c
-				os.Exit(0)
-			}
-		}()
-
-		// Create an IP pool that will be used to assign IPs to clients
-		ipPool, err := vpnlib.NewIPPool(vpnSubnet)
-		if err != nil {
-			log.Fatalf("Failed to create IP Pool: %v", err)
-		}
-		subnetSize := ipPool.GetSubnetSize()
-		serverIp := ipPool.GetServerIp()
-
-		// create the connection map
-		cm := vpnlib.NewConnectionMap()
-
-		iface, err := water.New(water.Config{DeviceType: water.TUN})
-		if err != nil {
-			return fmt.Errorf("failed to create TUN iface: %v", err)
-		}
-		defer iface.Close()
-		logger.Logger.Info("Started VPN server", zap.String("interface", iface.Name()), zap.String("server_ip", serverIp), zap.String(" vpn_subnet ", vpnSubnet))
-
-		if err = vpnlib.AddServerIp(iface.Name(), serverIp, subnetSize); err != nil {
-			return fmt.Errorf("failed to add server IP to interface: %v", err)
-		}
-
-		if runtime.GOOS != "linux" {
-			// On linux the routes are added to the interface when creating the interface and adding the IP
-			if err = vpnlib.AddRoutesToIface(iface.Name(), []string{vpnSubnet}); err != nil {
-				logger.Logger.Warn("failed to add routes to interface", zap.Error(err))
-			}
-		}
-
-		// Now start the Tun to Conn goroutine
-		// This will listen for packets on the TUN interface and forward them to the right connection
-		go vpnlib.TunToConnCopy(iface, cm, false, nil)
-
-		for {
-			conn, err := l.Accept()
-			if err != nil {
-				fmt.Printf("Failed to accept new vpn connection: %v\n", err)
-				continue
-			}
-
-			// dispatch new connection handler
-			go func() {
-				defer conn.Close()
-
-				// get an ip for the new client
-				clientIp, err := ipPool.Allocate()
-				if err != nil {
-					fmt.Printf("Failed to allocate client IP: %v\n", err)
-					return
-				}
-				defer ipPool.Release(clientIp)
-
-				fmt.Printf("New client connected allocated IP: %s\n", clientIp)
-
-				// attach the connection to the client ip
-				cm.Set(clientIp, conn)
-				defer cm.Delete(clientIp)
-
-				// define control message
-				controlMessage := &vpnlib.ControlMessage{
-					ClientIp:   clientIp,
-					ServerIp:   serverIp,
-					SubnetSize: uint8(subnetSize),
-					Routes:     routes,
-				}
-				controlMessageBytes, err := controlMessage.Build()
-				if err != nil {
-					fmt.Printf("failed to build control message: %v\n", err)
-					return
-				}
-
-				// write configuration message
-				n, err := conn.Write(controlMessageBytes)
-				if err != nil {
-					fmt.Printf("failed to write control message to net conn: %v\n", err)
-					return
-				}
-				if n < len(controlMessageBytes) {
-					fmt.Printf("failed to write entire control message bytes (is %d, wrote %d)\n", controlMessageBytes, n)
-					return
-				}
-
-				if err = vpnlib.ConnToTunCopy(conn, iface); err != nil {
-					if !errors.Is(err, io.EOF) {
-						fmt.Printf("failed to forward between tls conn and TUN iface: %v\n", err)
-					}
-					return
-				}
-			}()
-		}
+		return vpnlib.RunVpn(l, vpnSubnet, routes)
 	},
 }
 
