@@ -414,6 +414,7 @@ func (c *ConnectorService) handleSocketConfig(action pb.Action, config *pb.Socke
 			return fmt.Errorf("failed to create socket: %w", err)
 		}
 
+		c.logger.Info("socket config", zap.Any("config", socket.Socket))
 		c.sockets[config.GetId()] = socket
 	case pb.Action_UPDATE:
 		c.logger.Info("update socket", zap.String("socket", config.GetId()))
@@ -463,6 +464,8 @@ func (c *ConnectorService) newSocket(config *pb.SocketConfig) (*border0.Socket, 
 		SocketID:                       config.GetId(),
 		SocketType:                     config.GetType(),
 		ConnectorAuthenticationEnabled: connectorSocketConfig.ConnectorAuthenticationEnabled,
+		EndToEndEncryptionEnabled:      connectorSocketConfig.EndToEndEncryptionEnabled,
+		RecordingEnabled:               connectorSocketConfig.RecordingEnabled,
 	}
 
 	if s.ConnectorLocalData == nil {

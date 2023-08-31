@@ -495,8 +495,8 @@ var socketConnectCmd = &cobra.Command{
 			log.Fatalf("error: %v", err)
 		}
 
-		if socket.SocketID == "c1aa477f-47d6-47e4-b860-ad09e419cb46" {
-			socket.EndToEndEncryptionEnabled = true
+		if socket.EndToEndEncryptionEnabled {
+			return fmt.Errorf("error: end to end encryption is only supported with the connector")
 		}
 
 		socket.WithVersion(version)
