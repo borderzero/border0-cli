@@ -495,6 +495,10 @@ var socketConnectCmd = &cobra.Command{
 			log.Fatalf("error: %v", err)
 		}
 
+		if socket.SocketID == "c1aa477f-47d6-47e4-b860-ad09e419cb46" {
+			socket.EndToEndEncryptionEnabled = true
+		}
+
 		socket.WithVersion(version)
 
 		if proxyHost != "" {
@@ -562,11 +566,9 @@ var socketConnectCmd = &cobra.Command{
 		}
 
 		var sshAuthProxy bool
-		sshProxyConfig := ssh.ProxyConfig{
-			Logger: logger.Logger,
-		}
+		var sshProxyConfig ssh.ProxyConfig
 
-		if socket.SocketType == "ssh" && (upstream_username != "" || upstream_password != "" || upstream_identify_file != "" || awsEc2InstanceId != "" || socket.UpstreamType == "aws-ssm" || socket.UpstreamType == "aws-ec2connect" || awsEc2InstanceConnect) {
+		if socket.SocketType == "ssh" && (upstream_username != "" || upstream_password != "" || upstream_identify_file != "" || awsEc2InstanceId != "" || socket.UpstreamType == "aws-ssm" || socket.UpstreamType == "aws-ec2connect" || awsEc2InstanceConnect || socket.EndToEndEncryptionEnabled) {
 			switch {
 			case socket.UpstreamType == "aws-ssm":
 				if awsECSCluster == "" && awsEc2InstanceId == "" {
@@ -578,6 +580,7 @@ var socketConnectCmd = &cobra.Command{
 					AWSRegion:       awsRegion,
 					AWSProfile:      awsProfile,
 					AwsUpstreamType: "aws-ssm",
+					Logger:          logger.Logger,
 				}
 
 				if awsECSCluster != "" {
@@ -601,6 +604,7 @@ var socketConnectCmd = &cobra.Command{
 					Port:             port,
 					Username:         upstream_username,
 					AwsUpstreamType:  "aws-ec2connect",
+					Logger:           logger.Logger,
 				}
 
 			default:
@@ -609,11 +613,14 @@ var socketConnectCmd = &cobra.Command{
 				}
 
 				sshProxyConfig = ssh.ProxyConfig{
-					Hostname:     hostname,
-					Port:         port,
-					Username:     upstream_username,
-					Password:     upstream_password,
-					IdentityFile: upstream_identify_file,
+					Hostname:           hostname,
+					Port:               port,
+					Username:           upstream_username,
+					Password:           upstream_password,
+					IdentityFile:       upstream_identify_file,
+					EndToEndEncryption: socket.EndToEndEncryptionEnabled,
+					Recording:          socket.RecordingEnabled,
+					Logger:             logger.Logger,
 				}
 			}
 			sshAuthProxy = true

@@ -118,6 +118,8 @@ type Socket struct {
 	UpstreamType                   string            `json:"upstream_type,omitempty"`
 	CloudAuthEnabled               bool              `json:"cloud_authentication_enabled,omitempty"`
 	ConnectorAuthenticationEnabled bool              `json:"connector_authentication_enabled,omitempty"`
+	EndToEndEncryptionEnabled      bool              `json:"end_to_end_encryption_enabled,omitempty"`
+	RecordingEnabled               bool              `json:"recording_enabled,omitempty"`
 	Tags                           map[string]string `json:"tags,omitempty"`
 	CustomDomains                  []string          `json:"custom_domains,omitempty"`
 	PolicyNames                    []string          `json:"policy_names,omitempty"`

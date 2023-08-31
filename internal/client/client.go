@@ -313,6 +313,7 @@ type ResourceInfo struct {
 	PrivateKeyPath                 string
 	Port                           int
 	ConnectorAuthenticationEnabled bool
+	EndToEndEncryptionEnabled      bool
 }
 
 func (info *ResourceInfo) SetupTLSCertificate() tls.Certificate {
@@ -345,6 +346,11 @@ func GetResourceInfo(logger *zap.Logger, hostname string) (info ResourceInfo, er
 
 	info.Port = resource.SocketPorts[0]
 	info.ConnectorAuthenticationEnabled = resource.ConnectorAuthenticationEnabled
+	info.EndToEndEncryptionEnabled = resource.EndToEndEncryptionEnabled
+
+	if hostname == "ssh.bass.toonk.nl" {
+		info.EndToEndEncryptionEnabled = true
+	}
 
 	info.Certficate, info.PrivateKey, _, _, err = ReadOrgCert(claims["org_id"].(string))
 	if err != nil {
@@ -863,6 +869,23 @@ func ConnectorAuthConnectWithConn(conn net.Conn, tlsConfig *tls.Config) error {
 	}
 
 	return err
+}
+
+func ConnectorAuthConnectWithConnV2(conn net.Conn, tlsConfig *tls.Config, connectorAuthOnly bool) (*tls.Conn, error) {
+	connectorConn := tls.Client(conn, tlsConfig)
+	if err := connectorConn.Handshake(); err != nil {
+		return nil, fmt.Errorf("failed to authenticate to connector: %w", err)
+	}
+
+	if connectorAuthOnly {
+		_, err := conn.Write([]byte("BORDER0-CLIENT-CONNECTOR-AUTHENTICATED"))
+		if err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("failed to write to proxy: %w", err)
+		}
+	}
+
+	return connectorConn, nil
 }
 
 func handleConnection(src net.Conn, dst net.Conn) {

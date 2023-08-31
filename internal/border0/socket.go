@@ -54,6 +54,7 @@ type Socket struct {
 	SocketType                       string
 	UpstreamType                     string
 	ConnectorAuthenticationEnabled   bool
+	EndToEndEncryptionEnabled        bool
 	ConnectorAuthenticationTLSConfig *tls.Config
 	border0API                       Border0API
 	keyPair                          sshKeyPair
@@ -70,6 +71,7 @@ type Socket struct {
 	context                          context.Context
 	cancel                           context.CancelFunc
 	Socket                           *models.Socket
+	RecordingEnabled                 bool
 }
 
 type connWithError struct {
@@ -118,6 +120,7 @@ func NewSocket(ctx context.Context, border0API api.API, nameOrID string) (*Socke
 		readyChan:                      make(chan bool),
 		Organization:                   org,
 		acceptChan:                     make(chan connWithError),
+		RecordingEnabled:               socketFromApi.RecordingEnabled,
 
 		context: sckContext,
 		cancel:  sckCancel,
@@ -169,7 +172,7 @@ func (s *Socket) WithProxy(proxyHost string) error {
 }
 
 func (s *Socket) Listen() (net.Listener, error) {
-	if s.ConnectorAuthenticationEnabled {
+	if s.ConnectorAuthenticationEnabled || s.EndToEndEncryptionEnabled {
 		tlsConfig, err := s.generateConnectorAuthenticationTLSConfig()
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate connector authentication TLS config: %v", err)
@@ -230,7 +233,7 @@ func (s *Socket) Listen() (net.Listener, error) {
 		for {
 			select {
 			case conn := <-newConn:
-				if s.ConnectorAuthenticationEnabled {
+				if s.EndToEndEncryptionEnabled || s.ConnectorAuthenticationEnabled {
 					go s.acceptConnectorAuth(conn)
 				} else {
 					s.acceptChan <- connWithError{conn, nil}
@@ -516,7 +519,7 @@ func (s *Socket) acceptConnectorAuth(conn net.Conn) {
 	ctx, cancel := context.WithTimeout(context.Background(), connectorAuthenticationTimeout)
 	defer cancel()
 
-	ok, err := s.authenticateConnector(ctx, conn)
+	tlsConn, err := s.connectorAuthentication(ctx, conn)
 	if err != nil {
 		conn.Close()
 		log.Printf("failed to authenticate connector %s", err)
@@ -524,14 +527,18 @@ func (s *Socket) acceptConnectorAuth(conn net.Conn) {
 		return
 	}
 
-	if !ok {
+	if tlsConn == nil {
 		conn.Close()
 		log.Print("failed to authenticate connector")
 		s.acceptChan <- connWithError{nil, border0NetError("failed to authenticate connector")}
 		return
 	}
 
-	s.acceptChan <- connWithError{conn, nil}
+	if s.EndToEndEncryptionEnabled {
+		s.acceptChan <- connWithError{tlsConn, nil}
+	} else {
+		s.acceptChan <- connWithError{conn, nil}
+	}
 }
 
 func (s *Socket) Addr() net.Addr {
@@ -548,8 +555,11 @@ func (s *Socket) Close() error {
 	return nil
 }
 
-func (s *Socket) authenticateConnector(ctx context.Context, conn net.Conn) (bool, error) {
+func (s *Socket) connectorAuthentication(ctx context.Context, conn net.Conn) (*tls.Conn, error) {
 	tlsConn := tls.Server(conn, s.ConnectorAuthenticationTLSConfig)
+	if tlsConn == nil {
+		return nil, fmt.Errorf("failed to create tls connection")
+	}
 
 	authChan := make(chan error, 1)
 	go func() {
@@ -558,9 +568,11 @@ func (s *Socket) authenticateConnector(ctx context.Context, conn net.Conn) (bool
 			return
 		}
 
-		if _, err := conn.Write([]byte(connectorAuthenticationHeader)); err != nil {
-			authChan <- fmt.Errorf("failed to write header: %s", err)
-			return
+		if s.ConnectorAuthenticationEnabled {
+			if _, err := conn.Write([]byte(connectorAuthenticationHeader)); err != nil {
+				authChan <- fmt.Errorf("failed to write header: %s", err)
+				return
+			}
 		}
 
 		authChan <- nil
@@ -569,16 +581,16 @@ func (s *Socket) authenticateConnector(ctx context.Context, conn net.Conn) (bool
 	select {
 	case err := <-authChan:
 		if err != nil {
-			return false, err
+			return nil, err
 		}
 	case <-ctx.Done():
-		return false, fmt.Errorf("client handshake failed: %s", ctx.Err())
+		return nil, fmt.Errorf("client handshake failed: %s", ctx.Err())
 	}
 
 	log.Printf("client %s authenticated", tlsConn.ConnectionState().PeerCertificates[0].Subject.CommonName)
 	time.Sleep(connectorAuthenticationShutdownTime)
 
-	return true, nil
+	return tlsConn, nil
 }
 
 func (s *Socket) generateConnectorAuthenticationTLSConfig() (*tls.Config, error) {

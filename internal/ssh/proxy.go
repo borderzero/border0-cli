@@ -32,7 +32,10 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-const ResizeSleepInterval = 500 * time.Millisecond
+const (
+	ResizeSleepInterval = 500 * time.Millisecond
+	sshProxyVersion     = "SSH-2.0-Border0.com"
+)
 
 type ProxyConfig struct {
 	Username           string
@@ -56,6 +59,8 @@ type ProxyConfig struct {
 	AwsUpstreamType    string
 	Logger             *zap.Logger
 	AwsCredentials     *common.AwsCredentials
+	Recording          bool
+	EndToEndEncryption bool
 }
 
 type ECSSSMProxy struct {
@@ -70,7 +75,7 @@ func BuildProxyConfig(logger *zap.Logger, socket models.Socket, AWSRegion, AWSPr
 		return nil, nil
 	}
 
-	isNormalSSHSocket := socket.UpstreamType != "aws-ssm" && socket.UpstreamType != "aws-ec2connect" && !socket.ConnectorLocalData.AWSEC2InstanceConnectEnabled
+	isNormalSSHSocket := socket.UpstreamType != "aws-ssm" && socket.UpstreamType != "aws-ec2connect" && !socket.ConnectorLocalData.AWSEC2InstanceConnectEnabled && !socket.EndToEndEncryptionEnabled
 	if isNormalSSHSocket {
 		if socket.ConnectorLocalData.UpstreamUsername == "" && socket.ConnectorLocalData.UpstreamPassword == "" {
 			if len(socket.ConnectorLocalData.UpstreamIdentityPrivateKey) == 0 && socket.ConnectorLocalData.UpstreamIdentifyFile == "" {
@@ -110,6 +115,8 @@ func BuildProxyConfig(logger *zap.Logger, socket models.Socket, AWSRegion, AWSPr
 		AWSRegion:          AWSRegion,
 		AWSProfile:         AWSProfile,
 		AwsCredentials:     socket.ConnectorLocalData.AwsCredentials,
+		Recording:          socket.RecordingEnabled,
+		EndToEndEncryption: socket.EndToEndEncryptionEnabled,
 	}
 
 	switch {
@@ -220,7 +227,7 @@ func Proxy(l net.Listener, c ProxyConfig) error {
 			authMethods = append(authMethods, ssh.Password(c.Password))
 		}
 
-		if len(authMethods) == 0 {
+		if len(authMethods) == 0 && !c.EndToEndEncryption {
 			return fmt.Errorf("sshauthproxy: no authentication methods provided")
 		}
 
@@ -234,8 +241,16 @@ func Proxy(l net.Listener, c ProxyConfig) error {
 		handler = handleSshClient
 	}
 
-	c.sshServerConfig = &ssh.ServerConfig{
-		NoClientAuth: true,
+	if c.EndToEndEncryption {
+		c.sshServerConfig = &ssh.ServerConfig{
+			ServerVersion:     sshProxyVersion,
+			PublicKeyCallback: c.sshPublicKeyCallback,
+			AuthLogCallback:   c.sshAuthLogCallback,
+		}
+	} else {
+		c.sshServerConfig = &ssh.ServerConfig{
+			NoClientAuth: true,
+		}
 	}
 
 	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
@@ -252,10 +267,24 @@ func Proxy(l net.Listener, c ProxyConfig) error {
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			return fmt.Errorf("sshauthproxy: failed to accept connection: %s", err)
+			c.Logger.Error("sshauthproxy: failed to accept connection", zap.Error(err))
+			continue
 		}
 
 		go handler(conn, c)
+	}
+}
+
+func (c *ProxyConfig) sshPublicKeyCallback(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
+	c.Logger.Info("sshauthproxy: sshPublicKeyCallback", zap.String("user", conn.User()), zap.String("client", string(conn.ClientVersion())))
+	return &ssh.Permissions{}, nil
+}
+
+func (c *ProxyConfig) sshAuthLogCallback(conn ssh.ConnMetadata, method string, err error) {
+	if err != nil {
+		c.Logger.Error("sshauthproxy: authentication failed", zap.String("method", method), zap.String("user", conn.User()), zap.Error(err))
+	} else {
+		c.Logger.Info("sshauthproxy: authentication successful", zap.String("method", method), zap.String("user", conn.User()))
 	}
 }
 
@@ -608,7 +637,7 @@ func handleSshClient(conn net.Conn, config ProxyConfig) {
 
 	sshConn, chans, reqs, err := ssh.NewServerConn(conn, config.sshServerConfig)
 	if err != nil {
-		config.Logger.Sugar().Errorf("failed to accept ssh connection: %s\n", err)
+		config.Logger.Sugar().Errorf("failed to accept ssh connection: %s", err)
 		return
 	}
 
@@ -624,7 +653,7 @@ func handleEc2InstanceConnectClient(conn net.Conn, config ProxyConfig) {
 
 	sshConn, chans, reqs, err := ssh.NewServerConn(conn, config.sshServerConfig)
 	if err != nil {
-		config.Logger.Sugar().Errorf("failed to accept ssh connection: %s\n", err)
+		config.Logger.Sugar().Errorf("failed to accept ssh connection: %s", err)
 		return
 	}
 

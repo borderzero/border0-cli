@@ -174,25 +174,17 @@ var sshCmd = &cobra.Command{
 			wsNetConn := websocket.NetConn(ctx, wsConn, websocket.MessageBinary)
 
 			conn = tls.Client(wsNetConn, &tlsConfig)
-		}
-
-		if info.ConnectorAuthenticationEnabled {
-			if wsProxy == "" {
-				conn, err = client.ConnectorAuthConnect(fmt.Sprintf("%s:%d", hostname, info.Port), &tlsConfig)
-				if err != nil {
-					fmt.Println("ERROR: could not setup listener:", err)
-					return err
-				}
-			} else {
-				if err := client.ConnectorAuthConnectWithConn(conn, &tlsConfig); err != nil {
-					fmt.Println("ERROR: could not setup listener:", err)
-					return err
-				}
-			}
 		} else {
 			conn, err = tls.Dial("tcp", fmt.Sprintf("%s:%d", hostname, info.Port), &tlsConfig)
 			if err != nil {
 				return fmt.Errorf("failed to connect to %s:%d: %w", hostname, info.Port, err)
+			}
+		}
+
+		if info.ConnectorAuthenticationEnabled || info.EndToEndEncryptionEnabled {
+			conn, err = client.ConnectorAuthConnectWithConnV2(conn, &tlsConfig, info.ConnectorAuthenticationEnabled)
+			if err != nil {
+				return fmt.Errorf("failed to connect: %w", err)
 			}
 		}
 

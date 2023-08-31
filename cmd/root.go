@@ -97,9 +97,10 @@ var (
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:     "border0",
-	Short:   "border0 command line interface (CLI)",
-	Version: version,
+	Use:          "border0",
+	Short:        "border0 command line interface (CLI)",
+	Version:      version,
+	SilenceUsage: true,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

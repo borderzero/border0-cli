@@ -18,6 +18,7 @@ type ClientResource struct {
 	DatabaseType                   string   `json:"database_type,omitempty"`
 	SshType                        string   `json:"ssh_type,omitempty"`
 	ConnectorAuthenticationEnabled bool     `json:"connector_authentication_enabled,omitempty"`
+	EndToEndEncryptionEnabled      bool     `json:"end_to_end_encryption_enabled,omitempty"`
 }
 
 func (c ClientResource) Hostname() string {
