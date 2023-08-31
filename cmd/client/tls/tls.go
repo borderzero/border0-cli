@@ -79,7 +79,8 @@ var clientTlsCmd = &cobra.Command{
 				}
 
 				go func() {
-					conn, err := tls.Dial("tcp", fmt.Sprintf("%s:%d", hostname, info.Port), &tlsConfig)
+					var conn net.Conn
+					conn, err = tls.Dial("tcp", fmt.Sprintf("%s:%d", hostname, info.Port), &tlsConfig)
 					if err != nil {
 						fmt.Printf("failed to connect to %s:%d: %s\n", hostname, info.Port, err)
 					}
@@ -96,6 +97,7 @@ var clientTlsCmd = &cobra.Command{
 				}()
 			}
 		} else {
+			var conn net.Conn
 			conn, err := tls.Dial("tcp", fmt.Sprintf("%s:%d", hostname, info.Port), &tlsConfig)
 			if err != nil {
 				return fmt.Errorf("failed to connect to %s:%d: %w", hostname, info.Port, err)
