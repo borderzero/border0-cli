@@ -871,23 +871,23 @@ func ConnectorAuthConnectWithConn(conn net.Conn, tlsConfig *tls.Config) error {
 	return err
 }
 
-func ConnectorAuthConnectWithConnV2(conn net.Conn, tlsConfig *tls.Config, connectorAuthOnly bool) (net.Conn, error) {
+func ConnectorAuthConnectWithConnV2(conn net.Conn, tlsConfig *tls.Config, ConnectorAuthenticationEnabled bool) (net.Conn, error) {
 	connectorConn := tls.Client(conn, tlsConfig)
 	if err := connectorConn.Handshake(); err != nil {
 		return nil, fmt.Errorf("failed to authenticate to connector: %w", err)
 	}
 
-	if connectorAuthOnly {
-		_, err := conn.Write([]byte("BORDER0-CLIENT-CONNECTOR-AUTHENTICATED"))
-		if err != nil {
-			conn.Close()
-			return nil, fmt.Errorf("failed to write to proxy: %w", err)
-		}
-
-		return conn, nil
-	} else {
+	if !ConnectorAuthenticationEnabled {
 		return connectorConn, nil
 	}
+
+	_, err := conn.Write([]byte("BORDER0-CLIENT-CONNECTOR-AUTHENTICATED"))
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to write to proxy: %w", err)
+	}
+
+	return conn, nil
 }
 
 func handleConnection(src net.Conn, dst net.Conn) {
