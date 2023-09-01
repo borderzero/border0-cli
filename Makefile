@@ -67,12 +67,9 @@ moddownload:
 
 build:
 	$(GOBUILD) $(FLAGS) -o $(BINARY_NAME) -v
-	-rm -f border0
-	cp $(BINARY_NAME) border0
 
 build-linux:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GOBUILD) $(FLAGS) -o $(BINARY_NAME) -v
-	cp $(BINARY_NAME) border0
 
 # Cross compile for all supported platforms in parallel
 build-all: build-windows-amd64 build-linux-amd64 build-linux-arm64 build-linux-arm build-linux-armv6 build-linux-386 build-darwin-amd64 build-darwin-arm64 build-openbsd-amd64
