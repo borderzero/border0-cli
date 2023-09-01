@@ -61,6 +61,7 @@ type ProxyConfig struct {
 	AwsCredentials     *common.AwsCredentials
 	Recording          bool
 	EndToEndEncryption bool
+	Hostkey            *ssh.Signer
 }
 
 type ECSSSMProxy struct {
@@ -253,16 +254,20 @@ func Proxy(l net.Listener, c ProxyConfig) error {
 		}
 	}
 
-	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		return fmt.Errorf("sshauthproxy: failed to generate private key: %s", err)
-	}
+	if c.Hostkey == nil {
+		_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			return fmt.Errorf("sshauthproxy: failed to generate private key: %s", err)
+		}
 
-	signer, err := ssh.NewSignerFromKey(privateKey)
-	if err != nil {
-		return fmt.Errorf("sshauthproxy: failed to generate signer: %s", err)
+		signer, err := ssh.NewSignerFromKey(privateKey)
+		if err != nil {
+			return fmt.Errorf("sshauthproxy: failed to generate signer: %s", err)
+		}
+		c.sshServerConfig.AddHostKey(signer)
+	} else {
+		c.sshServerConfig.AddHostKey(*c.Hostkey)
 	}
-	c.sshServerConfig.AddHostKey(signer)
 
 	for {
 		conn, err := l.Accept()
