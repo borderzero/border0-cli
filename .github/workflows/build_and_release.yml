@@ -121,6 +121,11 @@ jobs:
     needs: build
     name: Release Docker
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      actions: read
+      packages: write
     steps:
       - uses: actions/checkout@v3
         with:

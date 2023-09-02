@@ -70,8 +70,8 @@ fi
 rpmdev-setuptree
 echo "setting up directories..."
 
-cp $HOME/bin/mysocketctl_linux_${FILE_ARCH} $HOME/rpmbuild/SOURCES/border0
-cp $HOME/CENTOS/post-install.sh  $HOME/rpmbuild/SOURCES/post-install.sh 
+cp $HOME/bin/border0_linux_${FILE_ARCH} $HOME/rpmbuild/SOURCES/border0
+cp $HOME/CENTOS/post-install.sh  $HOME/rpmbuild/SOURCES/post-install.sh
 
 # Write the SPEC file
 cat <<EOL >$HOME/rpmbuild/SPECS/border0.spec
@@ -97,9 +97,9 @@ mkdir -p %{buildroot}/usr/bin
 cp %{SOURCE0} %{buildroot}/usr/bin/border0
 chmod +x %{buildroot}/usr/bin/border0
 
-%post -f %{_sourcedir}/post-install.sh 
+%post -f %{_sourcedir}/post-install.sh
 
-%postun -f %{_sourcedir}/post-install.sh 
+%postun -f %{_sourcedir}/post-install.sh
 
 %files
 /usr/bin/border0

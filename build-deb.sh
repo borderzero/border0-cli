@@ -12,7 +12,7 @@ mkdir -p border0_${VERSION}_${ARCH}/etc/border0
 mkdir -p border0_${VERSION}_${ARCH}/DEBIAN
 
 echo "Copying files..."
-cp ./bin/mysocketctl_linux_${ARCH} border0_${VERSION}_${ARCH}/usr/bin/border0
+cp ./bin/border0_linux_${ARCH} border0_${VERSION}_${ARCH}/usr/bin/border0
 cp -pvr DEBIAN/* border0_${VERSION}_${ARCH}/DEBIAN/
 
 echo "Creating control file..."
