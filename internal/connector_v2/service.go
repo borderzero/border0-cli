@@ -806,7 +806,7 @@ func (c *ConnectorService) hostkey() (*gossh.Signer, error) {
 func storeHostkey(key []byte, path, filename string) error {
 	if _, err := os.Stat(path); err == nil {
 		if err := os.MkdirAll(path, 0700); err != nil {
-			return fmt.Errorf("failed to create directoru %s %w", path, err)
+			return fmt.Errorf("failed to create directory %s %w", path, err)
 		}
 	}
 
