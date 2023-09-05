@@ -94,8 +94,9 @@ func (u *UpstreamDataBuilder) buildUpstreamDataForDatabaseServiceAwsRds(socket *
 		}
 		socket.ConnectorLocalData.RdsIAMAuth = true
 		socket.ConnectorLocalData.UpstreamTLS = pointer.To(true)
-		socket.ConnectorLocalData.AWSRegion = config.IamAuth.AwsRegion
+		socket.ConnectorLocalData.AWSRegion = config.IamAuth.RdsInstanceRegion
 		socket.ConnectorLocalData.UpstreamUsername = u.fetchVariableFromSource(config.IamAuth.Username)
+		socket.ConnectorLocalData.AwsCredentials = config.IamAuth.AwsCredentials
 		if config.IamAuth.CaCertificate != "" {
 			socket.ConnectorLocalData.UpstreamCACertBlock = []byte(u.fetchVariableFromSource(config.IamAuth.CaCertificate))
 		}
