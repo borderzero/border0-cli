@@ -429,7 +429,6 @@ func (c *ConnectorService) handleSocketConfig(action pb.Action, config *pb.Socke
 			return fmt.Errorf("failed to create socket: %w", err)
 		}
 
-		c.logger.Info("socket config", zap.Any("config", socket.Socket))
 		c.sockets[config.GetId()] = socket
 	case pb.Action_UPDATE:
 		c.logger.Info("update socket", zap.String("socket", config.GetId()))
@@ -510,7 +509,7 @@ func (c *ConnectorService) newSocket(config *pb.SocketConfig) (*border0.Socket, 
 		return nil, fmt.Errorf("failed to build upstream data: %w", err)
 	}
 
-	socket, err := border0.NewSocketFromConnectorAPI(c.context, c, *s, c.organization)
+	socket, err := border0.NewSocketFromConnectorAPI(c.context, c, *s, c.organization, c.logger.With(zap.String("socket_id", s.SocketID)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create socket: %w", err)
 	}
@@ -608,15 +607,18 @@ func (c *ConnectorService) Listen(socket *border0.Socket) {
 
 	var sshProxyConfig *ssh.ProxyConfig
 	if socket.SocketType == "ssh" {
-		sshProxyConfig, err = ssh.BuildProxyConfig(logger, *socket.Socket, socket.Socket.AWSRegion, "")
-		if err != nil {
-			logger.Error("failed to create config for socket", zap.String("socket", socket.SocketID), zap.Error(err))
-			return
+		var hostkeySigner *gossh.Signer
+		if socket.EndToEndEncryptionEnabled {
+			hostkeySigner, err = c.hostkey()
+			if err != nil {
+				logger.Error("failed to get hostkey", zap.String("socket", socket.SocketID), zap.Error(err))
+				return
+			}
 		}
 
-		sshProxyConfig.Hostkey, err = c.hostkey()
+		sshProxyConfig, err = ssh.BuildProxyConfig(logger, *socket.Socket, socket.Socket.AWSRegion, "", hostkeySigner, c.organization)
 		if err != nil {
-			logger.Error("failed to get hostkey", zap.String("socket", socket.SocketID), zap.Error(err))
+			logger.Error("failed to create config for socket", zap.String("socket", socket.SocketID), zap.Error(err))
 			return
 		}
 	}

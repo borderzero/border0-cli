@@ -1,6 +1,7 @@
 package ssh
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -8,6 +9,7 @@ import (
 	"crypto/x509"
 	"encoding/binary"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -35,6 +37,9 @@ import (
 const (
 	ResizeSleepInterval = 500 * time.Millisecond
 	sshProxyVersion     = "SSH-2.0-Border0.com"
+
+	principal_extension = "principals@mysocket.io"
+	useremail_extension = "user_email@mysocket.io"
 )
 
 type ProxyConfig struct {
@@ -62,6 +67,7 @@ type ProxyConfig struct {
 	Recording          bool
 	EndToEndEncryption bool
 	Hostkey            *ssh.Signer
+	orgSshCA           ssh.PublicKey
 }
 
 type ECSSSMProxy struct {
@@ -71,7 +77,7 @@ type ECSSSMProxy struct {
 	Containers []string
 }
 
-func BuildProxyConfig(logger *zap.Logger, socket models.Socket, AWSRegion, AWSProfile string) (*ProxyConfig, error) {
+func BuildProxyConfig(logger *zap.Logger, socket models.Socket, AWSRegion, AWSProfile string, hostkey *ssh.Signer, org *models.Organization) (*ProxyConfig, error) {
 	if socket.ConnectorLocalData == nil {
 		return nil, nil
 	}
@@ -135,6 +141,18 @@ func BuildProxyConfig(logger *zap.Logger, socket models.Socket, AWSRegion, AWSPr
 			Services:   socket.ConnectorLocalData.AWSECSServices,
 			Tasks:      socket.ConnectorLocalData.AWSECSTasks,
 			Containers: socket.ConnectorLocalData.AWSECSContainers,
+		}
+	}
+
+	if socket.EndToEndEncryptionEnabled {
+		proxyConfig.Hostkey = hostkey
+		if orgSshCA, ok := org.Certificates["ssh_public_key"]; ok {
+			orgCa, _, _, _, err := ssh.ParseAuthorizedKey([]byte(orgSshCA))
+			if err != nil {
+				return nil, err
+			}
+
+			proxyConfig.orgSshCA = orgCa
 		}
 	}
 
@@ -281,15 +299,44 @@ func Proxy(l net.Listener, c ProxyConfig) error {
 }
 
 func (c *ProxyConfig) sshPublicKeyCallback(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
-	c.Logger.Info("sshauthproxy: sshPublicKeyCallback", zap.String("user", conn.User()), zap.String("client", string(conn.ClientVersion())))
-	return &ssh.Permissions{}, nil
+	cert, ok := key.(*ssh.Certificate)
+	if !ok {
+		return nil, errors.New("can not cast certificate")
+	}
+
+	// validated := false
+	// policyInput := proxy.authSvc.NewPolicyInput(cert.KeyId, conn.RemoteAddr(), proxy.id, proxy.socket.SocketID)
+	// actions, authInfo := proxy.authSvc.Authorize(proxy.socket.AppProtocol, policyInput)
+
+	if c.orgSshCA == nil {
+		return nil, errors.New("error: unable to validate certificate, no CA configured")
+	}
+
+	if bytes.Equal(cert.SignatureKey.Marshal(), c.orgSshCA.Marshal()) {
+	} else {
+		// proxy.sessionLogSvc.LogSession(proxy.id, proxy.socket, conn.RemoteAddr(), "denied", authInfo, conn.User(), cert.KeyId, cert.Permissions.Extensions[userinfo_extension])
+		return nil, errors.New("error: invalid client certificate")
+	}
+
+	var certChecker ssh.CertChecker
+	if err := certChecker.CheckCert("mysocket_ssh_signed", cert); err != nil {
+		return nil, fmt.Errorf("error: invalid client certificate: %s", err)
+	}
+
+	cert.Permissions.Extensions[principal_extension] = cert.ValidPrincipals[0]
+	cert.Permissions.Extensions[useremail_extension] = cert.KeyId
+
+	return &cert.Permissions, nil
 }
 
 func (c *ProxyConfig) sshAuthLogCallback(conn ssh.ConnMetadata, method string, err error) {
 	if err != nil {
-		c.Logger.Error("sshauthproxy: authentication failed", zap.String("method", method), zap.String("user", conn.User()), zap.Error(err))
+		if errors.Is(err, ssh.ErrNoAuth) {
+			return
+		}
+		c.Logger.Debug("sshauthproxy: authentication failed", zap.String("method", method), zap.String("user", conn.User()), zap.Error(err))
 	} else {
-		c.Logger.Info("sshauthproxy: authentication successful", zap.String("method", method), zap.String("user", conn.User()))
+		c.Logger.Debug("sshauthproxy: authentication successful", zap.String("method", method), zap.String("user", conn.User()))
 	}
 }
 

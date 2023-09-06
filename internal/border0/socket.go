@@ -13,7 +13,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
-	"log"
 	"math/big"
 	"net"
 	"net/url"
@@ -73,6 +72,7 @@ type Socket struct {
 	Socket                           *models.Socket
 	RecordingEnabled                 bool
 	ConfigHash                       string
+	logger                           *zap.Logger
 }
 
 type connWithError struct {
@@ -129,7 +129,7 @@ func NewSocket(ctx context.Context, border0API api.API, nameOrID string) (*Socke
 	}, nil
 }
 
-func NewSocketFromConnectorAPI(ctx context.Context, border0API Border0API, socket models.Socket, org *models.Organization) (*Socket, error) {
+func NewSocketFromConnectorAPI(ctx context.Context, border0API Border0API, socket models.Socket, org *models.Organization, logger *zap.Logger) (*Socket, error) {
 	newCtx, cancel := context.WithCancel(context.Background())
 
 	return &Socket{
@@ -146,6 +146,7 @@ func NewSocketFromConnectorAPI(ctx context.Context, border0API Border0API, socke
 		Organization:                   org,
 		acceptChan:                     make(chan connWithError),
 		Socket:                         &socket,
+		logger:                         logger,
 
 		context: newCtx,
 		cancel:  cancel,
@@ -191,9 +192,9 @@ func (s *Socket) Listen() (net.Listener, error) {
 		for {
 			select {
 			case err := <-s.errChan:
-				log.Printf("border0 listener: %v", err)
+				s.logger.Error("border0 listener: %v", zap.Error(err))
 				if _, ok := err.(PermanentError); ok {
-					log.Printf("border0 listener: permanent error, exiting")
+					s.logger.Error("border0 listener: permanent error, exiting")
 					s.cancel()
 					return
 				}
@@ -220,11 +221,11 @@ func (s *Socket) Listen() (net.Listener, error) {
 				default:
 				}
 				if err == io.EOF {
-					log.Print("listener closed, reconnecting...")
+					s.logger.Error("listener closed, reconnecting...")
 					<-s.readyChan
 					continue
 				} else {
-					log.Printf("error accepting connecting %s", err)
+					s.logger.Error("error accepting connecting %s", zap.Error(err))
 					continue
 				}
 			}
@@ -502,7 +503,7 @@ func (s *Socket) keepAlive(ctx context.Context, client *ssh.Client) {
 			}
 
 			if n >= max {
-				log.Println("ssh keepalive timeout, disconnecting")
+				s.logger.Error("ssh keepalive timeout, disconnecting")
 				client.Close()
 				return
 			}
@@ -526,14 +527,14 @@ func (s *Socket) acceptConnectorAuth(conn net.Conn) {
 	tlsConn, err := s.connectorAuthentication(ctx, conn)
 	if err != nil {
 		conn.Close()
-		log.Printf("failed to authenticate connector %s", err)
+		s.logger.Error("failed to authenticate connector %s", zap.Error(err))
 		s.acceptChan <- connWithError{nil, border0NetError(fmt.Sprintf("failed to authenticate connector: %s", err))}
 		return
 	}
 
 	if tlsConn == nil {
 		conn.Close()
-		log.Print("failed to authenticate connector")
+		s.logger.Error("failed to authenticate connector")
 		s.acceptChan <- connWithError{nil, border0NetError("failed to authenticate connector")}
 		return
 	}
@@ -591,7 +592,14 @@ func (s *Socket) connectorAuthentication(ctx context.Context, conn net.Conn) (*t
 		return nil, fmt.Errorf("client handshake failed: %s", ctx.Err())
 	}
 
-	log.Printf("client %s authenticated", tlsConn.ConnectionState().PeerCertificates[0].Subject.CommonName)
+	if s.ConnectorAuthenticationEnabled {
+		s.logger.Info("connector authentication successful", zap.String("user", tlsConn.ConnectionState().PeerCertificates[0].Subject.CommonName), zap.String("clientIP", tlsConn.RemoteAddr().String()))
+	}
+
+	if s.EndToEndEncryptionEnabled {
+		s.logger.Info("End to end encryption successful", zap.String("user", tlsConn.ConnectionState().PeerCertificates[0].Subject.CommonName), zap.String("clientIP", tlsConn.RemoteAddr().String()))
+	}
+
 	time.Sleep(connectorAuthenticationShutdownTime)
 
 	return tlsConn, nil
