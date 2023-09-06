@@ -22,13 +22,13 @@ configure)
     if [ "$DEBIAN_FRONTEND" = "noninteractive" ]; then
       echo "Running in non-interactive mode."
       if [ -n "$BORDER0_TOKEN" ]; then
-        border0 connector install --v2 --daemon-only
+        border0 connector install --daemon-only
         create_config_file
       else
-        echo -e "BORDER0_TOKEN is not set.\nPlease run the install manually... \n'border0 connector install --v2'"
+        echo -e "BORDER0_TOKEN is not set.\nPlease run the install manually... \n'border0 connector install'"
       fi
     elif [ -n "$BORDER0_TOKEN" ]; then
-      border0 connector install --v2 --daemon-only
+      border0 connector install --daemon-only
       create_config_file
     else
       echo "Running Border0 Connector Install."
@@ -37,16 +37,16 @@ configure)
         read -p "Do you want to proceed? (y/n) " choice
         case "$choice" in
         y | Y)
-          echo "Running 'border0 connector install --v2'"
-          border0 connector install --v2
+          echo "Running 'border0 connector install'"
+          border0 connector install
           break
           ;;
         n | N)
-          echo "You can always execute 'border0 connector install --v2' to install the connector later."
+          echo "You can always execute 'border0 connector install' to install the connector later."
           break
           ;;
         *)
-          echo -e "Invalid choice. \nYou can always execute 'border0 connector install --v2' to install the connector later."
+          echo -e "Invalid choice. \nYou can always execute 'border0 connector install' to install the connector later."
           let "attempts--"
           if [ $attempts -eq 0 ]; then
             echo "Exceeded maximum number of attempts."

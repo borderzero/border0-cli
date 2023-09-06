@@ -12,14 +12,14 @@ case "$1" in
   # New installation
   echo "Performing new installation."
   if [ -n "$BORDER0_TOKEN" ]; then
-    border0 connector install --v2 --daemon-only
+    border0 connector install --daemon-only
     create_config_file
   else
     if [ -f /etc/systemd/system/border0.service ]; then
       echo "Looks like border0.service is already installed."
       exit 0
     fi
-    echo -e "BORDER0_TOKEN is not set.\nPlease run the install manually... \n'border0 connector install --v2'"
+    echo -e "BORDER0_TOKEN is not set.\nPlease run the install manually... \n'border0 connector install'"
   fi
   ;;
 2)
