@@ -72,6 +72,7 @@ type Socket struct {
 	cancel                           context.CancelFunc
 	Socket                           *models.Socket
 	RecordingEnabled                 bool
+	ConfigHash                       string
 }
 
 type connWithError struct {

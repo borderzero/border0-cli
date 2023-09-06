@@ -1,8 +1,12 @@
 package connectorv2
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/gob"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"sync"
@@ -424,11 +428,26 @@ func (c *ConnectorService) handleSocketConfig(action pb.Action, config *pb.Socke
 			return fmt.Errorf("socket does not exist")
 		}
 
+		var connectorSocketConfig service.ConnectorServiceConfiguration
+		if err := util.AsStruct(config.GetConfig(), &connectorSocketConfig); err != nil {
+			return fmt.Errorf("failed to parse socket config: %w", err)
+		}
+
+		newHash, err := hashStruct(connectorSocketConfig)
+		if err != nil {
+			return fmt.Errorf("failed to hash socket config: %w", err)
+		}
+
+		if socket.ConfigHash == newHash {
+			c.logger.Debug("socket config did not change", zap.String("socket", config.GetId()))
+			return nil
+		}
+
 		if !socket.IsClosed() {
 			socket.Close()
 		}
 
-		socket, err := c.newSocket(config)
+		socket, err = c.newSocket(config)
 		if err != nil {
 			return fmt.Errorf("failed to create socket: %w", err)
 		}
@@ -483,6 +502,10 @@ func (c *ConnectorService) newSocket(config *pb.SocketConfig) (*border0.Socket, 
 	socket, err := border0.NewSocketFromConnectorAPI(c.context, c, *s, c.organization)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create socket: %w", err)
+	}
+
+	if socket.ConfigHash, err = hashStruct(connectorSocketConfig); err != nil {
+		return nil, fmt.Errorf("failed to hash socket config: %w", err)
 	}
 
 	go c.Listen(socket)
@@ -675,4 +698,16 @@ func (c *ConnectorService) sendControlStreamRequest(request *pb.ControlStreamReq
 	}
 
 	return c.stream.Send(request)
+}
+
+func hashStruct(data interface{}) (string, error) {
+	var buf bytes.Buffer
+
+	enc := gob.NewEncoder(&buf)
+	if err := enc.Encode(data); err != nil {
+		return "", err
+	}
+
+	hash := sha256.Sum256(buf.Bytes())
+	return hex.EncodeToString(hash[:]), nil
 }

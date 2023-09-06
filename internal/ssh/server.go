@@ -115,19 +115,16 @@ func NewServer(logger *zap.Logger, ca string, opts ...Option) (*ssh.Server, erro
 		PublicKeyHandler: func(ctx ssh.Context, key ssh.PublicKey) bool {
 			pubCert, _, _, _, err := ssh.ParseAuthorizedKey([]byte(ca))
 			if err != nil {
-				logger.Error("error parsing public certificate", zap.Error(err))
+				logger.Error("error parsing public key", zap.Error(err))
 				return false
 			}
 
 			cert, ok := key.(*gossh.Certificate)
 			if !ok {
-				logger.Error("error key is not a certificate")
 				return false
 			}
 
 			if !bytes.Equal(cert.SignatureKey.Marshal(), pubCert.Marshal()) {
-				// not logging error here because multiple public certs could be given to
-				// ssh server, and some pub certs may not be valid
 				return false
 			}
 
