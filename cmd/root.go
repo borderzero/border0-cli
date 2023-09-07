@@ -122,7 +122,7 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.SetVersionTemplate(fmt.Sprintf("border0:\nversion %s\ndate: %s\n", version, date))
+	rootCmd.SetVersionTemplate(fmt.Sprintf("border0:\nversion: %s\ndate: %s\n", version, date))
 }
 
 func splitLongLines(b string, maxLength int) string {
