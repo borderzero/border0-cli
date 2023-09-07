@@ -449,7 +449,6 @@ func (c *ConnectorService) handleSocketConfig(action pb.Action, config *pb.Socke
 		}
 
 		if socket.ConfigHash == newHash {
-			c.logger.Debug("socket config did not change", zap.String("socket", config.GetId()))
 			return nil
 		}
 

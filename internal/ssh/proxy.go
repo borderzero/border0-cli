@@ -28,6 +28,7 @@ import (
 	ssmLog "github.com/aws/session-manager-plugin/src/log"
 	"github.com/aws/session-manager-plugin/src/message"
 	"github.com/borderzero/border0-cli/internal/api/models"
+	"github.com/borderzero/border0-cli/internal/border0"
 	"github.com/borderzero/border0-cli/internal/util"
 	"github.com/borderzero/border0-go/types/common"
 	"github.com/manifoldco/promptui"
@@ -37,9 +38,6 @@ import (
 const (
 	ResizeSleepInterval = 500 * time.Millisecond
 	sshProxyVersion     = "SSH-2.0-Border0.com"
-
-	principal_extension = "principals@mysocket.io"
-	useremail_extension = "user_email@mysocket.io"
 )
 
 type ProxyConfig struct {
@@ -68,6 +66,11 @@ type ProxyConfig struct {
 	EndToEndEncryption bool
 	Hostkey            *ssh.Signer
 	orgSshCA           ssh.PublicKey
+}
+
+type session struct {
+	metadata    border0.E2EEncryptionMetadata
+	proxyConfig ProxyConfig
 }
 
 type ECSSSMProxy struct {
@@ -262,9 +265,7 @@ func Proxy(l net.Listener, c ProxyConfig) error {
 
 	if c.EndToEndEncryption {
 		c.sshServerConfig = &ssh.ServerConfig{
-			ServerVersion:     sshProxyVersion,
-			PublicKeyCallback: c.sshPublicKeyCallback,
-			AuthLogCallback:   c.sshAuthLogCallback,
+			ServerVersion: sshProxyVersion,
 		}
 	} else {
 		c.sshServerConfig = &ssh.ServerConfig{
@@ -294,11 +295,30 @@ func Proxy(l net.Listener, c ProxyConfig) error {
 			continue
 		}
 
-		go handler(conn, c)
+		go func() {
+			if c.EndToEndEncryption {
+				e2EEncryptionConn, ok := conn.(border0.E2EEncryptionConn)
+				if !ok {
+					conn.Close()
+					c.Logger.Error("failed to cast connection to e2eencryption")
+					return
+				}
+
+				session := &session{
+					metadata:    *e2EEncryptionConn.Metadata,
+					proxyConfig: c,
+				}
+
+				c.sshServerConfig.PublicKeyCallback = session.sshPublicKeyCallback
+				c.sshServerConfig.AuthLogCallback = session.sshAuthLogCallback
+			}
+
+			handler(conn, c)
+		}()
 	}
 }
 
-func (c *ProxyConfig) sshPublicKeyCallback(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
+func (s *session) sshPublicKeyCallback(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
 	cert, ok := key.(*ssh.Certificate)
 	if !ok {
 		return nil, errors.New("can not cast certificate")
@@ -308,14 +328,18 @@ func (c *ProxyConfig) sshPublicKeyCallback(conn ssh.ConnMetadata, key ssh.Public
 	// policyInput := proxy.authSvc.NewPolicyInput(cert.KeyId, conn.RemoteAddr(), proxy.id, proxy.socket.SocketID)
 	// actions, authInfo := proxy.authSvc.Authorize(proxy.socket.AppProtocol, policyInput)
 
-	if c.orgSshCA == nil {
+	if s.proxyConfig.orgSshCA == nil {
 		return nil, errors.New("error: unable to validate certificate, no CA configured")
 	}
 
-	if bytes.Equal(cert.SignatureKey.Marshal(), c.orgSshCA.Marshal()) {
+	if bytes.Equal(cert.SignatureKey.Marshal(), s.proxyConfig.orgSshCA.Marshal()) {
 	} else {
 		// proxy.sessionLogSvc.LogSession(proxy.id, proxy.socket, conn.RemoteAddr(), "denied", authInfo, conn.User(), cert.KeyId, cert.Permissions.Extensions[userinfo_extension])
 		return nil, errors.New("error: invalid client certificate")
+	}
+
+	if s.metadata.UserEmail != cert.KeyId {
+		return nil, errors.New("error: ssh certificate does not match tls certificate")
 	}
 
 	var certChecker ssh.CertChecker
@@ -323,20 +347,17 @@ func (c *ProxyConfig) sshPublicKeyCallback(conn ssh.ConnMetadata, key ssh.Public
 		return nil, fmt.Errorf("error: invalid client certificate: %s", err)
 	}
 
-	cert.Permissions.Extensions[principal_extension] = cert.ValidPrincipals[0]
-	cert.Permissions.Extensions[useremail_extension] = cert.KeyId
-
-	return &cert.Permissions, nil
+	return &ssh.Permissions{}, nil
 }
 
-func (c *ProxyConfig) sshAuthLogCallback(conn ssh.ConnMetadata, method string, err error) {
+func (s *session) sshAuthLogCallback(conn ssh.ConnMetadata, method string, err error) {
 	if err != nil {
 		if errors.Is(err, ssh.ErrNoAuth) {
 			return
 		}
-		c.Logger.Debug("sshauthproxy: authentication failed", zap.String("method", method), zap.String("user", conn.User()), zap.Error(err))
+		s.proxyConfig.Logger.Debug("sshauthproxy: authentication failed", zap.String("method", method), zap.String("user", conn.User()), zap.Error(err))
 	} else {
-		c.Logger.Debug("sshauthproxy: authentication successful", zap.String("method", method), zap.String("user", conn.User()))
+		s.proxyConfig.Logger.Debug("sshauthproxy: authentication successful", zap.String("method", method), zap.String("user", conn.User()), zap.String("remote_addr", s.metadata.ClientIP), zap.String("userEmail", s.metadata.UserEmail))
 	}
 }
 

@@ -10,7 +10,7 @@ import (
 	"github.com/aws/session-manager-plugin/src/log"
 	"github.com/aws/session-manager-plugin/src/message"
 	"github.com/aws/session-manager-plugin/src/retry"
-	"github.com/aws/session-manager-plugin/src/sessionmanagerplugin/session"
+	awsSession "github.com/aws/session-manager-plugin/src/sessionmanagerplugin/session"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -19,7 +19,7 @@ const (
 )
 
 type ShellSession struct {
-	session.Session
+	awsSession.Session
 	retryParams     retry.RepeatableExponentialRetryer
 	sshChannel      ssh.Channel
 	sshWindowHeight int

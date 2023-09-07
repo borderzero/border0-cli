@@ -10,6 +10,8 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
+	"encoding/binary"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
@@ -31,21 +33,34 @@ import (
 )
 
 const (
-	defaultTunnelHost                     = "tunnel.border0.com"
-	defaultTunnelPort                     = 22
-	defaultSSHTimeout                     = 5 * time.Second
-	tunnelHostEnvVar                      = "BORDER0_TUNNEL"
-	connectorAuthenticationHeader         = "BORDER0-CLIENT-CONNECTOR-AUTHENTICATED"
-	connectorAuthenticationShutdownTime   = 200 * time.Millisecond
-	connectorAuthenticationCertificateOrg = "Border0 Connector"
-	connectorAuthenticationCertificateTTL = 24 * 365 * 10 * time.Hour
-	connectorAuthenticationTimeout        = 10 * time.Second
-	proxyHostRegex                        = "^http(s)?://"
+	defaultTunnelHost                        = "tunnel.border0.com"
+	defaultTunnelPort                        = 22
+	defaultSSHTimeout                        = 5 * time.Second
+	tunnelHostEnvVar                         = "BORDER0_TUNNEL"
+	connectorAuthenticationHeader            = "BORDER0-CLIENT-CONNECTOR-AUTHENTICATED"
+	connectorAuthenticationShutdownTime      = 200 * time.Millisecond
+	connectorAuthenticationCertificateOrg    = "Border0 Connector"
+	connectorAuthenticationCertificateTTL    = 24 * 365 * 10 * time.Hour
+	connectorAuthenticationTimeout           = 10 * time.Second
+	endToEndEncryptionHandshakeTimeout       = 5 * time.Second
+	endToEndEncryptionMetadataHeaderByteSize = 2
+	proxyHostRegex                           = "^http(s)?://"
 )
 
 type Border0API interface {
 	GetUserID() (string, error)
 	SignSSHKey(ctx context.Context, socketID string, publicKey []byte) (string, string, error)
+}
+
+type E2EEncryptionMetadata struct {
+	ClientIP   string `json:"client_ip"`
+	UserEmail  string `json:"user_email"`
+	SessionKey string `json:"session_key"`
+}
+
+type E2EEncryptionConn struct {
+	*tls.Conn
+	Metadata *E2EEncryptionMetadata
 }
 
 type Socket struct {
@@ -238,9 +253,12 @@ func (s *Socket) Listen() (net.Listener, error) {
 		for {
 			select {
 			case conn := <-newConn:
-				if s.EndToEndEncryptionEnabled || s.ConnectorAuthenticationEnabled {
-					go s.acceptConnectorAuth(conn)
-				} else {
+				switch {
+				case s.EndToEndEncryptionEnabled:
+					go s.endToEndEncryptionHandshake(conn)
+				case s.ConnectorAuthenticationEnabled:
+					go s.connecorAuthHandshake(conn)
+				default:
 					s.acceptChan <- connWithError{conn, nil}
 				}
 			case <-s.context.Done():
@@ -520,29 +538,111 @@ func (s *Socket) Accept() (net.Conn, error) {
 	return r.conn, r.err
 }
 
-func (s *Socket) acceptConnectorAuth(conn net.Conn) {
+func (s *Socket) connecorAuthHandshake(conn net.Conn) {
 	ctx, cancel := context.WithTimeout(context.Background(), connectorAuthenticationTimeout)
 	defer cancel()
 
 	tlsConn, err := s.connectorAuthentication(ctx, conn)
 	if err != nil {
 		conn.Close()
-		s.logger.Error("failed to authenticate connector %s", zap.Error(err))
-		s.acceptChan <- connWithError{nil, border0NetError(fmt.Sprintf("failed to authenticate connector: %s", err))}
+		s.logger.Error("failed to authenticate client %s", zap.Error(err))
+		s.acceptChan <- connWithError{nil, border0NetError(fmt.Sprintf("failed to authenticate client: %s", err))}
 		return
 	}
 
 	if tlsConn == nil {
 		conn.Close()
-		s.logger.Error("failed to authenticate connector")
-		s.acceptChan <- connWithError{nil, border0NetError("failed to authenticate connector")}
+		s.logger.Error("failed to authenticate client")
+		s.acceptChan <- connWithError{nil, border0NetError("failed to authenticate client")}
 		return
 	}
 
-	if s.EndToEndEncryptionEnabled {
-		s.acceptChan <- connWithError{tlsConn, nil}
-	} else {
-		s.acceptChan <- connWithError{conn, nil}
+	s.acceptChan <- connWithError{conn, nil}
+}
+
+func (s *Socket) endToEndEncryptionHandshake(conn net.Conn) {
+	ctx, cancel := context.WithTimeout(context.Background(), endToEndEncryptionHandshakeTimeout)
+	defer cancel()
+
+	md, err := e2EEncryptionMetadata(ctx, conn)
+	if err != nil {
+		conn.Close()
+		s.logger.Error("failed to read metadata from net conn: %s", zap.Error(err))
+		s.acceptChan <- connWithError{nil, border0NetError(fmt.Sprintf("failed to read metadata from net conn: %s", err))}
+		return
+	}
+
+	tlsConn, err := s.endToEndEncryptionAuthentication(ctx, conn)
+	if err != nil {
+		conn.Close()
+		s.logger.Error("failed to authenticate client %s", zap.Error(err))
+		s.acceptChan <- connWithError{nil, border0NetError(fmt.Sprintf("failed to authenticate client: %s", err))}
+		return
+	}
+
+	if tlsConn == nil {
+		conn.Close()
+		s.logger.Error("failed to authenticate client")
+		s.acceptChan <- connWithError{nil, border0NetError("failed to authenticate client")}
+		return
+	}
+
+	s.acceptChan <- connWithError{E2EEncryptionConn{tlsConn, md}, nil}
+}
+
+func e2EEncryptionMetadata(ctx context.Context, conn net.Conn) (*E2EEncryptionMetadata, error) {
+
+	resultChan := make(chan *E2EEncryptionMetadata)
+	errChan := make(chan error)
+
+	go func() {
+		headerBuffer := make([]byte, endToEndEncryptionMetadataHeaderByteSize)
+		n, err := conn.Read(headerBuffer)
+		if err != nil {
+			errChan <- fmt.Errorf("failed to read header: %v", err)
+			return
+		}
+
+		if n < endToEndEncryptionMetadataHeaderByteSize {
+			errChan <- fmt.Errorf("read less than controlMessageHeaderByteSize bytes (%d): %d", endToEndEncryptionMetadataHeaderByteSize, n)
+			return
+		}
+
+		// convert binary header to the size uint16
+		size := binary.BigEndian.Uint16(headerBuffer)
+
+		// new empty buffer of the size of the control message we're about to read
+		metadataBuffer := make([]byte, size)
+
+		// read the control message
+		n, err = io.ReadFull(conn, metadataBuffer)
+		if err != nil {
+			errChan <- fmt.Errorf("failed to read control message from net conn: %v", err)
+			return
+		}
+
+		if n < int(size) {
+			errChan <- fmt.Errorf("read less than the advertised size (expected %d, got %d)", size, n)
+			return
+		}
+
+		// decode control message JSON
+		var md *E2EEncryptionMetadata
+		if err = json.Unmarshal(metadataBuffer, &md); err != nil {
+			errChan <- fmt.Errorf("failed to decode control message JSON: %v", err)
+			return
+		}
+
+		resultChan <- md
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf("timeout receiving metadata")
+	case err := <-errChan:
+		return nil, err
+	case md := <-resultChan:
+		return md, nil
 	}
 }
 
@@ -573,11 +673,9 @@ func (s *Socket) connectorAuthentication(ctx context.Context, conn net.Conn) (*t
 			return
 		}
 
-		if s.ConnectorAuthenticationEnabled {
-			if _, err := conn.Write([]byte(connectorAuthenticationHeader)); err != nil {
-				authChan <- fmt.Errorf("failed to write header: %s", err)
-				return
-			}
+		if _, err := conn.Write([]byte(connectorAuthenticationHeader)); err != nil {
+			authChan <- fmt.Errorf("failed to write header: %s", err)
+			return
 		}
 
 		authChan <- nil
@@ -592,16 +690,39 @@ func (s *Socket) connectorAuthentication(ctx context.Context, conn net.Conn) (*t
 		return nil, fmt.Errorf("client handshake failed: %s", ctx.Err())
 	}
 
-	if s.ConnectorAuthenticationEnabled {
-		s.logger.Info("connector authentication successful", zap.String("user", tlsConn.ConnectionState().PeerCertificates[0].Subject.CommonName), zap.String("clientIP", tlsConn.RemoteAddr().String()))
-	}
-
-	if s.EndToEndEncryptionEnabled {
-		s.logger.Info("End to end encryption successful", zap.String("user", tlsConn.ConnectionState().PeerCertificates[0].Subject.CommonName), zap.String("clientIP", tlsConn.RemoteAddr().String()))
-	}
+	s.logger.Info("connector authentication successful", zap.String("user", tlsConn.ConnectionState().PeerCertificates[0].Subject.CommonName))
 
 	time.Sleep(connectorAuthenticationShutdownTime)
 
+	return tlsConn, nil
+}
+
+func (s *Socket) endToEndEncryptionAuthentication(ctx context.Context, conn net.Conn) (*tls.Conn, error) {
+	tlsConn := tls.Server(conn, s.ConnectorAuthenticationTLSConfig)
+	if tlsConn == nil {
+		return nil, fmt.Errorf("failed to create tls connection")
+	}
+
+	authChan := make(chan error, 1)
+	go func() {
+		if err := tlsConn.HandshakeContext(ctx); err != nil {
+			authChan <- fmt.Errorf("client tls handshake failed: %s", err)
+			return
+		}
+
+		authChan <- nil
+	}()
+
+	select {
+	case err := <-authChan:
+		if err != nil {
+			return nil, err
+		}
+	case <-ctx.Done():
+		return nil, fmt.Errorf("client handshake failed: %s", ctx.Err())
+	}
+
+	s.logger.Info("end to end encryption authentication successful", zap.String("user", tlsConn.ConnectionState().PeerCertificates[0].Subject.CommonName), zap.String("clientIP", tlsConn.RemoteAddr().String()))
 	return tlsConn, nil
 }
 
