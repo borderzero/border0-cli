@@ -112,7 +112,7 @@ type PermanentError struct {
 
 func (e PermanentError) Error() string { return e.Message }
 
-func NewSocket(ctx context.Context, border0API api.API, nameOrID string) (*Socket, error) {
+func NewSocket(ctx context.Context, border0API api.API, nameOrID string, logger *zap.Logger) (*Socket, error) {
 	socketFromApi, err := border0API.GetSocket(ctx, nameOrID)
 	if err != nil {
 		return nil, err
@@ -138,6 +138,7 @@ func NewSocket(ctx context.Context, border0API api.API, nameOrID string) (*Socke
 		Organization:                   org,
 		acceptChan:                     make(chan connWithError),
 		RecordingEnabled:               socketFromApi.RecordingEnabled,
+		logger:                         logger,
 
 		context: sckContext,
 		cancel:  sckCancel,

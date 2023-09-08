@@ -15,7 +15,7 @@ type Connection struct {
 }
 
 func NewConnection(logger *zap.Logger, api api.API, socketID string, version string) (*Connection, error) {
-	socket, err := border0.NewSocket(context.Background(), api, socketID)
+	socket, err := border0.NewSocket(context.Background(), api, socketID, logger)
 	if err != nil {
 		return nil, err
 	}

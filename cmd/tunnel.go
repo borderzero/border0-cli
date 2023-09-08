@@ -134,7 +134,7 @@ var tunnelConnectCmd = &cobra.Command{
 
 		border0API := api.NewAPI(api.WithVersion(version))
 
-		socket, err := border0.NewSocket(ctx, border0API, socketID)
+		socket, err := border0.NewSocket(ctx, border0API, socketID, logger.Logger)
 		if err != nil {
 			log.Fatalf("error: %v", err)
 		}

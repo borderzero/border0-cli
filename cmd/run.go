@@ -195,7 +195,7 @@ func createSocketStartTunnel(ctx context.Context, border0API *api.Border0API, qu
 			fmt.Print(print_socket(*socketFromAPI, policies))
 			SetRlimit()
 
-			socket, err := border0.NewSocket(ctx, border0API, socketFromAPI.SocketID)
+			socket, err := border0.NewSocket(ctx, border0API, socketFromAPI.SocketID, logger.Logger)
 			if err != nil {
 				return fmt.Errorf("failed to create socket: %s", err)
 			}
@@ -286,7 +286,7 @@ func createHTTPSocketStartTunnel(ctx context.Context, border0API *api.Border0API
 
 			SetRlimit()
 
-			socket, err := border0.NewSocket(ctx, border0API, socketFromAPI.SocketID)
+			socket, err := border0.NewSocket(ctx, border0API, socketFromAPI.SocketID, logger.Logger)
 			if err != nil {
 				return fmt.Errorf("failed to create socket: %s", err)
 			}

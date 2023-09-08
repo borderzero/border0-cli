@@ -301,7 +301,7 @@ var socketConnectProxyCmd = &cobra.Command{
 			socketID = args[0]
 		}
 
-		socket, err := border0.NewSocket(ctx, border0API, socketID)
+		socket, err := border0.NewSocket(ctx, border0API, socketID, logger.Logger)
 		if err != nil {
 			log.Fatalf("error: %v", err)
 		}
@@ -354,7 +354,7 @@ var socketConnectVpnCmd = &cobra.Command{
 			socketID = args[0]
 		}
 
-		socket, err := border0.NewSocket(ctx, border0API, socketID)
+		socket, err := border0.NewSocket(ctx, border0API, socketID, logger.Logger)
 		if err != nil {
 			log.Fatalf("error: %v", err)
 		}
@@ -490,7 +490,7 @@ var socketConnectCmd = &cobra.Command{
 			socketID = args[0]
 		}
 
-		socket, err := border0.NewSocket(ctx, border0API, socketID)
+		socket, err := border0.NewSocket(ctx, border0API, socketID, logger.Logger)
 		if err != nil {
 			log.Fatalf("error: %v", err)
 		}

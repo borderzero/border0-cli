@@ -109,7 +109,7 @@ var connectCmd = &cobra.Command{
 			httpserver = false
 		}
 
-		socket, err := border0.NewSocket(context.Background(), border0API, socketFromAPI.SocketID)
+		socket, err := border0.NewSocket(context.Background(), border0API, socketFromAPI.SocketID, logger.Logger)
 		if err != nil {
 			log.Fatalf("error: %v", err)
 		}
