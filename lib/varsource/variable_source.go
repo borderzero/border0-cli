@@ -29,6 +29,7 @@ func NewDefaultVariableSource() VariableSource {
 		WithTopLevelPrefix(defaultTopLevelPrefix),
 		WithEnvVariableUpstream(),
 		WithFileVariableUpstream(),
+		WithShellVariableUpstream(),
 		WithAWSSSMVariableUpstream(),
 		WithAWSSecretsManagerVariableUpstream(),
 	)
