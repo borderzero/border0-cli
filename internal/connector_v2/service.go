@@ -22,6 +22,7 @@ import (
 	"github.com/borderzero/border0-cli/internal/border0"
 	"github.com/borderzero/border0-cli/internal/connector_v2/cmds"
 	"github.com/borderzero/border0-cli/internal/connector_v2/config"
+	"github.com/borderzero/border0-cli/internal/connector_v2/daemon"
 	"github.com/borderzero/border0-cli/internal/connector_v2/errors"
 	"github.com/borderzero/border0-cli/internal/connector_v2/logger"
 	"github.com/borderzero/border0-cli/internal/connector_v2/plugin"
@@ -94,6 +95,13 @@ func NewConnectorService(
 func (c *ConnectorService) Start() {
 	c.logger.Info("starting the connector service")
 	newCtx, cancel := context.WithCancel(c.context)
+
+	if ok, _ := daemon.IsInstalled(); ok {
+		svc, err := daemon.GetConnectorService()
+		if err == nil {
+			svc.Start()
+		}
+	}
 
 	go c.StartControlStream(newCtx, cancel)
 	go c.handleDiscoveryResult(newCtx)

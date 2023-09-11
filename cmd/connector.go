@@ -13,19 +13,21 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+
 	"time"
 
 	"github.com/borderzero/border0-cli/internal/connector"
 	"github.com/borderzero/border0-cli/internal/connector/config"
+	"github.com/borderzero/border0-cli/internal/connector_v2/daemon"
 	"github.com/borderzero/border0-cli/internal/connector_v2/install"
-	"github.com/borderzero/border0-cli/internal/service_daemon"
+	"github.com/borderzero/border0-cli/internal/logging"
 	"github.com/borderzero/border0-cli/internal/util"
+	"github.com/kardianos/service"
 
 	connectorv2 "github.com/borderzero/border0-cli/internal/connector_v2"
 	connectorv2config "github.com/borderzero/border0-cli/internal/connector_v2/config"
 
 	"github.com/borderzero/border0-cli/internal/http"
-	"github.com/borderzero/border0-cli/internal/logging"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
@@ -38,9 +40,7 @@ var connectorCmd = &cobra.Command{
 }
 
 const (
-	serviceName        = "border0" // must match binary name
-	serviceDescription = "Border0 Connector Service"
-
+	serviceName           = "border0" // must match binary name
 	defaultConfigFileName = "border0.yaml"
 )
 
@@ -148,12 +148,22 @@ func displayServiceStatus(serviceName string) {
 	}
 }
 
+func setUpLogging() {
+	logFile, err := os.OpenFile("C:/Users/mysocket/border0/my_log.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		panic(err)
+	}
+	log.SetOutput(logFile)
+	log.Println("Logger initialized.")
+}
+
 var connectorStartCmd = &cobra.Command{
 	Use:   "start",
 	Short: "start the connector in foreground ad-hoc mode",
 	Run: func(cmd *cobra.Command, args []string) {
-		log, _ := logging.BuildProduction()
-		defer log.Sync()
+		logger, _ := logging.BuildProduction()
+		defer logger.Sync()
+		setUpLogging()
 
 		SetRlimit()
 
@@ -171,12 +181,12 @@ var connectorStartCmd = &cobra.Command{
 			// if not check if it exists in the serviceConfigPath directory
 			if _, err := os.Stat(defaultConfigFileName); err == nil {
 				configPath = filepath.Join(defaultConfigFileName)
-				log.Info("using config file in the current directory", zap.String("config_path", configPath))
+				log.Println("using config file in the current directory", zap.String("config_path", configPath))
 			} else if _, err := os.Stat(serviceConfigPath + defaultConfigFileName); err == nil {
 				configPath = filepath.Join(serviceConfigPath + defaultConfigFileName)
-				log.Info("using config file in the service config directory", zap.String("config_path", configPath))
+				log.Println("using config file in the service config directory", zap.String("config_path", configPath))
 			} else {
-				log.Debug("no legacy connector config found, defaulting to connector v2", zap.String("error", err.Error()))
+				log.Println("no legacy connector config found, defaulting to connector v2", zap.String("error", err.Error()))
 				v2 = true
 			}
 		}
@@ -185,19 +195,19 @@ var connectorStartCmd = &cobra.Command{
 
 		var cfg *config.Config
 		if !v2 {
-			log.Info("reading the config", zap.String("config_path", configPath))
+			log.Println("reading the config", zap.String("config_path", configPath))
 
 			parsedCfg, err := parser.Parse(configPath)
 			if err == nil && parsedCfg != nil {
 				cfg = parsedCfg
 			}
 			if err != nil {
-				log.Debug("failed to parse legacy connector config, defaulting to connector v2", zap.String("error", err.Error()))
+				log.Println("failed to parse legacy connector config, defaulting to connector v2", zap.String("error", err.Error()))
 				v2 = true
 			}
 			if !v2 {
 				if err := cfg.Validate(); err != nil {
-					log.Debug("failed to validate legacy connector config, defaulting to connector v2", zap.String("error", err.Error()))
+					log.Println("failed to validate legacy connector config, defaulting to connector v2", zap.String("error", err.Error()))
 					v2 = true
 				}
 			}
@@ -215,23 +225,43 @@ var connectorStartCmd = &cobra.Command{
 				config.ConnectorId = connectorId
 			}
 
-			connectorv2.NewConnectorService(ctx, log, version, config).Start()
+			// fucking windows
+			go func() {
+				connectorSvc, err := daemon.GetConnectorService(
+					daemon.WithConfigurationFilePath(connectorConfig),
+				)
+				if err != nil {
+					log.Println("failed to get connector service", zap.Error(err))
+				}
+				if serviceFlag != "" {
+					err = service.Control(connectorSvc, serviceFlag)
+					if err != nil {
+						log.Println("failed to bop it service", zap.Error(err))
+					}
+				}
+				err = connectorSvc.Run()
+				if err != nil {
+					log.Println("failed to run connector service", zap.Error(err))
+				}
+			}()
+
+			connectorv2.NewConnectorService(ctx, logger, version, config).Start()
 			return
 		}
 
 		svc, err := config.StartSSMSession(cfg)
 		if err != nil {
-			log.Error("failed to start ssm session", zap.String("error", err.Error()))
+			log.Println("failed to start ssm session", zap.String("error", err.Error()))
 		}
 
 		if svc != nil {
 			if err := parser.LoadSSMInConfig(svc, cfg); err != nil {
-				log.Error("failed to load ssm config", zap.String("error", err.Error()))
+				log.Println("failed to load ssm config", zap.String("error", err.Error()))
 			}
 
 			parser := config.NewConfigParser()
 
-			log.Info("reading the config", zap.String("config_path", configPath))
+			log.Println("reading the config", zap.String("config_path", configPath))
 			cfg, err := parser.Parse(configPath)
 			if err != nil {
 				log.Fatal("failed to parse config", zap.String("error", err.Error()))
@@ -243,17 +273,17 @@ var connectorStartCmd = &cobra.Command{
 
 			svc, err := config.StartSSMSession(cfg)
 			if err != nil {
-				log.Error("failed to start ssm session", zap.String("error", err.Error()))
+				log.Println("failed to start ssm session", zap.String("error", err.Error()))
 			}
 
 			if svc != nil {
 				if err := parser.LoadSSMInConfig(svc, cfg); err != nil {
-					log.Error("failed to load ssm config", zap.String("error", err.Error()))
+					log.Println("failed to load ssm config", zap.String("error", err.Error()))
 				}
 			}
 
-			if err := connector.NewConnectorService(*cfg, log, version).Start(); err != nil {
-				log.Error("failed to start connector", zap.String("error", err.Error()))
+			if err := connector.NewConnectorService(*cfg, logger, version).Start(); err != nil {
+				log.Println("failed to start connector", zap.String("error", err.Error()))
 			}
 		}
 	},
@@ -338,30 +368,34 @@ var connectorUnInstallCmd = &cobra.Command{
 			log.Println("Error: command must be ran as system administrator")
 			os.Exit(1)
 		}
-		service, err := service_daemon.New(serviceName, serviceDescription)
+
+		installed, err := daemon.IsInstalled()
 		if err != nil {
-			log.Println("Error: ", err)
-			os.Exit(1)
-		}
-		installed, err := service_daemon.IsInstalled(service)
-		if err != nil {
-			log.Printf("Error: failed to check whether service is already installed: %v", err)
-			os.Exit(1)
-		}
-		if !installed {
-			log.Printf("The service is NOT installed")
-			os.Exit(1)
+			log.Fatalf("could not determine if connector service is already installed: %v", err)
 		}
 
-		result, err := service.Stop()
-		if err == nil {
-			fmt.Println(result)
+		if !installed {
+			fmt.Printf("The Border0 Connector Service is not installed")
+			os.Exit(0)
 		}
-		result, err = service.Remove()
+
+		connectorSvc, err := daemon.GetConnectorService()
 		if err != nil {
-			fmt.Println(result)
-		} else {
-			fmt.Println(result)
+			log.Fatalf("failed to build connector service object: %v", err)
+		}
+
+		// best effort attempt at stopping gracefully
+		status, err := connectorSvc.Status()
+		if err == nil {
+			if status == service.StatusRunning {
+				if err = connectorSvc.Stop(); err != nil {
+					log.Fatalf("failed to stop connector service: %v", err)
+				}
+			}
+		}
+
+		if err = connectorSvc.Uninstall(); err != nil {
+			log.Fatalf("failed to uninstall connector service: %v", err)
 		}
 
 		configPath := filepath.Join(serviceConfigPath + defaultConfigFileName)
@@ -432,11 +466,14 @@ var connectorStatusCmd = &cobra.Command{
 }
 
 func init() {
+	connectorStartCmd.Flags().StringVarP(&serviceFlag, "service", "s", "", "used to provide service actions e.g. start | stop | install | uninstall...")
 	connectorStartCmd.Flags().StringVarP(&connectorConfig, "config", "f", "", "yaml configuration file for connector service, see https://docs.border0.com for more info")
 	connectorStartCmd.Flags().StringVarP(&connectorId, "connector-id", "", "", "connector id to use with connector control stream")
 	connectorInstallCmd.Flags().BoolVarP(&aws, "aws", "", false, "true to run the connector installation wizard for AWS")
 	connectorInstallCmd.Flags().BoolVarP(&daemonOnly, "daemon-only", "d", false, "Install the daemon only, do not create connector")
 	connectorInstallCmd.Flags().StringVarP(&token, "token", "t", "", "Border0 token for use by the installed connector")
+
+	connectorStartCmd.Flag("service").Hidden = true // used by service controller on windows
 
 	connectorCmd.AddCommand(connectorStartCmd)
 	connectorCmd.AddCommand(connectorStopCmd)

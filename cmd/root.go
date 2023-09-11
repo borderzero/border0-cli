@@ -63,6 +63,7 @@ var (
 	orgName                 string
 	sso                     string
 	connectorConfig         string
+	serviceFlag             string
 	perPage                 int64
 	page                    int64
 	orgwide                 bool
