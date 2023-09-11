@@ -41,7 +41,8 @@ func (vg *shellVariableUpstream) GetVariable(ctx context.Context, varDefn string
 	}
 
 	// Capture the command's output as a string
-	output := stdout.String()
+	// and remove the trailing newline
+	output := strings.TrimSuffix(stdout.String(), "\n")
 
 	// Return the output
 	return output, nil

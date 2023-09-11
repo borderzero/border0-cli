@@ -14,7 +14,7 @@ const (
 	prefixAWSSSM            = "aws:ssm:"
 	prefixEnv               = "env:"
 	prefixFile              = "file:"
-	prefixsShell            = "shell:"
+	prefixShell             = "shell:"
 )
 
 // variableUpstream represents functioanlity of an upstream source of variable values
@@ -63,7 +63,7 @@ func WithFileVariableUpstream() Option {
 // a shell script and use the output of that as a new MultipleUpstreamVariableSource
 func WithShellVariableUpstream() Option {
 	return func(m *MultipleUpstreamVariableSource) {
-		m.upstreams[prefixsShell] = &shellVariableUpstream{}
+		m.upstreams[prefixShell] = &shellVariableUpstream{}
 	}
 }
 
