@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 	"unsafe"
 
 	"github.com/creack/pty"
@@ -48,7 +47,7 @@ func execCmd(s ssh.Session, cmd exec.Cmd, uid, gid uint64, username string) {
 		if euid == 0 && loginCmd != "" {
 			cmd.Path = loginCmd
 			if isAlpine() {
-				cmd.Args = append([]string{loginCmd, "-p", "-h", "Border0", "-f", username})
+				cmd.Args = []string{loginCmd, "-p", "-h", "Border0", "-f", username}
 			} else {
 				cmd.Args = append([]string{loginCmd, "-p", "-h", "Border0", "-f", username}, cmd.Args...)
 			}
@@ -83,33 +82,29 @@ func execCmd(s ssh.Session, cmd exec.Cmd, uid, gid uint64, username string) {
 			return
 		}
 
-		done := make(chan bool, 2)
-		go func() {
-			cmd.Wait()
-			done <- true
-		}()
-
 		go func() {
 			for win := range winCh {
 				setWinsize(f, win.Width, win.Height)
 			}
 		}()
 
+		var wg sync.WaitGroup
+		wg.Add(2)
+
 		go func() {
+			defer wg.Done()
 			io.Copy(f, s)
-			done <- true
+			f.Close()
 		}()
 
 		go func() {
-			time.Sleep(200 * time.Millisecond)
+			defer wg.Done()
 			io.Copy(s, f)
-			done <- true
+			s.CloseWrite()
 		}()
 
-		select {
-		case <-done:
-		case <-s.Context().Done():
-		}
+		wg.Wait()
+		cmd.Wait()
 
 		if cmd.ProcessState == nil {
 			cmd.Process.Signal(syscall.SIGHUP)

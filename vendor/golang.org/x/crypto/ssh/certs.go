@@ -424,7 +424,6 @@ func (c *CertChecker) CheckCert(principal string, cert *Certificate) error {
 	if before := int64(cert.ValidBefore); cert.ValidBefore != uint64(CertTimeInfinity) && (unixNow >= before || before < 0) {
 		return fmt.Errorf("ssh: cert has expired")
 	}
-
 	if err := cert.SignatureKey.Verify(cert.bytesForSigning(), cert.Signature); err != nil {
 		return fmt.Errorf("ssh: certificate signature does not verify")
 	}

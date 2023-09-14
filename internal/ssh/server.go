@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/user"
@@ -15,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/gliderlabs/ssh"
+	"github.com/pkg/sftp"
 	"go.uber.org/zap"
 	gossh "golang.org/x/crypto/ssh"
 )
@@ -93,21 +95,6 @@ func NewServer(logger *zap.Logger, ca string, opts ...Option) (*ssh.Server, erro
 		return nil, fmt.Errorf("could not generate signer: %s", err)
 	}
 
-	requestHandlers := map[string]ssh.RequestHandler{}
-	for k, v := range ssh.DefaultRequestHandlers {
-		requestHandlers[k] = v
-	}
-
-	channelHandlers := map[string]ssh.ChannelHandler{}
-	for k, v := range ssh.DefaultChannelHandlers {
-		channelHandlers[k] = v
-	}
-
-	subsystemHandlers := map[string]ssh.SubsystemHandler{}
-	for k, v := range ssh.DefaultSubsystemHandlers {
-		subsystemHandlers[k] = v
-	}
-
 	return &ssh.Server{
 		Version:     "Border0-ssh-server",
 		HostSigners: []ssh.Signer{signer},
@@ -138,9 +125,33 @@ func NewServer(logger *zap.Logger, ca string, opts ...Option) (*ssh.Server, erro
 
 			return true
 		},
-		RequestHandlers:   requestHandlers,
-		ChannelHandlers:   channelHandlers,
-		SubsystemHandlers: subsystemHandlers,
+		SubsystemHandlers: map[string]ssh.SubsystemHandler{
+			"sftp": func(s ssh.Session) {
+				pubKey := s.PublicKey()
+				cert, ok := pubKey.(*gossh.Certificate)
+				if !ok {
+					logger.Sugar().Errorf("could not get user certificate")
+					return
+				}
+
+				logger.Sugar().Infof("new sftp session for %s (as user %s)", cert.KeyId, s.User())
+
+				server, err := sftp.NewServer(
+					s,
+				)
+
+				if err != nil {
+					logger.Sugar().Errorf("sftp server init error: %s", err)
+					return
+				}
+				if err := server.Serve(); err == io.EOF {
+					server.Close()
+				} else if err != nil {
+					logger.Sugar().Errorf("sftp server completed with error:", err)
+				}
+
+			},
+		},
 	}, nil
 }
 
