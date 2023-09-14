@@ -67,6 +67,7 @@ type Socket struct {
 	SocketID                         string
 	SocketType                       string
 	UpstreamType                     string
+	UpstreamUsername                 string
 	ConnectorAuthenticationEnabled   bool
 	EndToEndEncryptionEnabled        bool
 	ConnectorAuthenticationTLSConfig *tls.Config
@@ -125,10 +126,16 @@ func NewSocket(ctx context.Context, border0API api.API, nameOrID string, logger 
 
 	sckContext, sckCancel := context.WithCancel(context.Background())
 
+	var upstreamUsername string
+	if socketFromApi.UpstreamUsername != nil {
+		upstreamUsername = *socketFromApi.UpstreamUsername
+	}
+
 	return &Socket{
 		SocketID:                       socketFromApi.SocketID,
 		SocketType:                     socketFromApi.SocketType,
 		UpstreamType:                   socketFromApi.UpstreamType,
+		UpstreamUsername:               upstreamUsername,
 		ConnectorAuthenticationEnabled: socketFromApi.ConnectorAuthenticationEnabled,
 		EndToEndEncryptionEnabled:      socketFromApi.EndToEndEncryptionEnabled,
 		border0API:                     border0API,

@@ -660,7 +660,11 @@ var socketConnectCmd = &cobra.Command{
 				return err
 			}
 		case localssh:
-			sshServer, err := ssh.NewServer(logger.Logger, socket.Organization.Certificates["ssh_public_key"])
+			opts := []ssh.Option{}
+			if socket.UpstreamUsername != "" {
+				opts = append(opts, ssh.WithUsername(socket.UpstreamUsername))
+			}
+			sshServer, err := ssh.NewServer(logger.Logger, socket.Organization.Certificates["ssh_public_key"], opts...)
 			if err != nil {
 				return err
 			}
