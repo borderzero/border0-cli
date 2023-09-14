@@ -6,7 +6,6 @@ import (
 	"crypto/rsa"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"os/user"
@@ -16,7 +15,6 @@ import (
 	"strings"
 
 	"github.com/gliderlabs/ssh"
-	"github.com/pkg/sftp"
 	"go.uber.org/zap"
 	gossh "golang.org/x/crypto/ssh"
 )
