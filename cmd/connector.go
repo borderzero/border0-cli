@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"math/rand"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -13,7 +12,6 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/borderzero/border0-cli/internal/connector"
 	"github.com/borderzero/border0-cli/internal/connector/config"
@@ -306,16 +304,6 @@ func connectorInstallLocal(cmd *cobra.Command) {
 		fmt.Printf("\nError: %s\n", err)
 		os.Exit(1)
 	}
-}
-
-func randString(n int) string {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	var letters = []rune("0123456789abcdefghijklmnopqrstuvwxyz")
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letters[r.Intn(len(letters))]
-	}
-	return string(b)
 }
 
 var connectorInstallCmd = &cobra.Command{

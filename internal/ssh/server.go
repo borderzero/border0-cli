@@ -6,7 +6,6 @@ import (
 	"crypto/rsa"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"os/user"
@@ -16,7 +15,6 @@ import (
 	"strings"
 
 	"github.com/gliderlabs/ssh"
-	"github.com/pkg/sftp"
 	"go.uber.org/zap"
 	gossh "golang.org/x/crypto/ssh"
 )
@@ -135,19 +133,13 @@ func NewServer(logger *zap.Logger, ca string, opts ...Option) (*ssh.Server, erro
 				}
 
 				logger.Sugar().Infof("new sftp session for %s (as user %s)", cert.KeyId, s.User())
-
-				server, err := sftp.NewServer(
-					s,
-				)
-
-				if err != nil {
-					logger.Sugar().Errorf("sftp server init error: %s", err)
-					return
+				username := s.User()
+				if o.username != "" {
+					username = o.username
 				}
-				if err := server.Serve(); err == io.EOF {
-					server.Close()
-				} else if err != nil {
-					logger.Sugar().Errorf("sftp server completed with error:", err)
+
+				if err := startChildProcess(s, "sftp", username); err != nil {
+					logger.Sugar().Errorf("could not start sftp child process: %s", err)
 				}
 
 			},
@@ -155,9 +147,55 @@ func NewServer(logger *zap.Logger, ca string, opts ...Option) (*ssh.Server, erro
 	}, nil
 }
 
+func startChildProcess(s ssh.Session, process, username string) error {
+	user, err := user.Lookup(username)
+	if err != nil {
+		return fmt.Errorf("could not find user %s: %v", username, err)
+	}
+
+	uidv, err := strconv.ParseInt(user.Uid, 10, 32)
+	if err != nil {
+		return fmt.Errorf("could not parse uid: %v", err)
+	}
+	uid := int(uidv)
+
+	euid := os.Geteuid()
+	if uid != euid && euid != 0 {
+		return fmt.Errorf("need root privileges to start child process as another user")
+	}
+
+	executable, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("could not get executable path: %s", err)
+	}
+
+	groups, err := user.GroupIds()
+	if err != nil {
+		return fmt.Errorf("could not get user groups: %s", err)
+	}
+
+	commandArgs := []string{"child", process, "--user", user.Name, "--uid", user.Uid, "--gid", user.Gid}
+	if len(groups) > 0 {
+		for _, group := range groups {
+			commandArgs = append(commandArgs, "--group", group)
+		}
+	}
+
+	cmd := exec.CommandContext(s.Context(), executable, commandArgs...)
+	cmd.Stdin = s
+	cmd.Stdout = s
+	cmd.Dir = user.HomeDir
+
+	return cmd.Run()
+}
+
 func getShell(user *user.User) (string, error) {
 	switch runtime.GOOS {
 	case "linux", "openbsd", "freebsd":
+		if _, err := exec.LookPath("getent"); err != nil {
+			return "/bin/sh", nil
+		}
+
 		out, err := exec.Command("getent", "passwd", user.Uid).Output()
 		if err != nil {
 			return "", err
