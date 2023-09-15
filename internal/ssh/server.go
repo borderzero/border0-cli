@@ -147,48 +147,6 @@ func NewServer(logger *zap.Logger, ca string, opts ...Option) (*ssh.Server, erro
 	}, nil
 }
 
-func startChildProcess(s ssh.Session, process, username string) error {
-	user, err := user.Lookup(username)
-	if err != nil {
-		return fmt.Errorf("could not find user %s: %v", username, err)
-	}
-
-	uidv, err := strconv.ParseInt(user.Uid, 10, 32)
-	if err != nil {
-		return fmt.Errorf("could not parse uid: %v", err)
-	}
-	uid := int(uidv)
-
-	euid := os.Geteuid()
-	if uid != euid && euid != 0 {
-		return fmt.Errorf("need root privileges to start child process as another user")
-	}
-
-	executable, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("could not get executable path: %s", err)
-	}
-
-	groups, err := user.GroupIds()
-	if err != nil {
-		return fmt.Errorf("could not get user groups: %s", err)
-	}
-
-	commandArgs := []string{"child", process, "--user", user.Name, "--uid", user.Uid, "--gid", user.Gid}
-	if len(groups) > 0 {
-		for _, group := range groups {
-			commandArgs = append(commandArgs, "--group", group)
-		}
-	}
-
-	cmd := exec.CommandContext(s.Context(), executable, commandArgs...)
-	cmd.Stdin = s
-	cmd.Stdout = s
-	cmd.Dir = user.HomeDir
-
-	return cmd.Run()
-}
-
 func getShell(user *user.User) (string, error) {
 	switch runtime.GOOS {
 	case "linux", "openbsd", "freebsd":

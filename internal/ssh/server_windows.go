@@ -4,6 +4,7 @@
 package ssh
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/ActiveState/termtest/conpty"
 	"github.com/gliderlabs/ssh"
+	"github.com/pkg/sftp"
 	"golang.org/x/sys/windows"
 )
 
@@ -146,5 +148,25 @@ func execCmd(s ssh.Session, cmd exec.Cmd, uid, gid uint64, username string) {
 
 		wg.Wait()
 		cmd.Wait()
+	}
+}
+
+func startChildProcess(s ssh.Session, process, username string) error {
+	switch process {
+	case "sftp":
+		server, err := sftp.NewServer(s)
+		if err != nil {
+			return fmt.Errorf("sftp server init error: %s", err)
+		}
+
+		if err := server.Serve(); err == io.EOF {
+			server.Close()
+		} else if err != nil {
+			return fmt.Errorf("sftp server completed with error: %s", err)
+		}
+
+		return nil
+	default:
+		return fmt.Errorf("unknown process: %s", process)
 	}
 }
