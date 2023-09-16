@@ -30,6 +30,7 @@ import (
 	"github.com/aws/session-manager-plugin/src/message"
 	"github.com/borderzero/border0-cli/internal/api/models"
 	"github.com/borderzero/border0-cli/internal/border0"
+	"github.com/borderzero/border0-cli/internal/service/policy"
 	"github.com/borderzero/border0-cli/internal/util"
 	"github.com/borderzero/border0-go/types/common"
 	"github.com/manifoldco/promptui"
@@ -67,11 +68,17 @@ type ProxyConfig struct {
 	EndToEndEncryption bool
 	Hostkey            *ssh.Signer
 	orgSshCA           ssh.PublicKey
+	socket             *models.Socket
+	services           services
 }
 
 type session struct {
 	metadata    border0.E2EEncryptionMetadata
 	proxyConfig ProxyConfig
+}
+
+type services struct {
+	policyService policy.PolicyService
 }
 
 type ECSSSMProxy struct {
@@ -81,7 +88,7 @@ type ECSSSMProxy struct {
 	Containers []string
 }
 
-func BuildProxyConfig(logger *zap.Logger, socket models.Socket, AWSRegion, AWSProfile string, hostkey *ssh.Signer, org *models.Organization) (*ProxyConfig, error) {
+func BuildProxyConfig(logger *zap.Logger, socket models.Socket, AWSRegion, AWSProfile string, hostkey *ssh.Signer, org *models.Organization, policyService policy.PolicyService) (*ProxyConfig, error) {
 	if socket.ConnectorLocalData == nil {
 		return nil, nil
 	}
@@ -133,6 +140,10 @@ func BuildProxyConfig(logger *zap.Logger, socket models.Socket, AWSRegion, AWSPr
 		AwsCredentials:     socket.ConnectorLocalData.AwsCredentials,
 		Recording:          socket.RecordingEnabled,
 		EndToEndEncryption: socket.EndToEndEncryptionEnabled,
+		socket:             &socket,
+		services: services{
+			policyService: policyService,
+		},
 	}
 
 	switch {
@@ -330,17 +341,12 @@ func (s *session) sshPublicKeyCallback(conn ssh.ConnMetadata, key ssh.PublicKey)
 		return nil, errors.New("can not cast certificate")
 	}
 
-	// validated := false
-	// policyInput := proxy.authSvc.NewPolicyInput(cert.KeyId, conn.RemoteAddr(), proxy.id, proxy.socket.SocketID)
-	// actions, authInfo := proxy.authSvc.Authorize(proxy.socket.AppProtocol, policyInput)
-
 	if s.proxyConfig.orgSshCA == nil {
 		return nil, errors.New("error: unable to validate certificate, no CA configured")
 	}
 
 	if bytes.Equal(cert.SignatureKey.Marshal(), s.proxyConfig.orgSshCA.Marshal()) {
 	} else {
-		// proxy.sessionLogSvc.LogSession(proxy.id, proxy.socket, conn.RemoteAddr(), "denied", authInfo, conn.User(), cert.KeyId, cert.Permissions.Extensions[userinfo_extension])
 		return nil, errors.New("error: invalid client certificate")
 	}
 
@@ -352,6 +358,21 @@ func (s *session) sshPublicKeyCallback(conn ssh.ConnMetadata, key ssh.PublicKey)
 	if err := certChecker.CheckCert("mysocket_ssh_signed", cert); err != nil {
 		return nil, fmt.Errorf("error: invalid client certificate: %s", err)
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	ok, err := s.proxyConfig.services.policyService.Authorize(ctx, s.proxyConfig.socket, s.metadata)
+	if err != nil {
+		return nil, fmt.Errorf("error: failed to authorize: %s", err)
+	}
+
+	if !ok {
+		// proxy.sessionLogSvc.LogSession(proxy.id, proxy.socket, conn.RemoteAddr(), "denied", authInfo, conn.User(), cert.KeyId, cert.Permissions.Extensions[userinfo_extension])
+		return nil, errors.New("error: authorization failed")
+	}
+
+	// proxy.sessionLogSvc.LogSession(proxy.id, proxy.socket, conn.RemoteAddr(), "denied", authInfo, conn.User(), cert.KeyId, cert.Permissions.Extensions[userinfo_extension])
 
 	return &ssh.Permissions{}, nil
 }

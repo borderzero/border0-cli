@@ -19,6 +19,7 @@ message ControlStreamRequest {
     TunnelCertificateSignRequest tunnel_certificate_sign_request = 5;
     Log log = 6;
     ConnectorMetadata metadata = 7;
+    AuthorizeRequest authorize = 8;
   }
 }
 
@@ -32,6 +33,7 @@ message ControlStreamReponse {
     Discover discover = 6;
     Stop stop = 7;
     Disconnect disconnect = 8;
+    AuthorizeResponse authorize = 9;
   }
 }
 
@@ -148,4 +150,19 @@ message Stop {
 
 message Disconnect {
   string reason = 1;
+}
+
+message AuthorizeRequest {
+  string request_id = 1;
+  string protocol = 2;
+  string user_email = 3;
+  string ip_address = 4;
+  string session_key = 5;
+  string socket_id = 6;
+}
+
+message AuthorizeResponse {
+  string request_id = 1;
+  repeated string allowed_actions = 2;
+  google.protobuf.Struct info = 3;
 }
