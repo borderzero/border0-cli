@@ -45,6 +45,7 @@ require (
 	github.com/moby/term v0.5.0
 	github.com/opencontainers/selinux v1.11.0
 	github.com/pavlo-v-chernykh/keystore-go/v4 v4.4.1
+	github.com/pkg/sftp v1.13.1
 	github.com/satori/go.uuid v1.2.0
 	github.com/shirou/gopsutil/v3 v3.23.4
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
@@ -160,7 +161,6 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.0.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/pkg/sftp v1.13.6
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/procfs v0.9.0
 	github.com/rivo/uniseg v0.4.4 // indirect

@@ -1,8 +1,6 @@
 package sftp
 
-import (
-	"syscall"
-)
+import "syscall"
 
 func fakeFileInfoSys() interface{} {
 	return syscall.Win32FileAttributeData{}

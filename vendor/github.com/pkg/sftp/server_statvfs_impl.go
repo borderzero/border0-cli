@@ -1,4 +1,3 @@
-//go:build darwin || linux
 // +build darwin linux
 
 // fill in statvfs structure with OS specific values
@@ -15,7 +14,6 @@ func (p *sshFxpExtendedPacketStatVFS) respond(svr *Server) responsePacket {
 	if err != nil {
 		return statusFromError(p.ID, err)
 	}
-	retPkt.ID = p.ID
 
 	return retPkt
 }

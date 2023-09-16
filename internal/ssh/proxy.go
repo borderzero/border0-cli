@@ -15,7 +15,6 @@ import (
 	"net"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -855,44 +854,34 @@ func handleChannel(ctx context.Context, cancel context.CancelFunc, newChannel ss
 	defer clientChannel.Close()
 	defer serverChannel.Close()
 
-	var wg sync.WaitGroup
-	wg.Add(3)
-
 	go func() {
-		defer clientChannel.CloseWrite()
-		defer wg.Done()
 		io.Copy(clientChannel, serverChannel)
 		cancel()
 	}()
 
 	go func() {
-		defer serverChannel.CloseWrite()
-		defer wg.Done()
 		io.Copy(serverChannel, clientChannel)
 		cancel()
 	}()
 
-	go func() {
-		defer wg.Done()
-		for {
-			select {
-			case req := <-clientReq:
-				if req == nil {
-					return
-				}
-
-				handleRequest(serverChannel, req)
-			case req := <-serverReq:
-				if req == nil {
-					return
-				}
-
-				handleRequest(clientChannel, req)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case req := <-clientReq:
+			if req == nil {
+				return
 			}
-		}
-	}()
 
-	wg.Wait()
+			handleRequest(serverChannel, req)
+		case req := <-serverReq:
+			if req == nil {
+				return
+			}
+
+			handleRequest(clientChannel, req)
+		}
+	}
 }
 
 func handleRequest(channel ssh.Channel, req *ssh.Request) {
