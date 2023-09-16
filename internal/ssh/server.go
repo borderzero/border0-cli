@@ -144,6 +144,8 @@ func NewServer(logger *zap.Logger, ca string, opts ...Option) (*ssh.Server, erro
 
 			},
 		},
+		RequestHandlers: ssh.DefaultRequestHandlers,
+		ChannelHandlers: ssh.DefaultChannelHandlers,
 	}, nil
 }
 
