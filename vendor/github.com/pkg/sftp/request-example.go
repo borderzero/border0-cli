@@ -391,6 +391,21 @@ func (fs *root) Filelist(r *Request) (ListerAt, error) {
 			return nil, err
 		}
 		return listerat{file}, nil
+
+	case "Readlink":
+		symlink, err := fs.readlink(r.Filepath)
+		if err != nil {
+			return nil, err
+		}
+
+		// SFTP-v2: The server will respond with a SSH_FXP_NAME packet containing only
+		// one name and a dummy attributes value.
+		return listerat{
+			&memFile{
+				name: symlink,
+				err:  os.ErrNotExist, // prevent accidental use as a reader/writer.
+			},
+		}, nil
 	}
 
 	return nil, errors.New("unsupported")
@@ -419,7 +434,7 @@ func (fs *root) readdir(pathname string) ([]os.FileInfo, error) {
 	return files, nil
 }
 
-func (fs *root) Readlink(pathname string) (string, error) {
+func (fs *root) readlink(pathname string) (string, error) {
 	file, err := fs.lfetch(pathname)
 	if err != nil {
 		return "", err
@@ -449,10 +464,19 @@ func (fs *root) Lstat(r *Request) (ListerAt, error) {
 	return listerat{file}, nil
 }
 
+// implements RealpathFileLister interface
+func (fs *root) Realpath(p string) string {
+	if fs.startDirectory == "" || fs.startDirectory == "/" {
+		return cleanPath(p)
+	}
+	return cleanPathWithBase(fs.startDirectory, p)
+}
+
 // In memory file-system-y thing that the Hanlders live on
 type root struct {
-	rootFile *memFile
-	mockErr  error
+	rootFile       *memFile
+	mockErr        error
+	startDirectory string
 
 	mu    sync.Mutex
 	files map[string]*memFile
@@ -510,8 +534,8 @@ func (fs *root) exists(path string) bool {
 	return err != os.ErrNotExist
 }
 
-func (fs *root) fetch(pathname string) (*memFile, error) {
-	file, err := fs.lfetch(pathname)
+func (fs *root) fetch(path string) (*memFile, error) {
+	file, err := fs.lfetch(path)
 	if err != nil {
 		return nil, err
 	}
@@ -522,12 +546,7 @@ func (fs *root) fetch(pathname string) (*memFile, error) {
 			return nil, errTooManySymlinks
 		}
 
-		linkTarget := file.symlink
-		if !path.IsAbs(linkTarget) {
-			linkTarget = path.Join(path.Dir(file.name), linkTarget)
-		}
-
-		file, err = fs.lfetch(linkTarget)
+		file, err = fs.lfetch(file.symlink)
 		if err != nil {
 			return nil, err
 		}

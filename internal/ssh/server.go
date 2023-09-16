@@ -93,6 +93,21 @@ func NewServer(logger *zap.Logger, ca string, opts ...Option) (*ssh.Server, erro
 		return nil, fmt.Errorf("could not generate signer: %s", err)
 	}
 
+	requestHandlers := map[string]ssh.RequestHandler{}
+	for k, v := range ssh.DefaultRequestHandlers {
+		requestHandlers[k] = v
+	}
+
+	channelHandlers := map[string]ssh.ChannelHandler{}
+	for k, v := range ssh.DefaultChannelHandlers {
+		channelHandlers[k] = v
+	}
+
+	subsystemHandlers := map[string]ssh.SubsystemHandler{}
+	for k, v := range ssh.DefaultSubsystemHandlers {
+		subsystemHandlers[k] = v
+	}
+
 	return &ssh.Server{
 		Version:     "Border0-ssh-server",
 		HostSigners: []ssh.Signer{signer},
@@ -123,37 +138,15 @@ func NewServer(logger *zap.Logger, ca string, opts ...Option) (*ssh.Server, erro
 
 			return true
 		},
-		SubsystemHandlers: map[string]ssh.SubsystemHandler{
-			"sftp": func(s ssh.Session) {
-				pubKey := s.PublicKey()
-				cert, ok := pubKey.(*gossh.Certificate)
-				if !ok {
-					logger.Sugar().Errorf("could not get user certificate")
-					return
-				}
-
-				logger.Sugar().Infof("new sftp session for %s (as user %s)", cert.KeyId, s.User())
-				username := s.User()
-				if o.username != "" {
-					username = o.username
-				}
-
-				if err := startChildProcess(s, "sftp", username); err != nil {
-					logger.Sugar().Errorf("could not start sftp child process: %s", err)
-				}
-
-			},
-		},
+		RequestHandlers:   requestHandlers,
+		ChannelHandlers:   channelHandlers,
+		SubsystemHandlers: subsystemHandlers,
 	}, nil
 }
 
 func getShell(user *user.User) (string, error) {
 	switch runtime.GOOS {
 	case "linux", "openbsd", "freebsd":
-		if _, err := exec.LookPath("getent"); err != nil {
-			return "/bin/sh", nil
-		}
-
 		out, err := exec.Command("getent", "passwd", user.Uid).Output()
 		if err != nil {
 			return "", err
