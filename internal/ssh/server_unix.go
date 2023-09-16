@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/creack/pty"
@@ -100,6 +101,7 @@ func execCmd(s ssh.Session, cmd exec.Cmd, uid, gid uint64, username string) {
 
 		go func() {
 			defer wg.Done()
+			time.Sleep(200 * time.Millisecond)
 			io.Copy(s, f)
 			s.CloseWrite()
 		}()
