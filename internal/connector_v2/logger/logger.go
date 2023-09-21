@@ -1,6 +1,8 @@
 package logger
 
 import (
+	"io"
+
 	"github.com/borderzero/border0-cli/internal/connector_v2/errors"
 	pb "github.com/borderzero/border0-proto/connector"
 	"go.uber.org/zap"
@@ -88,7 +90,7 @@ func (c *connectorLogger) Write(entry zapcore.Entry, fields []zapcore.Field) err
 		},
 	})
 
-	if err != nil && err.Error() != errors.ErrStreamNotConnected {
+	if err != nil && err.Error() != errors.ErrStreamNotConnected && err != io.EOF {
 		c.logger.Error("failed to send log", zap.Error(err))
 	}
 

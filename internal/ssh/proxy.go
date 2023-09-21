@@ -30,7 +30,6 @@ import (
 	"github.com/aws/session-manager-plugin/src/message"
 	"github.com/borderzero/border0-cli/internal/api/models"
 	"github.com/borderzero/border0-cli/internal/border0"
-	"github.com/borderzero/border0-cli/internal/service/policy"
 	"github.com/borderzero/border0-cli/internal/util"
 	"github.com/borderzero/border0-go/types/common"
 	"github.com/manifoldco/promptui"
@@ -69,16 +68,12 @@ type ProxyConfig struct {
 	Hostkey            *ssh.Signer
 	orgSshCA           ssh.PublicKey
 	socket             *models.Socket
-	services           services
+	Border0API         border0.Border0API
 }
 
 type session struct {
 	metadata    border0.E2EEncryptionMetadata
 	proxyConfig ProxyConfig
-}
-
-type services struct {
-	policyService policy.PolicyService
 }
 
 type ECSSSMProxy struct {
@@ -88,7 +83,7 @@ type ECSSSMProxy struct {
 	Containers []string
 }
 
-func BuildProxyConfig(logger *zap.Logger, socket models.Socket, AWSRegion, AWSProfile string, hostkey *ssh.Signer, org *models.Organization, policyService policy.PolicyService) (*ProxyConfig, error) {
+func BuildProxyConfig(logger *zap.Logger, socket models.Socket, AWSRegion, AWSProfile string, hostkey *ssh.Signer, org *models.Organization, border0API border0.Border0API) (*ProxyConfig, error) {
 	if socket.ConnectorLocalData == nil {
 		return nil, nil
 	}
@@ -141,9 +136,7 @@ func BuildProxyConfig(logger *zap.Logger, socket models.Socket, AWSRegion, AWSPr
 		Recording:          socket.RecordingEnabled,
 		EndToEndEncryption: socket.EndToEndEncryptionEnabled,
 		socket:             &socket,
-		services: services{
-			policyService: policyService,
-		},
+		Border0API:         border0API,
 	}
 
 	switch {
@@ -335,6 +328,35 @@ func Proxy(l net.Listener, c ProxyConfig) error {
 	}
 }
 
+func newSSHServerConn(conn net.Conn, config ProxyConfig) (sshConn *ssh.ServerConn, chans <-chan ssh.NewChannel, reqs <-chan *ssh.Request, err error) {
+	sshConn, chans, reqs, err = ssh.NewServerConn(conn, config.sshServerConfig)
+	if err != nil {
+		err = fmt.Errorf("sshauthproxy: failed to accept ssh connection: %s", err)
+		config.Logger.Error(err.Error())
+		return
+	}
+
+	if config.EndToEndEncryption {
+		e2eConn, ok := conn.(border0.E2EEncryptionConn)
+		if !ok {
+			err = errors.New("failed to cast connection to e2eencryption")
+			config.Logger.Error(err.Error())
+			return
+		}
+
+		if err := config.Border0API.UpdateSession(models.SessionUpdate{
+			SessionKey: e2eConn.Metadata.SessionKey,
+			Socket:     config.socket,
+			UserData:   ",sshuser=" + sshConn.User(),
+		}); err != nil {
+			err = fmt.Errorf("failed to update session: %s", err)
+			config.Logger.Error(err.Error())
+		}
+	}
+
+	return
+}
+
 func (s *session) sshPublicKeyCallback(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
 	cert, ok := key.(*ssh.Certificate)
 	if !ok {
@@ -362,17 +384,14 @@ func (s *session) sshPublicKeyCallback(conn ssh.ConnMetadata, key ssh.PublicKey)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	ok, err := s.proxyConfig.services.policyService.Authorize(ctx, s.proxyConfig.socket, s.metadata)
+	actions, _, err := s.proxyConfig.Border0API.Evaluate(ctx, s.proxyConfig.socket, s.metadata.ClientIP, s.metadata.UserEmail, s.metadata.SessionKey)
 	if err != nil {
 		return nil, fmt.Errorf("error: failed to authorize: %s", err)
 	}
 
-	if !ok {
-		// proxy.sessionLogSvc.LogSession(proxy.id, proxy.socket, conn.RemoteAddr(), "denied", authInfo, conn.User(), cert.KeyId, cert.Permissions.Extensions[userinfo_extension])
+	if len(actions) == 0 {
 		return nil, errors.New("error: authorization failed")
 	}
-
-	// proxy.sessionLogSvc.LogSession(proxy.id, proxy.socket, conn.RemoteAddr(), "denied", authInfo, conn.User(), cert.KeyId, cert.Permissions.Extensions[userinfo_extension])
 
 	return &ssh.Permissions{}, nil
 }
@@ -391,7 +410,7 @@ func (s *session) sshAuthLogCallback(conn ssh.ConnMetadata, method string, err e
 func handleSsmClient(conn net.Conn, config ProxyConfig) {
 	defer conn.Close()
 
-	sshConn, chans, reqs, err := ssh.NewServerConn(conn, config.sshServerConfig)
+	sshConn, chans, reqs, err := newSSHServerConn(conn, config)
 	if err != nil {
 		config.Logger.Sugar().Errorf("failed to accept ssh connection: %s", err)
 		return
@@ -735,7 +754,7 @@ func handleSSMShell(channel ssh.Channel, config *ProxyConfig) {
 func handleSshClient(conn net.Conn, config ProxyConfig) {
 	defer conn.Close()
 
-	sshConn, chans, reqs, err := ssh.NewServerConn(conn, config.sshServerConfig)
+	sshConn, chans, reqs, err := newSSHServerConn(conn, config)
 	if err != nil {
 		config.Logger.Sugar().Errorf("failed to accept ssh connection: %s", err)
 		return
@@ -751,7 +770,7 @@ func handleSshClient(conn net.Conn, config ProxyConfig) {
 func handleEc2InstanceConnectClient(conn net.Conn, config ProxyConfig) {
 	defer conn.Close()
 
-	sshConn, chans, reqs, err := ssh.NewServerConn(conn, config.sshServerConfig)
+	sshConn, chans, reqs, err := newSSHServerConn(conn, config)
 	if err != nil {
 		config.Logger.Sugar().Errorf("failed to accept ssh connection: %s", err)
 		return

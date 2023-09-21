@@ -238,6 +238,21 @@ func (c *ConnectorService) controlStream() error {
 				}
 
 				return fmt.Errorf("connector was disconnected by server")
+			case *pb.ControlStreamReponse_Authorize:
+				if v, ok := c.requests.Load(r.Authorize.RequestId); ok {
+					responseChan, ok := v.(chan *pb.ControlStreamReponse)
+					if !ok {
+						c.logger.Error("failed to cast response channel", zap.String("request_id", r.Authorize.RequestId))
+					}
+					select {
+					case responseChan <- msg.response:
+					default:
+						c.logger.Error("failed to send response to request channel", zap.String("request_id", r.Authorize.RequestId))
+					}
+				} else {
+					c.logger.Error("unknown request id", zap.String("request_id", r.Authorize.RequestId))
+				}
+
 			default:
 				c.logger.Error("unknown message type", zap.Any("type", r))
 			}
@@ -615,7 +630,7 @@ func (c *ConnectorService) Listen(socket *border0.Socket) {
 			}
 		}
 
-		sshProxyConfig, err = ssh.BuildProxyConfig(logger, *socket.Socket, socket.Socket.AWSRegion, "", hostkeySigner, c.organization, c.policyService())
+		sshProxyConfig, err = ssh.BuildProxyConfig(logger, *socket.Socket, socket.Socket.AWSRegion, "", hostkeySigner, c.organization, c)
 		if err != nil {
 			logger.Error("failed to create config for socket", zap.String("socket", socket.SocketID), zap.Error(err))
 			return

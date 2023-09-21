@@ -66,7 +66,7 @@ moddownload:
 	go mod download
 
 build:
-	$(GOBUILD) $(FLAGS) -o $(BINARY_NAME) -v
+	CGO_ENABLED=0 $(GOBUILD) $(FLAGS) -o $(BINARY_NAME) -v
 
 build-linux:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GOBUILD) $(FLAGS) -o $(BINARY_NAME) -v

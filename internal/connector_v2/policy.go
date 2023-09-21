@@ -3,42 +3,49 @@ package connectorv2
 import (
 	"context"
 	"fmt"
+	"net"
+	"strings"
 
 	"github.com/borderzero/border0-cli/internal/api/models"
-	"github.com/borderzero/border0-cli/internal/border0"
-	"github.com/borderzero/border0-cli/internal/connector_v2/util"
-	"github.com/borderzero/border0-cli/internal/service/policy"
 	pb "github.com/borderzero/border0-proto/connector"
 	"github.com/google/uuid"
 )
 
-type PolicyService struct {
-	connectorService *ConnectorService
-}
-
-func (c *ConnectorService) policyService() policy.PolicyService {
-	return &PolicyService{
-		connectorService: c,
-	}
-}
-
-func (s *PolicyService) Authorize(ctx context.Context, socket *models.Socket, metadata border0.E2EEncryptionMetadata) (bool, error) {
+func (s *ConnectorService) Evaluate(ctx context.Context, socket *models.Socket, clientIP, userEmail, sessionKey string) (allowedActions []string, info map[string][]string, err error) {
 	if socket == nil {
-		return false, fmt.Errorf("socket is nil")
+		err = fmt.Errorf("socket is nil")
+		return
 	}
 
-	if metadata.ClientIP == "" || metadata.UserEmail == "" || metadata.SessionKey == "" {
-		return false, fmt.Errorf("metadata is invalid")
+	if clientIP == "" || userEmail == "" || sessionKey == "" {
+		err = fmt.Errorf("metadata is invalid")
+		return
 	}
 
-	s.connectorService.AuthorizeRequest(ctx, socket, metadata)
+	actions, info, err := s.AuthorizeRequest(ctx, socket, clientIP, userEmail, sessionKey)
+	if err != nil {
+		err = fmt.Errorf("authorization request failed: %w", err)
+		return
+	}
 
-	return true, nil
+	for app, actions := range actions {
+		if strings.EqualFold(socket.SocketType, app) || app == "*" {
+			for _, action := range actions {
+				allowedActions = append(allowedActions, strings.ToLower(action))
+			}
+		}
+	}
 
+	return
 }
 
-func (c *ConnectorService) AuthorizeRequest(ctx context.Context, socket *models.Socket, metadata border0.E2EEncryptionMetadata) ([]string, map[string]interface{}, error) {
+func (c *ConnectorService) AuthorizeRequest(ctx context.Context, socket *models.Socket, host, userEmail, sessionKey string) (map[string][]string, map[string][]string, error) {
 	requestId := uuid.New().String()
+
+	clientIP, _, err := net.SplitHostPort(host)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse client ip: %w", err)
+	}
 
 	if err := c.sendControlStreamRequest(&pb.ControlStreamRequest{
 		RequestType: &pb.ControlStreamRequest_Authorize{
@@ -46,19 +53,19 @@ func (c *ConnectorService) AuthorizeRequest(ctx context.Context, socket *models.
 				RequestId:  requestId,
 				SocketId:   socket.SocketID,
 				Protocol:   socket.SocketType,
-				IpAddress:  metadata.ClientIP,
-				UserEmail:  metadata.UserEmail,
-				SessionKey: metadata.SessionKey,
+				IpAddress:  clientIP,
+				UserEmail:  userEmail,
+				SessionKey: sessionKey,
 			},
 		},
 	}); err != nil {
-		return nil, nil, fmt.Errorf("failed to send tunnel certificate sign request: %w", err)
+		return nil, nil, fmt.Errorf("failed to send authorize request: %w", err)
 	}
 
 	recChan := make(chan *pb.ControlStreamReponse)
 	c.requests.Store(requestId, recChan)
-
 	defer c.requests.Delete(requestId)
+	defer close(recChan)
 
 	select {
 	case <-ctx.Done():
@@ -69,15 +76,16 @@ func (c *ConnectorService) AuthorizeRequest(ctx context.Context, socket *models.
 			return nil, nil, fmt.Errorf("invalid response")
 		}
 
-		if response.GetRequestId() == "" {
-			return nil, nil, fmt.Errorf("invalid response")
+		allowedActions := make(map[string][]string)
+		for app, actions := range response.GetAllowedActions() {
+			allowedActions[app] = actions.GetValues()
 		}
 
-		var info map[string]interface{}
-		if err := util.AsStruct(response.GetInfo(), &info); err != nil {
-			return nil, nil, fmt.Errorf("failed to parse result: %w", err)
+		info := make(map[string][]string)
+		for i, v := range response.GetInfo() {
+			allowedActions[i] = v.GetValues()
 		}
 
-		return response.GetAllowedActions(), info, nil
+		return allowedActions, info, nil
 	}
 }

@@ -50,6 +50,8 @@ const (
 type Border0API interface {
 	GetUserID() (string, error)
 	SignSSHKey(ctx context.Context, socketID string, publicKey []byte) (string, string, error)
+	Evaluate(ctx context.Context, socket *models.Socket, clientIP, userEmail, sessionKey string) ([]string, map[string][]string, error)
+	UpdateSession(updates models.SessionUpdate) error
 }
 
 type E2EEncryptionMetadata struct {
@@ -553,7 +555,7 @@ func (s *Socket) connecorAuthHandshake(conn net.Conn) {
 	tlsConn, err := s.connectorAuthentication(ctx, conn)
 	if err != nil {
 		conn.Close()
-		s.logger.Error("failed to authenticate client %s", zap.Error(err))
+		s.logger.Error("failed to authenticate client", zap.Error(err))
 		s.acceptChan <- connWithError{nil, border0NetError(fmt.Sprintf("failed to authenticate client: %s", err))}
 		return
 	}
@@ -580,10 +582,10 @@ func (s *Socket) endToEndEncryptionHandshake(conn net.Conn) {
 		return
 	}
 
-	tlsConn, err := s.endToEndEncryptionAuthentication(ctx, conn)
+	tlsConn, err := s.endToEndEncryptionAuthentication(ctx, conn, md)
 	if err != nil {
 		conn.Close()
-		s.logger.Error("failed to authenticate client %s", zap.Error(err))
+		s.logger.Error("failed to authenticate client", zap.Error(err))
 		s.acceptChan <- connWithError{nil, border0NetError(fmt.Sprintf("failed to authenticate client: %s", err))}
 		return
 	}
@@ -705,7 +707,7 @@ func (s *Socket) connectorAuthentication(ctx context.Context, conn net.Conn) (*t
 	return tlsConn, nil
 }
 
-func (s *Socket) endToEndEncryptionAuthentication(ctx context.Context, conn net.Conn) (*tls.Conn, error) {
+func (s *Socket) endToEndEncryptionAuthentication(ctx context.Context, conn net.Conn, md *E2EEncryptionMetadata) (*tls.Conn, error) {
 	tlsConn := tls.Server(conn, s.ConnectorAuthenticationTLSConfig)
 	if tlsConn == nil {
 		return nil, fmt.Errorf("failed to create tls connection")
@@ -730,7 +732,23 @@ func (s *Socket) endToEndEncryptionAuthentication(ctx context.Context, conn net.
 		return nil, fmt.Errorf("client handshake failed: %s", ctx.Err())
 	}
 
-	s.logger.Info("end to end encryption authentication successful", zap.String("user", tlsConn.ConnectionState().PeerCertificates[0].Subject.CommonName), zap.String("clientIP", tlsConn.RemoteAddr().String()))
+	if md.UserEmail != tlsConn.ConnectionState().PeerCertificates[0].Subject.CommonName {
+		return nil, fmt.Errorf("error: failed to authorize: user email does not match proxy session")
+	}
+
+	nctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	actions, _, err := s.border0API.Evaluate(nctx, s.Socket, md.ClientIP, md.UserEmail, md.SessionKey)
+	if err != nil {
+		return nil, fmt.Errorf("error: failed to authorize: %s", err)
+	}
+
+	if len(actions) == 0 {
+		return nil, fmt.Errorf("unauthorized request for user")
+	}
+
+	s.logger.Info("end to end encryption authentication successful", zap.String("user", md.UserEmail), zap.String("clientIP", md.ClientIP))
 	return tlsConn, nil
 }
 
