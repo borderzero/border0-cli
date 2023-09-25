@@ -52,12 +52,14 @@ type Border0API interface {
 	SignSSHKey(ctx context.Context, socketID string, publicKey []byte) (string, string, error)
 	Evaluate(ctx context.Context, socket *models.Socket, clientIP, userEmail, sessionKey string) ([]string, map[string][]string, error)
 	UpdateSession(updates models.SessionUpdate) error
+	SignSshOrgCertificate(ctx context.Context, socketID, sessionID, userEmail string, ticket []byte, publicKey []byte) ([]byte, error)
 }
 
 type E2EEncryptionMetadata struct {
 	ClientIP   string `json:"client_ip"`
 	UserEmail  string `json:"user_email"`
 	SessionKey string `json:"session_key"`
+	SshTicket  []byte `json:"ssh_ticket,omitempty"`
 }
 
 type E2EEncryptionConn struct {

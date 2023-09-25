@@ -226,6 +226,20 @@ func (c *ConnectorService) controlStream() error {
 				} else {
 					c.logger.Error("unknown request id", zap.String("request_id", r.TunnelCertificateSignResponse.RequestId))
 				}
+			case *pb.ControlStreamReponse_SshCertificateSignResponse:
+				if v, ok := c.requests.Load(r.SshCertificateSignResponse.RequestId); ok {
+					responseChan, ok := v.(chan *pb.ControlStreamReponse)
+					if !ok {
+						c.logger.Error("failed to cast response channel", zap.String("request_id", r.SshCertificateSignResponse.RequestId))
+					}
+					select {
+					case responseChan <- msg.response:
+					default:
+						c.logger.Error("failed to send response to request channel", zap.String("request_id", r.SshCertificateSignResponse.RequestId))
+					}
+				} else {
+					c.logger.Error("unknown request id", zap.String("request_id", r.SshCertificateSignResponse.RequestId))
+				}
 			case *pb.ControlStreamReponse_Heartbeat:
 			case *pb.ControlStreamReponse_Stop:
 				c.logger.Info("stopping connector as requested by server")
@@ -261,7 +275,6 @@ func (c *ConnectorService) controlStream() error {
 }
 
 func (c *ConnectorService) newConnectorClient(ctx context.Context) (*grpc.ClientConn, error) {
-
 	ccsOpts := []CredentialOption{
 		WithToken(c.config.Token),
 		WithInsecureTransport(c.config.ConnectorInsecureTransport),

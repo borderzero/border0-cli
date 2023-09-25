@@ -3,7 +3,9 @@ package ssh
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -69,6 +71,7 @@ type ProxyConfig struct {
 	orgSshCA           ssh.PublicKey
 	socket             *models.Socket
 	Border0API         border0.Border0API
+	border0CertAuth    bool
 }
 
 type session struct {
@@ -84,7 +87,7 @@ type ECSSSMProxy struct {
 }
 
 func BuildProxyConfig(logger *zap.Logger, socket models.Socket, AWSRegion, AWSProfile string, hostkey *ssh.Signer, org *models.Organization, border0API border0.Border0API) (*ProxyConfig, error) {
-	if socket.ConnectorLocalData == nil {
+	if socket.ConnectorLocalData == nil && !socket.EndToEndEncryptionEnabled {
 		return nil, nil
 	}
 
@@ -92,7 +95,7 @@ func BuildProxyConfig(logger *zap.Logger, socket models.Socket, AWSRegion, AWSPr
 	if isNormalSSHSocket {
 		// For connector v2 sockets CAN have an upsream username set
 		// so the check below would not pass - so we add this new one.
-		if socket.IsBorder0Certificate {
+		if socket.IsBorder0Certificate && !socket.EndToEndEncryptionEnabled {
 			return nil, nil
 		}
 		if socket.ConnectorLocalData.UpstreamUsername == "" && socket.ConnectorLocalData.UpstreamPassword == "" {
@@ -261,6 +264,8 @@ func Proxy(l net.Listener, c ProxyConfig) error {
 
 		if len(authMethods) == 0 && !c.EndToEndEncryption {
 			return fmt.Errorf("sshauthproxy: no authentication methods provided")
+		} else {
+			c.border0CertAuth = true
 		}
 
 		c.sshClientConfig = &ssh.ClientConfig{
@@ -321,11 +326,58 @@ func Proxy(l net.Listener, c ProxyConfig) error {
 
 				c.sshServerConfig.PublicKeyCallback = session.sshPublicKeyCallback
 				c.sshServerConfig.AuthLogCallback = session.sshAuthLogCallback
+
+				if c.border0CertAuth {
+					c.sshClientConfig.Auth = []ssh.AuthMethod{ssh.
+						PublicKeysCallback(session.userPublicKeyCallback)}
+				}
 			}
 
 			handler(conn, c)
 		}()
 	}
+}
+
+func (s *session) userPublicKeyCallback() ([]ssh.Signer, error) {
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate private key: %s", err)
+	}
+
+	sshPublicKey, err := ssh.NewPublicKey(privateKey.Public())
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate public key: %s", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	signedSshCert, err := s.proxyConfig.Border0API.SignSshOrgCertificate(ctx, s.proxyConfig.socket.SocketID, s.metadata.SessionKey, s.metadata.UserEmail, s.metadata.SshTicket, ssh.MarshalAuthorizedKey(sshPublicKey))
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch signed ssh org certificate %s", err)
+	}
+
+	pubcert, _, _, _, err := ssh.ParseAuthorizedKey([]byte(signedSshCert))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse authorized key: %s", err)
+	}
+
+	sshCert, ok := pubcert.(*ssh.Certificate)
+	if !ok {
+		return nil, fmt.Errorf("failed to cast to ssh certificate")
+	}
+
+	signer, err := ssh.NewSignerFromKey(privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate signer: %s", err)
+	}
+
+	certSigner, err := ssh.NewCertSigner(sshCert, signer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate cert signer: %s", err)
+	}
+
+	return []ssh.Signer{certSigner}, nil
 }
 
 func newSSHServerConn(conn net.Conn, config ProxyConfig) (sshConn *ssh.ServerConn, chans <-chan ssh.NewChannel, reqs <-chan *ssh.Request, err error) {

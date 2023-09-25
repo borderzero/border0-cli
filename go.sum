@@ -130,8 +130,8 @@ github.com/bluele/factory-go v0.0.1 h1:Wb3nA5Oe9biPfBJNNtZ9rcsf38jNwJV/2ASShHao8
 github.com/bluele/factory-go v0.0.1/go.mod h1:M5D/YMEfPK1tzRvy/nj1tb0nfvvNY3d9zmgT66sldu0=
 github.com/borderzero/border0-go v1.3.14 h1:uUb09dvE2oXA2D1mcQKkTppVtKvXSKi1HO+niL/1Wtw=
 github.com/borderzero/border0-go v1.3.14/go.mod h1:Yll5qVCxLLICOwODQEG3O/D5Q7AtuLgbbDoj06shFaQ=
-github.com/borderzero/border0-proto v1.0.12 h1:zBox2n6LrvzhJdshj+wQvbyXkxafl62KxpBzLAfL0KE=
-github.com/borderzero/border0-proto v1.0.12/go.mod h1:BhNopgYg3o/p5bYLVcKYISS4S49Ci6iAWNCbQpTzzqs=
+github.com/borderzero/border0-proto v1.0.17 h1:ZOzJDGg6lbDMbHArPwmnRDRqGnIxY9sLznCbIrCqF4Q=
+github.com/borderzero/border0-proto v1.0.17/go.mod h1:BhNopgYg3o/p5bYLVcKYISS4S49Ci6iAWNCbQpTzzqs=
 github.com/borderzero/discovery v0.1.23 h1:4LZoDjusKM8WnocVPLWuSn6SyCONKd1zDV2PqUqAvfM=
 github.com/borderzero/discovery v0.1.23/go.mod h1:Sd3HkMwhvipGDnkSDaLe9vfVvB8/hAb+xUimv+bRji8=
 github.com/brianvoe/gofakeit v3.18.0+incompatible h1:wDOmHc9DLG4nRjUVVaxA+CEglKOW72Y5+4WNxUIkjM8=
