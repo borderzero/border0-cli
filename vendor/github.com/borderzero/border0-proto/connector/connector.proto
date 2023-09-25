@@ -21,6 +21,7 @@ message ControlStreamRequest {
     ConnectorMetadata metadata = 7;
     AuthorizeRequest authorize = 8;
     SessionUpdateRequest session_update = 9;
+    SshCertifcateSignRequest ssh_certificate_sign_request = 10;
   }
 }
 
@@ -35,6 +36,7 @@ message ControlStreamReponse {
     Stop stop = 7;
     Disconnect disconnect = 8;
     AuthorizeResponse authorize = 9;
+    SshCertifcateSignResponse ssh_certificate_sign_response = 10;
   }
 }
 
@@ -180,4 +182,18 @@ message SessionUpdateRequest {
   string session_key = 1;
   string socket_id = 2;
   string user_data = 3;
+}
+
+message SshCertifcateSignRequest {
+  string request_id = 1;
+  string socket_id = 2;
+  string session_key = 3;
+  string user_email = 4;
+  bytes public_key = 5;
+  bytes ticket = 6;
+}
+
+message SshCertifcateSignResponse {
+  string request_id = 1;
+  bytes certificate = 2;
 }

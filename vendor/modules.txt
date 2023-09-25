@@ -254,7 +254,7 @@ github.com/borderzero/border0-go/lib/types/slice
 github.com/borderzero/border0-go/types/common
 github.com/borderzero/border0-go/types/connector
 github.com/borderzero/border0-go/types/service
-# github.com/borderzero/border0-proto v1.0.12
+# github.com/borderzero/border0-proto v1.0.17
 ## explicit; go 1.20
 github.com/borderzero/border0-proto/connector
 # github.com/borderzero/discovery v0.1.23
