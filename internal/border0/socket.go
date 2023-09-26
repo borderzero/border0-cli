@@ -219,7 +219,7 @@ func (s *Socket) Listen() (net.Listener, error) {
 		for {
 			select {
 			case err := <-s.errChan:
-				s.logger.Error("border0 listener: %v", zap.Error(err))
+				s.logger.Error("border0 listener error", zap.Error(err))
 				if _, ok := err.(PermanentError); ok {
 					s.logger.Error("border0 listener: permanent error, exiting")
 					s.cancel()
