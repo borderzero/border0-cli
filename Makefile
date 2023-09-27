@@ -24,6 +24,10 @@ release:
 	shasum -a 256 ./bin/$(BINARY_NAME)_windows_amd64 | awk '{print $$1}' > ./bin/$(BINARY_NAME)_windows_amd64-sha256-checksum.txt
 	python3 ./s3upload.py ./bin/$(BINARY_NAME)_windows_amd64-sha256-checksum.txt ${BUCKET} windows_amd64/sha256-checksum.txt
 	python3 ./s3upload.py ./bin/$(BINARY_NAME)_windows_amd64 ${BUCKET} windows_amd64/$(BINARY_NAME).exe
+	# Release for Windows ARM 64bit
+	shasum -a 256 ./bin/$(BINARY_NAME)_windows_arm64 | awk '{print $$1}' > ./bin/$(BINARY_NAME)_windows_arm64-sha256-checksum.txt
+	python3 ./s3upload.py ./bin/$(BINARY_NAME)_windows_arm64-sha256-checksum.txt ${BUCKET} windows_arm64/sha256-checksum.txt
+	python3 ./s3upload.py ./bin/$(BINARY_NAME)_windows_arm64 ${BUCKET} windows_arm64/$(BINARY_NAME).exe
 	# Release for Linux 64bit
 	shasum -a 256 ./bin/$(BINARY_NAME)_linux_amd64 | awk '{print $$1}' > ./bin/$(BINARY_NAME)_linux_amd64-sha256-checksum.txt
 	python3 ./s3upload.py ./bin/$(BINARY_NAME)_linux_amd64-sha256-checksum.txt ${BUCKET} linux_amd64/sha256-checksum.txt
@@ -72,10 +76,13 @@ build-linux:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GOBUILD) $(FLAGS) -o $(BINARY_NAME) -v
 
 # Cross compile for all supported platforms in parallel
-build-all: build-windows-amd64 build-linux-amd64 build-linux-arm64 build-linux-arm build-linux-armv6 build-linux-386 build-darwin-amd64 build-darwin-arm64 build-openbsd-amd64
+build-all: build-windows-amd64 build-windows-arm64 build-linux-amd64 build-linux-arm64 build-linux-arm build-linux-armv6 build-linux-386 build-darwin-amd64 build-darwin-arm64 build-openbsd-amd64
 
 build-windows-amd64:
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_windows_amd64
+
+build-windows-arm64:
+	CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_windows_arm64
 
 build-linux-amd64:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(FLAGS) -o ./bin/$(BINARY_NAME)_linux_amd64
