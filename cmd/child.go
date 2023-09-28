@@ -20,11 +20,9 @@ import (
 	"io"
 	"os"
 
-	"github.com/borderzero/border0-cli/cmd/logger"
 	"github.com/borderzero/border0-cli/internal/process"
 	"github.com/pkg/sftp"
 	"github.com/spf13/cobra"
-	"go.uber.org/zap"
 )
 
 type stdioWrapper struct {
@@ -46,10 +44,7 @@ var childSftpCmd = &cobra.Command{
 	Use:   "sftp",
 	Short: "Start a sftp child process",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		logger := logger.Logger
-		logger.Info("Starting sftp child process", zap.String("user", sftpArgs.User), zap.Int("uid", sftpArgs.UID), zap.Int("gid", sftpArgs.GID))
-
-		if err := process.SetupUserAndGroups(logger, &sftpArgs); err != nil {
+		if err := process.SetupUserAndGroups(&sftpArgs); err != nil {
 			return fmt.Errorf("failed to set up process user and groups: %v", err)
 		}
 

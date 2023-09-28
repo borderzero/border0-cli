@@ -77,7 +77,6 @@ func NewServer(logger *zap.Logger, ca string, opts ...Option) (*ssh.Server, erro
 			"USER=" + user.Username,
 			"SHELL=" + shell,
 		}
-
 		cmd.Dir = user.HomeDir
 
 		execCmd(s, cmd, uid, gid, username)
@@ -139,9 +138,8 @@ func NewServer(logger *zap.Logger, ca string, opts ...Option) (*ssh.Server, erro
 				}
 
 				if err := startChildProcess(s, "sftp", username); err != nil {
-					logger.Sugar().Errorf("could not start sftp child process: %s", err)
+					logger.Error("error starting sftp child process", zap.Error(err))
 				}
-
 			},
 		},
 	}, nil

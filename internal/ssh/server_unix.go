@@ -23,7 +23,6 @@ import (
 )
 
 func execCmd(s ssh.Session, cmd exec.Cmd, uid, gid uint64, username string) {
-
 	euid := os.Geteuid()
 	var loginCmd string
 	if selinux.EnforceMode() != selinux.Enforcing {
@@ -97,6 +96,9 @@ func execCmd(s ssh.Session, cmd exec.Cmd, uid, gid uint64, username string) {
 			defer wg.Done()
 			io.Copy(f, s)
 			f.Close()
+			if cmd.ProcessState == nil {
+				cmd.Process.Signal(syscall.SIGKILL)
+			}
 		}()
 
 		go func() {
@@ -110,9 +112,10 @@ func execCmd(s ssh.Session, cmd exec.Cmd, uid, gid uint64, username string) {
 		cmd.Wait()
 
 		if cmd.ProcessState == nil {
-			cmd.Process.Signal(syscall.SIGHUP)
+			cmd.Process.Signal(syscall.SIGKILL)
 		}
 
+		s.Exit(cmd.ProcessState.ExitCode())
 	} else {
 		sysProcAttr.Setsid = true
 		cmd.SysProcAttr = sysProcAttr
@@ -160,7 +163,7 @@ func execCmd(s ssh.Session, cmd exec.Cmd, uid, gid uint64, username string) {
 
 		wg.Wait()
 		cmd.Wait()
-
+		s.Exit(cmd.ProcessState.ExitCode())
 	}
 }
 
@@ -224,8 +227,21 @@ func startChildProcess(s ssh.Session, process, username string) error {
 	}
 
 	cmd := exec.CommandContext(s.Context(), executable, commandArgs...)
-	cmd.Stdin = s
+
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("failed to set stdin: %v", err)
+	}
+
+	go func() {
+		defer stdin.Close()
+		if _, err := io.Copy(stdin, s); err != nil {
+			log.Printf("failed to write to session %s\n", err)
+		}
+	}()
+
 	cmd.Stdout = s
+	cmd.Stderr = os.Stderr
 	cmd.Dir = user.HomeDir
 
 	return cmd.Run()
