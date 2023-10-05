@@ -56,3 +56,27 @@ type ConnectorPlugin struct {
 	PluginType    string                        `json:"plugin_type"`
 	Configuration connector.PluginConfiguration `json:"configuration"`
 }
+
+// AutocreationRuleRequest represents a request to create an autocreation rule for a Border0 organization.
+type AutocreationRuleRequest struct {
+	Name         string                 `json:"name"`
+	Description  string                 `json:"description"`
+	ResourceType string                 `json:"resource_type"`
+	Rule         map[string]interface{} `json:"rule"`
+}
+
+type AutocreationRuleResponse struct {
+	ID string `json:"id"`
+	// TODO: add rest of fields
+}
+
+type AutocreationRuleAttachment struct {
+	RuleId   string `json:"rule_id"`
+	Priority int    `json:"priority"`
+	Enabled  bool   `json:"enabled"`
+}
+
+type AttachAutocreationRulesRequest struct {
+	ConnectorId string                       `json:"connector_id"`
+	Rules       []AutocreationRuleAttachment `json:"rules"`
+}

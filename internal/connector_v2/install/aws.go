@@ -18,9 +18,11 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	"github.com/aws/aws-sdk-go/aws/endpoints"
 	border0 "github.com/borderzero/border0-cli/internal/api"
+	"github.com/borderzero/border0-cli/internal/api/models"
 	"github.com/borderzero/border0-go/lib/types/set"
 	"github.com/borderzero/border0-go/lib/types/slice"
 	"github.com/borderzero/border0-go/types/connector"
+	"github.com/borderzero/discovery"
 )
 
 const (
@@ -100,7 +102,14 @@ func RunCloudInstallWizardForAWS(ctx context.Context, cliVersion string) error {
 		fmt.Printf("warning: failed to enable AWS plugins: %v\n", err)
 	}
 
-	border0Token, err := generateNewBorder0ConnectorToken(ctx, border0Connector.ConnectorID, cliVersion, fmt.Sprintf("%s-token", maxString(runId, 50)))
+	if inFF, err := isInOrgEnabledForAutocreationRules(ctx, cliVersion); err == nil && inFF {
+		if err = enableAwsAutocreationRulesForConnector(ctx, border0Connector.ConnectorID, cliVersion); err != nil {
+			// we don't fail here on purpose
+			fmt.Printf("warning: failed to enable AWS autocreation rules: %v\n", err)
+		}
+	}
+
+	border0Token, err := generateNewBorder0ConnectorToken(ctx, border0Connector.ConnectorID, cliVersion, runId)
 	if err != nil {
 		return fmt.Errorf("failed to create new Border0 token: %v", err)
 	}
@@ -151,6 +160,119 @@ func enableAwsDiscoveryPluginsForConnector(
 		}
 		fmt.Printf("🚀 Border0 connector plugin \"%s\" enabled successfully!\n", pluginType)
 	}
+	return nil
+}
+
+func isInOrgEnabledForAutocreationRules(
+	ctx context.Context,
+	cliVersion string,
+) (bool, error) {
+	border0Client := border0.NewAPI(border0.WithVersion(cliVersion))
+
+	ffs, err := border0Client.GetFeatureFlags(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to get feature flags: %v", err)
+	}
+
+	if enabled, ok := ffs["enable_auto_creation"]; ok {
+		return enabled, nil
+	}
+	return false, nil
+}
+
+func enableAwsAutocreationRulesForConnector(
+	ctx context.Context,
+	connectorId string,
+	cliVersion string,
+) error {
+	now := time.Now().Unix()
+
+	rulesToCreate := map[string]struct {
+		resourceType          string
+		createWithName        string
+		createWithDescription string
+		attachmentPriority    int
+	}{
+		"EC2-INSTANCE-SSM-ONLINE": {
+			resourceType:          discovery.ResourceTypeAwsEc2Instance,
+			createWithName:        fmt.Sprintf("aws-installer-%d-ec2-ssm", now),
+			createWithDescription: "create sockets for ec2 instances reachable via aws ssm",
+			attachmentPriority:    1,
+		},
+		"EC2-INSTANCE-PRIVATE-DNS-REACHABLE": {
+			resourceType:          discovery.ResourceTypeAwsEc2Instance,
+			createWithName:        fmt.Sprintf("aws-installer-%d-ec2-private-dns", now),
+			createWithDescription: "create sockets for ec2 instances reachable via private dns name",
+			attachmentPriority:    2,
+		},
+		"EC2-INSTANCE-PUBLIC-DNS-REACHABLE": {
+			resourceType:          discovery.ResourceTypeAwsEc2Instance,
+			createWithName:        fmt.Sprintf("aws-installer-%d-ec2-public-dns", now),
+			createWithDescription: "create sockets for ec2 instances reachable via public dns name",
+			attachmentPriority:    3,
+		},
+		"ECS-SERVICE-CATCHALL": {
+			resourceType:          discovery.ResourceTypeAwsEcsService,
+			createWithName:        fmt.Sprintf("aws-installer-%d-ecs-any", now),
+			createWithDescription: "create sockets for ecs services reachable via ecs exec",
+			attachmentPriority:    1,
+		},
+		"RDS-INSTANCE-MYSQL": {
+			resourceType:          discovery.ResourceTypeAwsRdsInstance,
+			createWithName:        fmt.Sprintf("aws-installer-%d-rds-mysql", now),
+			createWithDescription: "create sockets for reachable rds instances with mysql based engines",
+			attachmentPriority:    1,
+		},
+		"RDS-INSTANCE-POSTGRES": {
+			resourceType:          discovery.ResourceTypeAwsRdsInstance,
+			createWithName:        fmt.Sprintf("aws-installer-%d-rds-postgres", now),
+			createWithDescription: "create sockets for reachable rds instances with postgresql based engines",
+			attachmentPriority:    1,
+		},
+	}
+
+	ruleToCreatedRuleID := make(map[string]string)
+
+	border0Client := border0.NewAPI(border0.WithVersion(cliVersion))
+
+	for quickCreateRule, details := range rulesToCreate {
+		body, err := border0Client.GetQuickCreateAutocreationRule(ctx, quickCreateRule)
+		if err != nil {
+			return fmt.Errorf("failed to get body for quick create rule %s: %v", quickCreateRule, err)
+		}
+		createdRule, err := border0Client.CreateAutocreationRule(
+			ctx,
+			details.createWithName,
+			details.createWithDescription,
+			details.resourceType,
+			body,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create rule based off of quick create rule %s: %v", quickCreateRule, err)
+		}
+		ruleToCreatedRuleID[quickCreateRule] = createdRule.ID
+	}
+
+	attachments := []models.AutocreationRuleAttachment{}
+	for quickCreateRule, createdRuleID := range ruleToCreatedRuleID {
+		attachments = append(attachments, models.AutocreationRuleAttachment{
+			RuleId:   createdRuleID,
+			Priority: rulesToCreate[quickCreateRule].attachmentPriority,
+			Enabled:  true,
+		})
+	}
+
+	req := &models.AttachAutocreationRulesRequest{
+		ConnectorId: connectorId,
+		Rules:       attachments,
+	}
+
+	if err := border0Client.AttachAutocreationRulesToConnector(ctx, req); err != nil {
+		return fmt.Errorf("failed to attach the created autocreation rules to connector %s: %v", connectorId, err)
+	}
+
+	fmt.Println("🚀 Border0 autocreation rules created and attached to connector successfully!")
+
 	return nil
 }
 

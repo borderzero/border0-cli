@@ -391,6 +391,16 @@ func (a *Border0API) CreateConnector(
 	return &connector, nil
 }
 
+// GetFeatureFlags gets all feature flags for the CLI component for a given user/org.
+func (a *Border0API) GetFeatureFlags(ctx context.Context) (map[string]bool, error) {
+	var featureflags map[string]bool
+	err := a.Request(http.MethodGet, "feature_flags?component=cli", &featureflags, nil, true)
+	if err != nil {
+		return nil, err
+	}
+	return featureflags, nil
+}
+
 // ListConnectors lists an organization's connectors (v2)
 func (a *Border0API) ListConnectors(ctx context.Context) ([]models.Connector, error) {
 	var connectorList models.ConnectorList
@@ -443,6 +453,16 @@ func (a *Border0API) GetDefaultPluginConfiguration(ctx context.Context, pluginTy
 	return &plugin.Configuration, nil
 }
 
+// GetDQuickCreateAutocreationRule returns the body of a given quick create autocreation rule.
+func (a *Border0API) GetQuickCreateAutocreationRule(ctx context.Context, rulename string) (map[string]interface{}, error) {
+	var body map[string]interface{}
+	err := a.Request(http.MethodGet, fmt.Sprintf("autocreation_rules/quick_create/%s", rulename), &body, nil, true)
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
+}
+
 // CreatePlugin creates a new connector plugin.
 func (a *Border0API) CreatePlugin(
 	ctx context.Context,
@@ -463,6 +483,39 @@ func (a *Border0API) CreatePlugin(
 		return nil, err
 	}
 	return plugin, nil
+}
+
+// CreateAutocreationRule creates a new autocreation rule.
+func (a *Border0API) CreateAutocreationRule(
+	ctx context.Context,
+	name string,
+	description string,
+	resourceType string,
+	body map[string]interface{},
+) (*models.AutocreationRuleResponse, error) {
+	payload := &models.AutocreationRuleRequest{
+		Name:         name,
+		Description:  description,
+		ResourceType: resourceType,
+		Rule:         body,
+	}
+	var autocreationRule *models.AutocreationRuleResponse
+	err := a.Request(http.MethodPost, "organizations/autocreation_rules", &autocreationRule, payload, true)
+	if err != nil {
+		return nil, err
+	}
+	return autocreationRule, nil
+}
+
+func (a *Border0API) AttachAutocreationRulesToConnector(
+	ctx context.Context,
+	req *models.AttachAutocreationRulesRequest,
+) error {
+	err := a.Request(http.MethodPost, "connectors/autocreation_rules", nil, req, true)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (a *Border0API) GetPolicyByName(ctx context.Context, name string) (*models.Policy, error) {
