@@ -443,6 +443,16 @@ func (a *Border0API) GetDefaultPluginConfiguration(ctx context.Context, pluginTy
 	return &plugin.Configuration, nil
 }
 
+// GetDefaultPluginConfiguration returns the default configuration for a given plugin type.
+func (a *Border0API) GetDefaultAutoCreationRuleSetJSON(ctx context.Context, resourceType string) ([]map[string]interface{}, error) {
+	var autocreationRule *models.ConnectorAutoCreationRule
+	err := a.Request(http.MethodGet, fmt.Sprintf("connector/autocreation_rule_sets/defaults/%s", resourceType), &autocreationRule, nil, true)
+	if err != nil {
+		return nil, err
+	}
+	return autocreationRule.Rules, nil
+}
+
 // CreatePlugin creates a new connector plugin.
 func (a *Border0API) CreatePlugin(
 	ctx context.Context,
@@ -463,6 +473,28 @@ func (a *Border0API) CreatePlugin(
 		return nil, err
 	}
 	return plugin, nil
+}
+
+// CreateAutoCreationRuleSet creates a new connector autocreation rule set.
+func (a *Border0API) CreateAutoCreationRuleSet(
+	ctx context.Context,
+	connectorId string,
+	enabled bool,
+	resourceType string,
+	rulesJson []map[string]interface{},
+) (*models.ConnectorAutoCreationRule, error) {
+	payload := &models.ConnectorAutoCreationRuleRequest{
+		ConnectorId:  connectorId,
+		Enabled:      enabled,
+		ResourceType: resourceType,
+		Rules:        rulesJson,
+	}
+	var cacrs *models.ConnectorAutoCreationRule
+	err := a.Request(http.MethodPost, "connector/autocreation_rule_sets", &cacrs, payload, true)
+	if err != nil {
+		return nil, err
+	}
+	return cacrs, nil
 }
 
 func (a *Border0API) GetPolicyByName(ctx context.Context, name string) (*models.Policy, error) {

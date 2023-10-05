@@ -21,6 +21,7 @@ import (
 	"github.com/borderzero/border0-go/lib/types/set"
 	"github.com/borderzero/border0-go/lib/types/slice"
 	"github.com/borderzero/border0-go/types/connector"
+	"github.com/borderzero/discovery"
 )
 
 const (
@@ -100,7 +101,12 @@ func RunCloudInstallWizardForAWS(ctx context.Context, cliVersion string) error {
 		fmt.Printf("warning: failed to enable AWS plugins: %v\n", err)
 	}
 
-	border0Token, err := generateNewBorder0ConnectorToken(ctx, border0Connector.ConnectorID, cliVersion, fmt.Sprintf("%s-token", maxString(runId, 50)))
+	if err = enableAwsAutocreationRulesForConnector(ctx, border0Connector.ConnectorID, cliVersion); err != nil {
+		// we don't fail here on purpose
+		fmt.Printf("warning: failed to enable AWS autocreation rules: %v\n", err)
+	}
+
+	border0Token, err := generateNewBorder0ConnectorToken(ctx, border0Connector.ConnectorID, cliVersion, runId)
 	if err != nil {
 		return fmt.Errorf("failed to create new Border0 token: %v", err)
 	}
@@ -150,6 +156,29 @@ func enableAwsDiscoveryPluginsForConnector(
 			return fmt.Errorf("failed to create a new Border0 connector via the Border0 API: %v", err)
 		}
 		fmt.Printf("🚀 Border0 connector plugin \"%s\" enabled successfully!\n", pluginType)
+	}
+	return nil
+}
+
+func enableAwsAutocreationRulesForConnector(
+	ctx context.Context,
+	connectorId string,
+	cliVersion string,
+) error {
+	border0Client := border0.NewAPI(border0.WithVersion(cliVersion))
+
+	for _, resourceType := range []string{
+		discovery.ResourceTypeAwsEc2Instance,
+		discovery.ResourceTypeAwsEcsService,
+	} {
+		acr, err := border0Client.GetDefaultAutoCreationRuleSetJSON(ctx, resourceType)
+		if err != nil {
+			return fmt.Errorf("failed to get default auto creation rule set for resource type %s: %v", resourceType, err)
+		}
+		if _, err = border0Client.CreateAutoCreationRuleSet(ctx, connectorId, true, resourceType, acr); err != nil {
+			return fmt.Errorf("failed to create a new Border0 connector via the Border0 API: %v", err)
+		}
+		fmt.Printf("🚀 Border0 connector auto-creation rule set for resource \"%s\" enabled successfully!\n", resourceType)
 	}
 	return nil
 }
