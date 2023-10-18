@@ -53,6 +53,7 @@ type Border0API interface {
 	Evaluate(ctx context.Context, socket *models.Socket, clientIP, userEmail, sessionKey string) ([]string, map[string][]string, error)
 	UpdateSession(updates models.SessionUpdate) error
 	SignSshOrgCertificate(ctx context.Context, socketID, sessionID, userEmail string, ticket []byte, publicKey []byte) ([]byte, error)
+	UploadRecording(content []byte, sessionKey, recordingID string) error
 }
 
 type E2EEncryptionMetadata struct {

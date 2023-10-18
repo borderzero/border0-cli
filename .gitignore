@@ -24,5 +24,5 @@ rpm/
 *.swp
 .vscode/
 
-border0
-mysocketctl
+/border0
+/mysocketctl

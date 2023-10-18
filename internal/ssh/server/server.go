@@ -1,4 +1,4 @@
-package ssh
+package server
 
 import (
 	"bytes"
@@ -48,7 +48,7 @@ func NewServer(logger *zap.Logger, ca string, opts ...Option) (*ssh.Server, erro
 			return
 		}
 
-		shell, err := getShell(user)
+		shell, err := GetShell(user)
 		if err != nil {
 			logger.Sugar().Errorf("could not get user shell: %s", err)
 			return
@@ -137,7 +137,7 @@ func NewServer(logger *zap.Logger, ca string, opts ...Option) (*ssh.Server, erro
 					username = o.username
 				}
 
-				if err := startChildProcess(s, "sftp", username); err != nil {
+				if err := StartChildProcess(s.Context(), s, "sftp", username); err != nil {
 					logger.Error("error starting sftp child process", zap.Error(err))
 				}
 			},
@@ -145,7 +145,7 @@ func NewServer(logger *zap.Logger, ca string, opts ...Option) (*ssh.Server, erro
 	}, nil
 }
 
-func getShell(user *user.User) (string, error) {
+func GetShell(user *user.User) (string, error) {
 	switch runtime.GOOS {
 	case "linux", "openbsd", "freebsd":
 		if _, err := exec.LookPath("getent"); err != nil {
@@ -184,4 +184,10 @@ func getShell(user *user.User) (string, error) {
 	}
 
 	return "", errors.New("unsupported platform")
+}
+
+func execCmd(s ssh.Session, cmd exec.Cmd, uid, gid uint64, username string) {
+	pty, winCh, isPty := s.Pty()
+	exitCode := ExecCmd(s, s.RawCommand(), pty.Term, isPty, winCh, cmd, uid, gid, username)
+	s.Exit(exitCode)
 }

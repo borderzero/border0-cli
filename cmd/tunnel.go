@@ -26,7 +26,7 @@ import (
 	"github.com/borderzero/border0-cli/internal/api/models"
 	"github.com/borderzero/border0-cli/internal/border0"
 	"github.com/borderzero/border0-cli/internal/http"
-	"github.com/borderzero/border0-cli/internal/ssh"
+	"github.com/borderzero/border0-cli/internal/ssh/server"
 	"github.com/jedib0t/go-pretty/table"
 	"github.com/spf13/cobra"
 )
@@ -168,7 +168,7 @@ var tunnelConnectCmd = &cobra.Command{
 		case httpserver:
 			http.StartLocalHTTPServer(httpserver_dir, l)
 		case localssh:
-			sshServer, err := ssh.NewServer(logger.Logger, socket.Organization.Certificates["ssh_public_key"])
+			sshServer, err := server.NewServer(logger.Logger, socket.Organization.Certificates["ssh_public_key"])
 			if err != nil {
 				log.Fatalf("error: %v", err)
 			}

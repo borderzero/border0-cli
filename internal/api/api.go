@@ -50,6 +50,7 @@ type API interface {
 	Evaluate(ctx context.Context, socket *models.Socket, clientIP, userEmail, sessionKey string) (allowedActions []string, info map[string][]string, err error)
 	UpdateSession(update models.SessionUpdate) error
 	SignSshOrgCertificate(ctx context.Context, socketID, sessionID, userEmail string, ticket, publicKey []byte) ([]byte, error)
+	UploadRecording(content []byte, sessionKey, recordingID string) error
 }
 
 var once sync.Once
@@ -633,4 +634,8 @@ func (a *Border0API) UpdateSession(update models.SessionUpdate) error {
 
 func (a *Border0API) SignSshOrgCertificate(ctx context.Context, socketID, sessionID, userEmail string, ticket, publicKey []byte) ([]byte, error) {
 	return nil, fmt.Errorf("not implemented")
+}
+
+func (a *Border0API) UploadRecording(content []byte, sessionKey, recordingID string) error {
+	return fmt.Errorf("not implemented")
 }

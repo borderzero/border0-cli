@@ -38,6 +38,8 @@ import (
 	"github.com/borderzero/border0-cli/internal/httpproxylib"
 	"github.com/borderzero/border0-cli/internal/sqlauthproxy"
 	"github.com/borderzero/border0-cli/internal/ssh"
+	"github.com/borderzero/border0-cli/internal/ssh/config"
+	"github.com/borderzero/border0-cli/internal/ssh/server"
 	"github.com/borderzero/border0-cli/internal/util"
 	"github.com/borderzero/border0-cli/internal/vpnlib"
 	"github.com/jedib0t/go-pretty/table"
@@ -566,7 +568,7 @@ var socketConnectCmd = &cobra.Command{
 		}
 
 		var sshAuthProxy bool
-		var sshProxyConfig ssh.ProxyConfig
+		var sshProxyConfig config.ProxyConfig
 
 		if socket.SocketType == "ssh" && (upstream_username != "" || upstream_password != "" || upstream_identify_file != "" || awsEc2InstanceId != "" || socket.UpstreamType == "aws-ssm" || socket.UpstreamType == "aws-ec2connect" || awsEc2InstanceConnect || socket.EndToEndEncryptionEnabled) {
 			switch {
@@ -575,7 +577,7 @@ var socketConnectCmd = &cobra.Command{
 					return fmt.Errorf("aws_ecs_cluster flag or aws ec2 instance id is required for aws-ssm upstream services")
 				}
 
-				sshProxyConfig = ssh.ProxyConfig{
+				sshProxyConfig = config.ProxyConfig{
 					AwsSSMTarget:    awsEc2InstanceId,
 					AWSRegion:       awsRegion,
 					AWSProfile:      awsProfile,
@@ -584,7 +586,7 @@ var socketConnectCmd = &cobra.Command{
 				}
 
 				if awsECSCluster != "" {
-					sshProxyConfig.ECSSSMProxy = &ssh.ECSSSMProxy{
+					sshProxyConfig.ECSSSMProxy = &config.ECSSSMProxy{
 						Cluster:    awsECSCluster,
 						Services:   awsECSServices,
 						Tasks:      awsECSTasks,
@@ -596,7 +598,7 @@ var socketConnectCmd = &cobra.Command{
 					return fmt.Errorf("aws ec2 instance id is required for EC2 Instance Connect based upstream services")
 				}
 
-				sshProxyConfig = ssh.ProxyConfig{
+				sshProxyConfig = config.ProxyConfig{
 					AwsEC2InstanceId: awsEc2InstanceId,
 					AWSRegion:        awsRegion,
 					AWSProfile:       awsProfile,
@@ -612,7 +614,7 @@ var socketConnectCmd = &cobra.Command{
 					return fmt.Errorf("aws_ecs_cluster flag or aws ec2 instance id is defined but socket is not configured with aws-ssm upstream type")
 				}
 
-				sshProxyConfig = ssh.ProxyConfig{
+				sshProxyConfig = config.ProxyConfig{
 					Hostname:           hostname,
 					Port:               port,
 					Username:           upstream_username,
@@ -660,11 +662,11 @@ var socketConnectCmd = &cobra.Command{
 				return err
 			}
 		case localssh:
-			opts := []ssh.Option{}
+			opts := []server.Option{}
 			if socket.UpstreamUsername != "" {
-				opts = append(opts, ssh.WithUsername(socket.UpstreamUsername))
+				opts = append(opts, server.WithUsername(socket.UpstreamUsername))
 			}
-			sshServer, err := ssh.NewServer(logger.Logger, socket.Organization.Certificates["ssh_public_key"], opts...)
+			sshServer, err := server.NewServer(logger.Logger, socket.Organization.Certificates["ssh_public_key"], opts...)
 			if err != nil {
 				return err
 			}

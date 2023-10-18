@@ -29,6 +29,8 @@ import (
 	"github.com/borderzero/border0-cli/internal/connector_v2/util"
 	"github.com/borderzero/border0-cli/internal/sqlauthproxy"
 	"github.com/borderzero/border0-cli/internal/ssh"
+	sshConfig "github.com/borderzero/border0-cli/internal/ssh/config"
+	"github.com/borderzero/border0-cli/internal/ssh/server"
 	"github.com/borderzero/border0-go/lib/types/set"
 	"github.com/borderzero/border0-go/types/connector"
 	"github.com/borderzero/border0-go/types/service"
@@ -632,7 +634,7 @@ func (c *ConnectorService) Listen(socket *border0.Socket) {
 		}
 	}
 
-	var sshProxyConfig *ssh.ProxyConfig
+	var sshProxyConfig *sshConfig.ProxyConfig
 	if socket.SocketType == "ssh" {
 		var hostkeySigner *gossh.Signer
 		if socket.EndToEndEncryptionEnabled {
@@ -643,7 +645,7 @@ func (c *ConnectorService) Listen(socket *border0.Socket) {
 			}
 		}
 
-		sshProxyConfig, err = ssh.BuildProxyConfig(logger, *socket.Socket, socket.Socket.AWSRegion, "", hostkeySigner, c.organization, c)
+		sshProxyConfig, err = sshConfig.BuildProxyConfig(logger, *socket.Socket, socket.Socket.AWSRegion, "", hostkeySigner, c.organization, c)
 		if err != nil {
 			logger.Error("failed to create config for socket", zap.String("socket", socket.SocketID), zap.Error(err))
 			return
@@ -651,14 +653,15 @@ func (c *ConnectorService) Listen(socket *border0.Socket) {
 	}
 
 	switch {
-	case socket.Socket.SSHServer && socket.SocketType == "ssh":
-		opts := []ssh.Option{}
+	case socket.Socket.SSHServer && socket.SocketType == "ssh" && !socket.EndToEndEncryptionEnabled:
+		opts := []server.Option{}
 		if socket.Socket != nil &&
 			socket.Socket.ConnectorLocalData != nil &&
 			socket.Socket.ConnectorLocalData.UpstreamUsername != "" {
-			opts = append(opts, ssh.WithUsername(socket.Socket.ConnectorLocalData.UpstreamUsername))
+			opts = append(opts, server.WithUsername(socket.Socket.ConnectorLocalData.UpstreamUsername))
 		}
-		sshServer, err := ssh.NewServer(logger, c.organization.Certificates["ssh_public_key"], opts...)
+
+		sshServer, err := server.NewServer(logger, c.organization.Certificates["ssh_public_key"], opts...)
 		if err != nil {
 			logger.Error("failed to create ssh server", zap.String("socket", socket.SocketID), zap.Error(err))
 			return

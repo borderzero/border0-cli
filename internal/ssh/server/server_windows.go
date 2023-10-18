@@ -1,9 +1,10 @@
 //go:build windows
 // +build windows
 
-package ssh
+package server
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -15,25 +16,24 @@ import (
 	"github.com/ActiveState/termtest/conpty"
 	"github.com/gliderlabs/ssh"
 	"github.com/pkg/sftp"
+	gossh "golang.org/x/crypto/ssh"
 	"golang.org/x/sys/windows"
 )
 
-func execCmd(s ssh.Session, cmd exec.Cmd, uid, gid uint64, username string) {
-	ptyReq, winCh, isPty := s.Pty()
-
+func ExecCmd(channel gossh.Channel, command string, ptyTerm string, isPty bool, winCh <-chan ssh.Window, cmd exec.Cmd, uid, gid uint64, username string) int {
 	vsn := windows.RtlGetVersion()
 	if vsn.MajorVersion < 10 {
 		log.Println("Windows version too old to support shell")
-		return
+		return 255
 	}
 
-	if len(s.Command()) > 0 {
-		cmd.Args = append(cmd.Args, "/C", s.RawCommand())
+	if command != "" {
+		cmd.Args = append(cmd.Args, "/C", command)
 	}
 
 	if isPty {
-
-		cpty, err := conpty.New(int16(ptyReq.Window.Width), int16(ptyReq.Window.Height))
+		win := <-winCh
+		cpty, err := conpty.New(int16(win.Width), int16(win.Height))
 		if err != nil {
 			log.Fatalf("Could not open a conpty terminal: %v", err)
 		}
@@ -55,103 +55,84 @@ func execCmd(s ssh.Session, cmd exec.Cmd, uid, gid uint64, username string) {
 
 		if err != nil {
 			log.Printf("failed to start command %v\n", err)
-			return
+			return 255
 		}
 
 		process, err := os.FindProcess(pid)
 		if err != nil {
 			log.Printf("failed to find process %v\n", err)
-			return
+			return 255
 		}
 
 		defer process.Kill()
 
 		go func() {
-			io.Copy(s, cpty.OutPipe())
-			s.Close()
+			defer channel.Close()
+			io.Copy(channel, cpty.OutPipe())
 		}()
+
 		go func() {
-			io.Copy(cpty.InPipe(), s)
-			s.Close()
+			defer channel.Close()
+			io.Copy(cpty.InPipe(), channel)
 		}()
 
-		done := make(chan struct {
-			*os.ProcessState
-			error
-		}, 1)
-		go func() {
-			ps, err := process.Wait()
-			done <- struct {
-				*os.ProcessState
-				error
-			}{ps, err}
-		}()
-
-		select {
-		case result := <-done:
-			if result.error != nil {
-				log.Println("Error waiting for process:", err)
-				s.Exit(255)
-				return
-			}
-			log.Printf("Session ended normally, exit code %d", result.ProcessState.ExitCode())
-			s.Exit(result.ProcessState.ExitCode())
-			return
-
-		case <-s.Context().Done():
-			log.Printf("Session terminated: %s", s.Context().Err())
-			return
+		ps, err := process.Wait()
+		if err != nil {
+			log.Println("Error waiting for process:", err)
+			return 255
 		}
 
+		log.Printf("Session ended normally, exit code %d", ps.ExitCode())
+		return ps.ExitCode()
 	} else {
-
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
 			log.Printf("failed to set stdout: %v\n", err)
-			return
+			return 255
 		}
 		stderr, err := cmd.StderrPipe()
 		if err != nil {
 			log.Printf("failed to set stderr: %v\n", err)
-			return
+			return 255
 		}
 		stdin, err := cmd.StdinPipe()
 		if err != nil {
 			log.Printf("failed to set stdin: %v\n", err)
-			return
+			return 255
 		}
 
 		wg := &sync.WaitGroup{}
 		wg.Add(2)
 		if err = cmd.Start(); err != nil {
 			log.Printf("failed to start command %v\n", err)
-			return
+			return 255
 		}
 		go func() {
 			defer stdin.Close()
-			if _, err := io.Copy(stdin, s); err != nil {
+			if _, err := io.Copy(stdin, channel); err != nil {
 				log.Printf("failed to write to session %s\n", err)
 			}
 		}()
 		go func() {
 			defer wg.Done()
-			if _, err := io.Copy(s, stdout); err != nil {
+			if _, err := io.Copy(channel, stdout); err != nil {
 				log.Printf("failed to write to stdout %s\n", err)
 			}
 		}()
 		go func() {
 			defer wg.Done()
-			if _, err := io.Copy(s.Stderr(), stderr); err != nil {
+			if _, err := io.Copy(channel.Stderr(), stderr); err != nil {
 				log.Printf("failed to write from stderr%s\n", err)
 			}
 		}()
 
 		wg.Wait()
 		cmd.Wait()
+		return cmd.ProcessState.ExitCode()
 	}
 }
 
-func startChildProcess(s ssh.Session, process, username string) error {
+func StartChildProcess(ctx context.Context, s io.ReadWriteCloser, process, username string) error {
 	switch process {
 	case "sftp":
 		server, err := sftp.NewServer(s)

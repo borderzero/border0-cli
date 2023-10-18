@@ -1,9 +1,10 @@
 //go:build !windows
 // +build !windows
 
-package ssh
+package server
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -20,9 +21,10 @@ import (
 	"github.com/creack/pty"
 	"github.com/gliderlabs/ssh"
 	"github.com/opencontainers/selinux/go-selinux"
+	gossh "golang.org/x/crypto/ssh"
 )
 
-func execCmd(s ssh.Session, cmd exec.Cmd, uid, gid uint64, username string) {
+func ExecCmd(channel gossh.Channel, command string, ptyTerm string, isPty bool, winCh <-chan ssh.Window, cmd exec.Cmd, uid, gid uint64, username string) int {
 	euid := os.Geteuid()
 	var loginCmd string
 	if selinux.EnforceMode() != selinux.Enforcing {
@@ -30,7 +32,7 @@ func execCmd(s ssh.Session, cmd exec.Cmd, uid, gid uint64, username string) {
 	}
 	sysProcAttr := &syscall.SysProcAttr{}
 
-	if len(s.Command()) > 0 {
+	if command != "" {
 		if euid == 0 {
 			err := syscall.Setgroups([]int{})
 			if err != nil {
@@ -43,7 +45,7 @@ func execCmd(s ssh.Session, cmd exec.Cmd, uid, gid uint64, username string) {
 			Gid:         uint32(gid),
 			NoSetGroups: true,
 		}
-		cmd.Args = append(cmd.Args, "-c", s.RawCommand())
+		cmd.Args = append(cmd.Args, "-c", command)
 	} else {
 		if euid == 0 && loginCmd != "" {
 			cmd.Path = loginCmd
@@ -70,17 +72,15 @@ func execCmd(s ssh.Session, cmd exec.Cmd, uid, gid uint64, username string) {
 		}
 	}
 
-	ptyReq, winCh, isPty := s.Pty()
-
 	if isPty {
-		cmd.Env = append(cmd.Env, fmt.Sprintf("TERM=%s", ptyReq.Term))
+		cmd.Env = append(cmd.Env, fmt.Sprintf("TERM=%s", ptyTerm))
 		sysProcAttr.Setsid = true
 		sysProcAttr.Setctty = true
 
 		f, err := pty.StartWithAttrs(&cmd, &pty.Winsize{}, sysProcAttr)
 		if err != nil {
 			log.Println(err)
-			return
+			return 255
 		}
 
 		go func() {
@@ -94,7 +94,7 @@ func execCmd(s ssh.Session, cmd exec.Cmd, uid, gid uint64, username string) {
 
 		go func() {
 			defer wg.Done()
-			io.Copy(f, s)
+			io.Copy(f, channel)
 			f.Close()
 			if cmd.ProcessState == nil {
 				cmd.Process.Signal(syscall.SIGKILL)
@@ -104,8 +104,8 @@ func execCmd(s ssh.Session, cmd exec.Cmd, uid, gid uint64, username string) {
 		go func() {
 			defer wg.Done()
 			time.Sleep(200 * time.Millisecond)
-			io.Copy(s, f)
-			s.CloseWrite()
+			io.Copy(channel, f)
+			channel.Close()
 		}()
 
 		wg.Wait()
@@ -115,7 +115,7 @@ func execCmd(s ssh.Session, cmd exec.Cmd, uid, gid uint64, username string) {
 			cmd.Process.Signal(syscall.SIGKILL)
 		}
 
-		s.Exit(cmd.ProcessState.ExitCode())
+		return cmd.ProcessState.ExitCode()
 	} else {
 		sysProcAttr.Setsid = true
 		cmd.SysProcAttr = sysProcAttr
@@ -123,47 +123,47 @@ func execCmd(s ssh.Session, cmd exec.Cmd, uid, gid uint64, username string) {
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
 			log.Printf("failed to set stdout: %v\n", err)
-			return
+			return 255
 		}
 		stderr, err := cmd.StderrPipe()
 		if err != nil {
 			log.Printf("failed to set stderr: %v\n", err)
-			return
+			return 255
 		}
 		stdin, err := cmd.StdinPipe()
 		if err != nil {
 			log.Printf("failed to set stdin: %v\n", err)
-			return
+			return 255
 		}
 
 		wg := &sync.WaitGroup{}
 		wg.Add(2)
 		if err = cmd.Start(); err != nil {
 			log.Printf("failed to start command %v\n", err)
-			return
+			return 255
 		}
 		go func() {
 			defer stdin.Close()
-			if _, err := io.Copy(stdin, s); err != nil {
+			if _, err := io.Copy(stdin, channel); err != nil {
 				log.Printf("failed to write to session %s\n", err)
 			}
 		}()
 		go func() {
 			defer wg.Done()
-			if _, err := io.Copy(s, stdout); err != nil {
+			if _, err := io.Copy(channel, stdout); err != nil {
 				log.Printf("failed to write to stdout %s\n", err)
 			}
 		}()
 		go func() {
 			defer wg.Done()
-			if _, err := io.Copy(s.Stderr(), stderr); err != nil {
+			if _, err := io.Copy(channel.Stderr(), stderr); err != nil {
 				log.Printf("failed to write from stderr%s\n", err)
 			}
 		}()
 
 		wg.Wait()
 		cmd.Wait()
-		s.Exit(cmd.ProcessState.ExitCode())
+		return cmd.ProcessState.ExitCode()
 	}
 }
 
@@ -192,7 +192,7 @@ func hasBusyBoxLogin(loginCmd string) bool {
 	return false
 }
 
-func startChildProcess(s ssh.Session, process, username string) error {
+func StartChildProcess(ctx context.Context, s io.ReadWriteCloser, process, username string) error {
 	user, err := user.Lookup(username)
 	if err != nil {
 		return fmt.Errorf("could not find user %s: %v", username, err)
@@ -226,7 +226,7 @@ func startChildProcess(s ssh.Session, process, username string) error {
 		}
 	}
 
-	cmd := exec.CommandContext(s.Context(), executable, commandArgs...)
+	cmd := exec.CommandContext(ctx, executable, commandArgs...)
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

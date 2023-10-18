@@ -22,6 +22,7 @@ message ControlStreamRequest {
     AuthorizeRequest authorize = 8;
     SessionUpdateRequest session_update = 9;
     SshCertifcateSignRequest ssh_certificate_sign_request = 10;
+    UploadRecording upload_recording = 11;
   }
 }
 
@@ -196,4 +197,10 @@ message SshCertifcateSignRequest {
 message SshCertifcateSignResponse {
   string request_id = 1;
   bytes certificate = 2;
+}
+
+message UploadRecording {
+  string session_key = 1;
+  string recording_id = 2;
+  bytes recording = 3;
 }

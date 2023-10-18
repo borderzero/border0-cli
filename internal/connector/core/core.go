@@ -17,6 +17,8 @@ import (
 	"github.com/borderzero/border0-cli/internal/connector/discover"
 	"github.com/borderzero/border0-cli/internal/sqlauthproxy"
 	"github.com/borderzero/border0-cli/internal/ssh"
+	sshConfig "github.com/borderzero/border0-cli/internal/ssh/config"
+	"github.com/borderzero/border0-cli/internal/ssh/server"
 	"github.com/borderzero/border0-go/lib/types/pointer"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -99,9 +101,9 @@ func (c *ConnectorCore) TunnelConnnect(ctx context.Context, socket models.Socket
 		}
 	}
 
-	var sshProxyConfig *ssh.ProxyConfig
+	var sshProxyConfig *sshConfig.ProxyConfig
 	if socket.SocketType == "ssh" {
-		sshProxyConfig, err = ssh.BuildProxyConfig(c.logger, socket, c.cfg.Connector.AwsRegion, c.cfg.Connector.AwsProfile, nil, nil, nil)
+		sshProxyConfig, err = sshConfig.BuildProxyConfig(c.logger, socket, c.cfg.Connector.AwsRegion, c.cfg.Connector.AwsProfile, nil, nil, nil)
 		if err != nil {
 			return fmt.Errorf("failed to create config for socket: %s", err)
 		}
@@ -115,7 +117,7 @@ func (c *ConnectorCore) TunnelConnnect(ctx context.Context, socket models.Socket
 
 	switch {
 	case socket.ConnectorLocalData != nil && socket.ConnectorLocalData.SSHServer && socket.SocketType == "ssh":
-		sshServer, err := ssh.NewServer(c.logger, conn.Socket.Organization.Certificates["ssh_public_key"])
+		sshServer, err := server.NewServer(c.logger, conn.Socket.Organization.Certificates["ssh_public_key"])
 		if err != nil {
 			return err
 		}

@@ -1068,6 +1068,50 @@ func (_c *API_UpdateSocket_Call) RunAndReturn(run func(context.Context, string, 
 	return _c
 }
 
+// UploadRecording provides a mock function with given fields: content, sessionKey, recordingID
+func (_m *API) UploadRecording(content []byte, sessionKey string, recordingID string) error {
+	ret := _m.Called(content, sessionKey, recordingID)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func([]byte, string, string) error); ok {
+		r0 = rf(content, sessionKey, recordingID)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// API_UploadRecording_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UploadRecording'
+type API_UploadRecording_Call struct {
+	*mock.Call
+}
+
+// UploadRecording is a helper method to define mock.On call
+//   - content []byte
+//   - sessionKey string
+//   - recordingID string
+func (_e *API_Expecter) UploadRecording(content interface{}, sessionKey interface{}, recordingID interface{}) *API_UploadRecording_Call {
+	return &API_UploadRecording_Call{Call: _e.mock.On("UploadRecording", content, sessionKey, recordingID)}
+}
+
+func (_c *API_UploadRecording_Call) Run(run func(content []byte, sessionKey string, recordingID string)) *API_UploadRecording_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].([]byte), args[1].(string), args[2].(string))
+	})
+	return _c
+}
+
+func (_c *API_UploadRecording_Call) Return(_a0 error) *API_UploadRecording_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *API_UploadRecording_Call) RunAndReturn(run func([]byte, string, string) error) *API_UploadRecording_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewAPI creates a new instance of API. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewAPI(t interface {
