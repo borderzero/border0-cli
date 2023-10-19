@@ -106,6 +106,8 @@ func (s *ssmSessionHandler) Proxy(conn net.Conn) {
 		session.logger = session.logger.With(zap.String("session_key", *sessionKey))
 	}
 
+	// we don't support global requests (yet)
+	// so we can disregard the reqs channel
 	go ssh.DiscardRequests(reqs)
 
 	if err := session.handleChannels(); err != nil {
@@ -171,19 +173,6 @@ func (s *ssmSession) handleChannels() error {
 
 	return nil
 }
-
-// func (s *ssmSession) record(reader io.Reader) (*Recording, error) {
-// 	pr, pw := io.Pipe()
-// 	reader = io.TeeReader(reader, pw)
-
-// 	r := NewRecording(s.logger, pr, *s.sessionKey, s.config.Border0API, s.sshWidth, s.sshHeight)
-
-// 	if err := r.Record(); err != nil {
-// 		return nil, err
-// 	}
-
-// 	return r, nil
-// }
 
 func (s *ssmSession) pickAwsEcsTargetForAwsSsm(channel ssh.Channel) error {
 	ecsSvc := ecs.NewFromConfig(s.config.AwsConfig)

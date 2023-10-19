@@ -137,6 +137,8 @@ func (s *sshSessionHandler) Proxy(conn net.Conn) {
 		}
 	}
 
+	// we don't support global requests (yet)
+	// so we can disregard the reqs channel
 	go ssh.DiscardRequests(reqs)
 	if err := session.handleChannels(); err != nil {
 		s.logger.Error("failed to handle channels", zap.Error(err))

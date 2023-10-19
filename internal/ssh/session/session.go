@@ -27,7 +27,7 @@ func newSSHServerConn(conn net.Conn, config *config.ProxyConfig) (sshConn *ssh.S
 	if config.EndToEndEncryption {
 		e2eConn, ok := conn.(border0.E2EEncryptionConn)
 		if !ok {
-			err = errors.New("failed to cast connection to e2eencryption")
+			err = errors.New("failed to cast connection to E2EEncryptionConn")
 			config.Logger.Error(err.Error())
 			return
 		}

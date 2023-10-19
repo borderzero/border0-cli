@@ -84,6 +84,8 @@ func (s *localSessionHandler) Proxy(conn net.Conn) {
 		session.userEmail = userEmail
 	}
 
+	// we don't support global requests (yet)
+	// so we can disregard the reqs channel
 	go ssh.DiscardRequests(reqs)
 	if err := session.handleChannels(); err != nil {
 		s.logger.Error("failed to handle channels", zap.Error(err))
@@ -150,6 +152,8 @@ func (s *localSession) handleDirectTcpipChannel(ctx context.Context, newChannel 
 		return
 	}
 
+	// in a direct-tcpip channel incomming requests are discarded
+	// we only care about the data
 	go ssh.DiscardRequests(reqs)
 
 	var wg sync.WaitGroup
