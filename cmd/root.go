@@ -59,6 +59,7 @@ var (
 	upstream_type           string
 	httpserver              bool
 	httpserver_dir          string
+	shellserve              string
 	localssh                bool
 	orgName                 string
 	sso                     string

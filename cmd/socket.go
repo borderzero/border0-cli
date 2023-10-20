@@ -638,6 +638,12 @@ var socketConnectCmd = &cobra.Command{
 			}
 		}
 
+		// if shellserve is provided set the localssh flag to true
+		// since we'll need to localssh server to serve the shell
+		if shellserve != "" {
+			localssh = true
+		}
+
 		border0API.StartRefreshAccessTokenJob(ctx)
 
 		l, err := socket.Listen()
@@ -666,6 +672,10 @@ var socketConnectCmd = &cobra.Command{
 			if socket.UpstreamUsername != "" {
 				opts = append(opts, server.WithUsername(socket.UpstreamUsername))
 			}
+			// Check if we should load a specific shell
+			if shellserve != "" {
+				opts = append(opts, server.WithShell(shellserve))
+			}
 			sshServer, err := server.NewServer(logger.Logger, socket.Organization.Certificates["ssh_public_key"], opts...)
 			if err != nil {
 				return err
@@ -686,6 +696,7 @@ var socketConnectCmd = &cobra.Command{
 			if err := ssh.Proxy(l, sshProxyConfig); err != nil {
 				return err
 			}
+
 		default:
 			if port < 1 {
 				return fmt.Errorf("error: port not specified")
@@ -844,6 +855,7 @@ func init() {
 	socketConnectCmd.Flags().StringVarP(&proxyHost, "proxy", "", "", "Proxy host used for connection to border0.com")
 	socketConnectCmd.Flags().BoolVarP(&localssh, "localssh", "", false, "Start a local SSH server to accept SSH sessions on this host")
 	socketConnectCmd.Flags().BoolVarP(&localssh, "sshserver", "l", false, "Start a local SSH server to accept SSH sessions on this host")
+	socketConnectCmd.Flags().StringVarP(&shellserve, "shell", "z", "", "Pass connection to provided shell command")
 	socketConnectCmd.Flags().MarkDeprecated("localssh", "use --sshserver instead")
 	socketConnectCmd.Flags().BoolVarP(&httpserver, "httpserver", "", false, "Start a local http server to accept http connections on this host")
 	socketConnectCmd.Flags().StringVarP(&httpserver_dir, "httpserver_dir", "", "", "Directory to serve http connections on this host")

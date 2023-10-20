@@ -21,6 +21,7 @@ import (
 
 type options struct {
 	username string
+	shell    string
 }
 
 // Option represents a configuration option for the ssh server.
@@ -28,6 +29,9 @@ type Option func(*options)
 
 // WithUsername is the option to override the ssh username.
 func WithUsername(username string) Option { return func(o *options) { o.username = username } }
+
+// WithShell is the option to override the ssh shell.
+func WithShell(shell string) Option { return func(o *options) { o.shell = shell } }
 
 // NewServer returns a new ssh server.
 func NewServer(logger *zap.Logger, ca string, opts ...Option) (*ssh.Server, error) {
@@ -37,6 +41,8 @@ func NewServer(logger *zap.Logger, ca string, opts ...Option) (*ssh.Server, erro
 	}
 
 	handler := ssh.Handler(func(s ssh.Session) {
+		var shell string
+
 		username := s.User()
 		if o.username != "" {
 			username = o.username
@@ -47,11 +53,14 @@ func NewServer(logger *zap.Logger, ca string, opts ...Option) (*ssh.Server, erro
 			logger.Sugar().Errorf("could not find user \"%s\": %v", username, err)
 			return
 		}
-
-		shell, err := GetShell(user)
-		if err != nil {
-			logger.Sugar().Errorf("could not get user shell: %s", err)
-			return
+		if o.shell != "" {
+			shell = o.shell
+		} else {
+			shell, err = GetShell(user)
+			if err != nil {
+				logger.Sugar().Errorf("could not get user shell: %s", err)
+				return
+			}
 		}
 
 		var cmd exec.Cmd
