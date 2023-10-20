@@ -69,8 +69,8 @@ func (s *localSessionHandler) Proxy(conn net.Conn) {
 		downstreamSshReqs:  reqs,
 	}
 
-	if s.config.Socket.UpstreamUsername != nil && *s.config.Socket.UpstreamUsername != "" {
-		session.username = *s.config.Socket.UpstreamUsername
+	if s.config.Username != "" {
+		session.username = s.config.Username
 	} else {
 		session.username = sshConn.User()
 	}
