@@ -113,8 +113,6 @@ var clientProxyCmd = &cobra.Command{
 
 			go handleClientConnection(clientConn, selectedSession)
 		}
-
-		return nil
 	},
 }
 
@@ -136,7 +134,7 @@ func (sm *SessionManager) addSession(session *yamux.Session, logStream *yamux.St
 }
 
 func (sm *SessionManager) createSession(info *client.ResourceInfo, tlsConfig *tls.Config, hostname string) (net.Conn, *yamux.Session, *yamux.Stream, error) {
-	conn, err := b0tls.EstablishConnection(info.ConnectorAuthenticationEnabled, fmt.Sprintf("%s:%d", hostname, info.Port), tlsConfig)
+	conn, err := b0tls.EstablishConnection(info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled, fmt.Sprintf("%s:%d", hostname, info.Port), tlsConfig)
 	if err != nil {
 		return nil, nil, nil, err
 	}

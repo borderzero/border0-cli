@@ -558,14 +558,12 @@ func (s *Socket) connecorAuthHandshake(conn net.Conn) {
 	tlsConn, err := s.connectorAuthentication(ctx, conn)
 	if err != nil {
 		conn.Close()
-		s.logger.Error("failed to authenticate client", zap.Error(err))
 		s.acceptChan <- connWithError{nil, border0NetError(fmt.Sprintf("failed to authenticate client: %s", err))}
 		return
 	}
 
 	if tlsConn == nil {
 		conn.Close()
-		s.logger.Error("failed to authenticate client")
 		s.acceptChan <- connWithError{nil, border0NetError("failed to authenticate client")}
 		return
 	}
@@ -580,7 +578,7 @@ func (s *Socket) endToEndEncryptionHandshake(conn net.Conn) {
 	md, err := e2EEncryptionMetadata(ctx, conn)
 	if err != nil {
 		conn.Close()
-		s.logger.Error("failed to read metadata from net conn: %s", zap.Error(err))
+		s.logger.Error("failed to read metadata from net conn", zap.Error(err))
 		s.acceptChan <- connWithError{nil, border0NetError(fmt.Sprintf("failed to read metadata from net conn: %s", err))}
 		return
 	}
@@ -588,14 +586,12 @@ func (s *Socket) endToEndEncryptionHandshake(conn net.Conn) {
 	tlsConn, err := s.endToEndEncryptionAuthentication(ctx, conn, md)
 	if err != nil {
 		conn.Close()
-		s.logger.Error("failed to authenticate client", zap.Error(err))
 		s.acceptChan <- connWithError{nil, border0NetError(fmt.Sprintf("failed to authenticate client: %s", err))}
 		return
 	}
 
 	if tlsConn == nil {
 		conn.Close()
-		s.logger.Error("failed to authenticate client")
 		s.acceptChan <- connWithError{nil, border0NetError("failed to authenticate client")}
 		return
 	}

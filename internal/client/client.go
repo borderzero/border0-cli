@@ -809,7 +809,7 @@ func OnInterruptDo(action func()) {
 	}()
 }
 
-func StartConnectorAuthListener(addr string, certificate tls.Certificate, port int) (int, error) {
+func StartConnectorAuthListener(addr string, certificate tls.Certificate, port int, connectorAuthenticationEnabled bool, endToEndEncryptionEnabled bool) (int, error) {
 	tlsConfig := &tls.Config{
 		Certificates:       []tls.Certificate{certificate},
 		InsecureSkipVerify: true,
@@ -829,7 +829,7 @@ func StartConnectorAuthListener(addr string, certificate tls.Certificate, port i
 			}
 
 			go func() {
-				conn, err := ConnectorAuthConnect(addr, tlsConfig)
+				conn, err := Connect(addr, tlsConfig, connectorAuthenticationEnabled, endToEndEncryptionEnabled)
 				if err != nil {
 					log.Printf("failed to connect: %v", err)
 					return
@@ -843,41 +843,31 @@ func StartConnectorAuthListener(addr string, certificate tls.Certificate, port i
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
-func ConnectorAuthConnect(addr string, tlsConfig *tls.Config) (conn net.Conn, err error) {
-	conn, err = tls.Dial("tcp", addr, tlsConfig)
+func Connect(addr string, tlsConfig *tls.Config, connectorAuthenticationEnabled bool, endToEndEncryptionEnabled bool) (*tls.Conn, error) {
+	fmt.Printf("Connecting to %s\n", addr)
+	conn, err := tls.Dial("tcp", addr, tlsConfig)
 	if err != nil {
-		log.Printf("failed to connect: %v", err)
-		return
+		return nil, err
 	}
 
-	err = ConnectorAuthConnectWithConn(conn, tlsConfig)
+	if err := conn.Handshake(); err != nil {
+		return nil, fmt.Errorf("failed to handshake with proxy: %w", err)
+	}
 
-	return
+	return ConnectWithConn(conn, tlsConfig, connectorAuthenticationEnabled, endToEndEncryptionEnabled)
 }
 
-func ConnectorAuthConnectWithConn(conn net.Conn, tlsConfig *tls.Config) error {
-	connectorConn := tls.Client(conn, tlsConfig)
-	if err := connectorConn.Handshake(); err != nil {
-		log.Printf("failed to authenticate to connector: %v", err.Error())
-		return err
+func ConnectWithConn(conn *tls.Conn, tlsConfig *tls.Config, connectorAuthenticationEnabled bool, endToEndEncryptionEnabled bool) (*tls.Conn, error) {
+	if !connectorAuthenticationEnabled && !endToEndEncryptionEnabled {
+		return conn, nil
 	}
 
-	_, err := conn.Write([]byte("BORDER0-CLIENT-CONNECTOR-AUTHENTICATED"))
-	if err != nil {
-		log.Printf("failed to write to proxy: %v", err.Error())
-		conn.Close()
-	}
-
-	return err
-}
-
-func ConnectorAuthConnectWithConnV2(conn net.Conn, tlsConfig *tls.Config, ConnectorAuthenticationEnabled bool) (net.Conn, error) {
 	connectorConn := tls.Client(conn, tlsConfig)
 	if err := connectorConn.Handshake(); err != nil {
 		return nil, fmt.Errorf("failed to authenticate to connector: %w", err)
 	}
 
-	if !ConnectorAuthenticationEnabled {
+	if endToEndEncryptionEnabled {
 		return connectorConn, nil
 	}
 

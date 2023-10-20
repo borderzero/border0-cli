@@ -170,7 +170,7 @@ func (p *postgresClientProxy) handleClientStartup(c *pgproto3.Backend, conn net.
 
 func (p *postgresClientProxy) Dialer(ctx context.Context, network, addr string) (net.Conn, error) {
 	if p.info.ConnectorAuthenticationEnabled {
-		return client.ConnectorAuthConnect(addr, p.tlsConfig)
+		return client.Connect(addr, p.tlsConfig, p.info.ConnectorAuthenticationEnabled, p.info.EndToEndEncryptionEnabled)
 	} else {
 		return net.DialTimeout("tcp", addr, 5*time.Second)
 	}

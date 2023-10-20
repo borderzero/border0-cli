@@ -97,13 +97,15 @@ func newMysqlHandler(c Config) (*mysqlHandler, error) {
 		options = append(options, func(c *client.Conn) { c.SetTLSConfig(tlsConfig) })
 	}
 
-	return &mysqlHandler{
+	mysqlHandler := &mysqlHandler{
 		Config:          c,
 		server:          server.NewDefaultServer(),
 		upstreamAddress: upstreamAddress,
 		awsCredentials:  awsCredentials,
 		options:         options,
-	}, nil
+	}
+
+	return mysqlHandler, nil
 }
 
 func (h mysqlHandler) handleClient(c net.Conn) {
@@ -112,14 +114,14 @@ func (h mysqlHandler) handleClient(c net.Conn) {
 	serverHandler := &mysqlServerHandler{}
 	clientConn, err := server.NewCustomizedConn(c, h.server, &dummyProvider{}, serverHandler)
 	if err != nil {
-		h.Logger.Error("sqlauthproxy: failed to accept connection", zap.Error(err))
+		h.Logger.Error("failed to accept connection", zap.Error(err))
 		return
 	}
 
 	if h.RdsIam {
 		authenticationToken, err := auth.BuildAuthToken(context.TODO(), h.upstreamAddress, h.AwsRegion, h.Username, h.awsCredentials)
 		if err != nil {
-			h.Logger.Error("sqlauthproxy: failed to create authentication token", zap.Error(err))
+			h.Logger.Error("failed to create authentication token", zap.Error(err))
 			return
 		}
 

@@ -79,14 +79,13 @@ var clientTlsCmd = &cobra.Command{
 				}
 
 				go func() {
-					var conn net.Conn
-					conn, err = tls.Dial("tcp", fmt.Sprintf("%s:%d", hostname, info.Port), &tlsConfig)
+					conn, err := tls.Dial("tcp", fmt.Sprintf("%s:%d", hostname, info.Port), &tlsConfig)
 					if err != nil {
 						fmt.Printf("failed to connect to %s:%d: %s\n", hostname, info.Port, err)
 					}
 
 					if info.ConnectorAuthenticationEnabled || info.EndToEndEncryptionEnabled {
-						conn, err = client.ConnectorAuthConnectWithConnV2(conn, &tlsConfig, info.ConnectorAuthenticationEnabled)
+						conn, err = client.ConnectWithConn(conn, &tlsConfig, info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled)
 						if err != nil {
 							fmt.Printf("failed to connect: %s\n", err)
 						}
@@ -97,14 +96,13 @@ var clientTlsCmd = &cobra.Command{
 				}()
 			}
 		} else {
-			var conn net.Conn
 			conn, err := tls.Dial("tcp", fmt.Sprintf("%s:%d", hostname, info.Port), &tlsConfig)
 			if err != nil {
 				return fmt.Errorf("failed to connect to %s:%d: %w", hostname, info.Port, err)
 			}
 
 			if info.ConnectorAuthenticationEnabled || info.EndToEndEncryptionEnabled {
-				conn, err = client.ConnectorAuthConnectWithConnV2(conn, &tlsConfig, info.ConnectorAuthenticationEnabled)
+				conn, err = client.ConnectWithConn(conn, &tlsConfig, info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled)
 				if err != nil {
 					return fmt.Errorf("failed to connect: %w", err)
 				}
@@ -117,9 +115,9 @@ var clientTlsCmd = &cobra.Command{
 	},
 }
 
-func EstablishConnection(connectorAuthenticationEnabled bool, addr string, tlsConfig *tls.Config) (conn net.Conn, err error) {
-	if connectorAuthenticationEnabled {
-		conn, err = client.ConnectorAuthConnect(addr, tlsConfig)
+func EstablishConnection(connectorAuthenticationEnabled, end2EndEncryptionEnabled bool, addr string, tlsConfig *tls.Config) (conn net.Conn, err error) {
+	if connectorAuthenticationEnabled || end2EndEncryptionEnabled {
+		conn, err = client.Connect(addr, tlsConfig, connectorAuthenticationEnabled, end2EndEncryptionEnabled)
 	} else {
 		conn, err = tls.Dial("tcp", addr, tlsConfig)
 	}

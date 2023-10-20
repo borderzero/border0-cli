@@ -69,8 +69,8 @@ var pgcliCmd = &cobra.Command{
 		defer persistPreference()
 		client.OnInterruptDo(persistPreference)
 
-		if info.ConnectorAuthenticationEnabled {
-			info.Port, err = client.StartConnectorAuthListener(fmt.Sprintf("%s:%d", hostname, info.Port), info.SetupTLSCertificate(), 0)
+		if info.ConnectorAuthenticationEnabled || info.EndToEndEncryptionEnabled {
+			info.Port, err = client.StartConnectorAuthListener(fmt.Sprintf("%s:%d", hostname, info.Port), info.SetupTLSCertificate(), 0, info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled)
 			if err != nil {
 				fmt.Println("ERROR: could not setup listener:", err)
 				return err

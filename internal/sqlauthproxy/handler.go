@@ -43,19 +43,20 @@ func Serve(l net.Listener, config Config) error {
 	case "postgres":
 		handler, err = newPostgresHandler(config)
 		if err != nil {
-			return fmt.Errorf("sqlauthproxy: %s", err)
+			return err
 		}
 	default:
 		handler, err = newMysqlHandler(config)
 		if err != nil {
-			return fmt.Errorf("sqlauthproxy: %s", err)
+			return err
 		}
 	}
 
 	for {
 		rconn, err := l.Accept()
 		if err != nil {
-			return fmt.Errorf("sqlauthproxy: failed to accept connection: %s", err)
+			config.Logger.Error("failed to accept connection", zap.Error(err))
+			continue
 		}
 
 		go handler.handleClient(rconn)

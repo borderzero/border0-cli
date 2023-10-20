@@ -63,7 +63,7 @@ var clientVpnCmd = &cobra.Command{
 			InsecureSkipVerify: true,
 		}
 
-		conn, err := establishConnection(info.ConnectorAuthenticationEnabled, fmt.Sprintf("%s:%d", hostname, info.Port), &tlsConfig)
+		conn, err := establishConnection(info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled, fmt.Sprintf("%s:%d", hostname, info.Port), &tlsConfig)
 		if err != nil {
 			return fmt.Errorf("failed to connect: %v", err)
 		}
@@ -269,9 +269,9 @@ func cleanUpAfterSessionDown(routesToDelete []networkRoute) {
 	}
 }
 
-func establishConnection(connectorAuthenticationEnabled bool, addr string, tlsConfig *tls.Config) (conn net.Conn, err error) {
-	if connectorAuthenticationEnabled {
-		conn, err = client.ConnectorAuthConnect(addr, tlsConfig)
+func establishConnection(connectorAuthenticationEnabled, end2EndEncryptionEnabled bool, addr string, tlsConfig *tls.Config) (conn net.Conn, err error) {
+	if connectorAuthenticationEnabled || end2EndEncryptionEnabled {
+		conn, err = client.Connect(addr, tlsConfig, connectorAuthenticationEnabled, end2EndEncryptionEnabled)
 	} else {
 		conn, err = tls.Dial("tcp", addr, tlsConfig)
 	}

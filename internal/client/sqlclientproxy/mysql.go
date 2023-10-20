@@ -144,8 +144,8 @@ func (p *mysqlClientProxy) handleConnection(ctx context.Context, clientConn net.
 }
 
 func (p *mysqlClientProxy) Dialer(ctx context.Context, network, addr string) (net.Conn, error) {
-	if p.info.ConnectorAuthenticationEnabled {
-		return client.ConnectorAuthConnect(addr, p.tlsConfig)
+	if p.info.ConnectorAuthenticationEnabled || p.info.EndToEndEncryptionEnabled {
+		return client.Connect(addr, p.tlsConfig, p.info.ConnectorAuthenticationEnabled, p.info.EndToEndEncryptionEnabled)
 	} else {
 		return net.DialTimeout("tcp", addr, 5*time.Second)
 	}

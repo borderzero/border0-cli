@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net"
 	"net/url"
 	"os"
 	"strings"
@@ -140,7 +139,7 @@ var sshCmd = &cobra.Command{
 			InsecureSkipVerify: true,
 		}
 
-		var conn net.Conn
+		var conn *tls.Conn
 
 		if wsProxy != "" {
 			destination := struct {
@@ -182,7 +181,7 @@ var sshCmd = &cobra.Command{
 		}
 
 		if info.ConnectorAuthenticationEnabled || info.EndToEndEncryptionEnabled {
-			conn, err = client.ConnectorAuthConnectWithConnV2(conn, &tlsConfig, info.ConnectorAuthenticationEnabled)
+			conn, err = client.ConnectWithConn(conn, &tlsConfig, info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled)
 			if err != nil {
 				return fmt.Errorf("failed to connect: %w", err)
 			}
