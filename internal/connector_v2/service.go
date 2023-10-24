@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/gob"
 	"encoding/hex"
 	"encoding/pem"
@@ -52,25 +53,30 @@ import (
 )
 
 const (
-	backoffMaxInterval = 1 * time.Hour
-	serviceConfigPath  = "/etc/border0/"
-	sshHostKeyFile     = "ssh_host_ecdsa_key"
+	backoffMaxInterval       = 1 * time.Hour
+	serviceConfigPath        = "/etc/border0/"
+	sshHostKeyFile           = "ssh_host_ecdsa_key"
+	connectorCertificateFile = "connector.crt"
+	connectorPrivateKeyFile  = "connector.key"
 )
 
 type ConnectorService struct {
-	config              *config.Configuration
-	logger              *zap.Logger
-	backoff             *backoff.ExponentialBackOff
-	version             string
-	context             context.Context
-	stream              pb.ConnectorService_ControlStreamClient
-	heartbeatInterval   int
-	plugins             map[string]plugin.Plugin
-	sockets             map[string]*border0.Socket
-	requests            sync.Map
-	organization        *models.Organization
-	discoveryResultChan chan *plugin.PluginDiscoveryResults
-	sshPrivateHostKey   *gossh.Signer
+	config                   *config.Configuration
+	logger                   *zap.Logger
+	backoff                  *backoff.ExponentialBackOff
+	version                  string
+	context                  context.Context
+	stream                   pb.ConnectorService_ControlStreamClient
+	heartbeatInterval        int
+	plugins                  map[string]plugin.Plugin
+	sockets                  map[string]*border0.Socket
+	requests                 sync.Map
+	organization             *models.Organization
+	discoveryResultChan      chan *plugin.PluginDiscoveryResults
+	sshPrivateHostKey        *gossh.Signer
+	sshPrivateHostKeyLock    sync.Mutex
+	connectorCertificateLock sync.Mutex
+	connectorCertificate     *tls.Certificate
 }
 
 func NewConnectorService(
@@ -156,20 +162,28 @@ func (c *ConnectorService) controlStream() error {
 	go c.heartbeat(ctx)
 	go c.uploadConnectorMetadata(ctx)
 
+	errChan := make(chan error)
+	msgChan := make(chan struct {
+		response *pb.ControlStreamReponse
+		error    error
+	})
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				msg, err := stream.Recv()
+				msgChan <- struct {
+					response *pb.ControlStreamReponse
+					error    error
+				}{msg, err}
+			}
+		}
+	}()
+
 	for {
-		msgChan := make(chan struct {
-			response *pb.ControlStreamReponse
-			error    error
-		})
-
-		go func() {
-			msg, err := stream.Recv()
-			msgChan <- struct {
-				response *pb.ControlStreamReponse
-				error    error
-			}{msg, err}
-		}()
-
 		select {
 		case <-ctx.Done():
 			err := stream.CloseSend()
@@ -178,6 +192,8 @@ func (c *ConnectorService) controlStream() error {
 			}
 
 			return nil
+		case err := <-errChan:
+			return err
 		case msg := <-msgChan:
 			if msg.error != nil {
 				statusErr, ok := status.FromError(msg.error)
@@ -189,89 +205,103 @@ func (c *ConnectorService) controlStream() error {
 				return msg.error
 			}
 
-			switch r := msg.response.GetRequestType().(type) {
-			case *pb.ControlStreamReponse_ConnectorConfig:
-				if err := c.handleConnectorConfig(r.ConnectorConfig); err != nil {
-					c.logger.Error("Failed to handle connector config", zap.Error(err))
-				}
-			case *pb.ControlStreamReponse_Init:
-				if err := c.handleInit(r.Init); err != nil {
-					c.logger.Error("Failed to handle init", zap.Error(err))
-					return fmt.Errorf("failed to handle init: %w", err)
-				}
-			case *pb.ControlStreamReponse_UpdateConfig:
-				switch t := r.UpdateConfig.GetConfigType().(type) {
-				case *pb.UpdateConfig_PluginConfig:
-					if err := c.handlePluginConfig(r.UpdateConfig.GetAction(), r.UpdateConfig.GetPluginConfig()); err != nil {
-						c.logger.Error("Failed to handle plugin config", zap.Error(err))
-						return fmt.Errorf("failed to handle plugin config: %w", err)
+			go func() {
+				switch r := msg.response.GetRequestType().(type) {
+				case *pb.ControlStreamReponse_ConnectorConfig:
+					if err := c.handleConnectorConfig(r.ConnectorConfig); err != nil {
+						c.logger.Error("Failed to handle connector config", zap.Error(err))
 					}
-				case *pb.UpdateConfig_SocketConfig:
-					if err := c.handleSocketConfig(r.UpdateConfig.GetAction(), r.UpdateConfig.GetSocketConfig()); err != nil {
-						c.logger.Error("Failed to handle socket config", zap.Error(err))
-						return fmt.Errorf("failed to handle socket config: %w", err)
+				case *pb.ControlStreamReponse_Init:
+					if err := c.handleInit(r.Init); err != nil {
+						c.logger.Error("Failed to handle init", zap.Error(err))
+						errChan <- fmt.Errorf("failed to handle init: %w", err)
+					}
+				case *pb.ControlStreamReponse_UpdateConfig:
+					switch t := r.UpdateConfig.GetConfigType().(type) {
+					case *pb.UpdateConfig_PluginConfig:
+						if err := c.handlePluginConfig(r.UpdateConfig.GetAction(), r.UpdateConfig.GetPluginConfig()); err != nil {
+							c.logger.Error("Failed to handle plugin config", zap.Error(err))
+							errChan <- fmt.Errorf("failed to handle plugin config: %w", err)
+						}
+					case *pb.UpdateConfig_SocketConfig:
+						if err := c.handleSocketConfig(r.UpdateConfig.GetAction(), r.UpdateConfig.GetSocketConfig()); err != nil {
+							c.logger.Error("Failed to handle socket config", zap.Error(err))
+							errChan <- fmt.Errorf("failed to handle socket config: %w", err)
+						}
+					default:
+						c.logger.Error("unknown config type", zap.Any("type", t))
+					}
+				case *pb.ControlStreamReponse_TunnelCertificateSignResponse:
+					if v, ok := c.requests.Load(r.TunnelCertificateSignResponse.GetRequestId()); ok {
+						responseChan, ok := v.(chan *pb.ControlStreamReponse)
+						if !ok {
+							c.logger.Error("failed to cast response channel", zap.String("request_id", r.TunnelCertificateSignResponse.GetRequestId()))
+						}
+						select {
+						case responseChan <- msg.response:
+						default:
+							c.logger.Error("failed to send response to request channel", zap.String("request_id", r.TunnelCertificateSignResponse.GetRequestId()))
+						}
+					} else {
+						c.logger.Error("unknown request id", zap.String("request_id", r.TunnelCertificateSignResponse.GetRequestId()))
+					}
+				case *pb.ControlStreamReponse_SshCertificateSignResponse:
+					if v, ok := c.requests.Load(r.SshCertificateSignResponse.GetRequestId()); ok {
+						responseChan, ok := v.(chan *pb.ControlStreamReponse)
+						if !ok {
+							c.logger.Error("failed to cast response channel", zap.String("request_id", r.SshCertificateSignResponse.GetRequestId()))
+						}
+						select {
+						case responseChan <- msg.response:
+						default:
+							c.logger.Error("failed to send response to request channel", zap.String("request_id", r.SshCertificateSignResponse.GetRequestId()))
+						}
+					} else {
+						c.logger.Error("unknown request id", zap.String("request_id", r.SshCertificateSignResponse.GetRequestId()))
+					}
+				case *pb.ControlStreamReponse_Heartbeat:
+				case *pb.ControlStreamReponse_Stop:
+					c.logger.Info("stopping connector as requested by server")
+					errChan <- backoff.Permanent(nil)
+				case *pb.ControlStreamReponse_Disconnect:
+					c.logger.Info("disconnecting connector as requested by server")
+					err := stream.CloseSend()
+					if err != nil {
+						errChan <- fmt.Errorf("failed to close control stream: %w", err)
+					}
+					errChan <- fmt.Errorf("connector was disconnected by server")
+				case *pb.ControlStreamReponse_Authorize:
+					if v, ok := c.requests.Load(r.Authorize.GetRequestId()); ok {
+						responseChan, ok := v.(chan *pb.ControlStreamReponse)
+						if !ok {
+							c.logger.Error("failed to cast response channel", zap.String("request_id", r.Authorize.GetRequestId()))
+						}
+						select {
+						case responseChan <- msg.response:
+						default:
+							c.logger.Error("failed to send response to request channel", zap.String("request_id", r.Authorize.GetRequestId()))
+						}
+					} else {
+						c.logger.Error("unknown request id", zap.String("request_id", r.Authorize.RequestId))
+					}
+				case *pb.ControlStreamReponse_CertifcateSignResponse:
+					if v, ok := c.requests.Load(r.CertifcateSignResponse.GetRequestId()); ok {
+						responseChan, ok := v.(chan *pb.ControlStreamReponse)
+						if !ok {
+							c.logger.Error("failed to cast response channel", zap.String("request_id", r.CertifcateSignResponse.GetRequestId()))
+						}
+						select {
+						case responseChan <- msg.response:
+						default:
+							c.logger.Error("failed to send response to request channel", zap.String("request_id", r.CertifcateSignResponse.RequestId))
+						}
+					} else {
+						c.logger.Error("unknown request id", zap.String("request_id", r.CertifcateSignResponse.GetRequestId()))
 					}
 				default:
-					c.logger.Error("unknown config type", zap.Any("type", t))
+					c.logger.Error("unknown message type", zap.Any("type", r))
 				}
-			case *pb.ControlStreamReponse_TunnelCertificateSignResponse:
-				if v, ok := c.requests.Load(r.TunnelCertificateSignResponse.RequestId); ok {
-					responseChan, ok := v.(chan *pb.ControlStreamReponse)
-					if !ok {
-						c.logger.Error("failed to cast response channel", zap.String("request_id", r.TunnelCertificateSignResponse.RequestId))
-					}
-					select {
-					case responseChan <- msg.response:
-					default:
-						c.logger.Error("failed to send response to request channel", zap.String("request_id", r.TunnelCertificateSignResponse.RequestId))
-					}
-				} else {
-					c.logger.Error("unknown request id", zap.String("request_id", r.TunnelCertificateSignResponse.RequestId))
-				}
-			case *pb.ControlStreamReponse_SshCertificateSignResponse:
-				if v, ok := c.requests.Load(r.SshCertificateSignResponse.RequestId); ok {
-					responseChan, ok := v.(chan *pb.ControlStreamReponse)
-					if !ok {
-						c.logger.Error("failed to cast response channel", zap.String("request_id", r.SshCertificateSignResponse.RequestId))
-					}
-					select {
-					case responseChan <- msg.response:
-					default:
-						c.logger.Error("failed to send response to request channel", zap.String("request_id", r.SshCertificateSignResponse.RequestId))
-					}
-				} else {
-					c.logger.Error("unknown request id", zap.String("request_id", r.SshCertificateSignResponse.RequestId))
-				}
-			case *pb.ControlStreamReponse_Heartbeat:
-			case *pb.ControlStreamReponse_Stop:
-				c.logger.Info("stopping connector as requested by server")
-				return backoff.Permanent(nil)
-			case *pb.ControlStreamReponse_Disconnect:
-				c.logger.Info("disconnecting connector as requested by server")
-				err := stream.CloseSend()
-				if err != nil {
-					return fmt.Errorf("failed to close control stream: %w", err)
-				}
-
-				return fmt.Errorf("connector was disconnected by server")
-			case *pb.ControlStreamReponse_Authorize:
-				if v, ok := c.requests.Load(r.Authorize.RequestId); ok {
-					responseChan, ok := v.(chan *pb.ControlStreamReponse)
-					if !ok {
-						c.logger.Error("failed to cast response channel", zap.String("request_id", r.Authorize.RequestId))
-					}
-					select {
-					case responseChan <- msg.response:
-					default:
-						c.logger.Error("failed to send response to request channel", zap.String("request_id", r.Authorize.RequestId))
-					}
-				} else {
-					c.logger.Error("unknown request id", zap.String("request_id", r.Authorize.RequestId))
-				}
-
-			default:
-				c.logger.Error("unknown message type", zap.Any("type", r))
-			}
+			}()
 		}
 	}
 }
@@ -538,7 +568,16 @@ func (c *ConnectorService) newSocket(config *pb.SocketConfig) (*border0.Socket, 
 		return nil, fmt.Errorf("failed to build upstream data: %w", err)
 	}
 
-	socket, err := border0.NewSocketFromConnectorAPI(c.context, c, *s, c.organization, c.logger.With(zap.String("socket_id", s.SocketID)))
+	var certificate *tls.Certificate
+	if s.EndToEndEncryptionEnabled {
+		var err error
+		certificate, err = c.Certificate()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get connector certificate: %w", err)
+		}
+	}
+
+	socket, err := border0.NewSocketFromConnectorAPI(c.context, c, *s, c.organization, c.logger.With(zap.String("socket_id", s.SocketID)), certificate)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create socket: %w", err)
 	}
@@ -766,6 +805,9 @@ func hashStruct(data interface{}) (string, error) {
 }
 
 func (c *ConnectorService) hostkey() (*gossh.Signer, error) {
+	c.sshPrivateHostKeyLock.Lock()
+	defer c.sshPrivateHostKeyLock.Unlock()
+
 	if c.sshPrivateHostKey != nil {
 		return c.sshPrivateHostKey, nil
 	}
@@ -844,6 +886,152 @@ func storeHostkey(key []byte, path, filename string) error {
 
 	if err := os.WriteFile(path+filename, key, 0600); err != nil {
 		return fmt.Errorf("failed to write host key: %w", err)
+	}
+
+	return nil
+}
+
+func (c *ConnectorService) Certificate() (*tls.Certificate, error) {
+	c.connectorCertificateLock.Lock()
+	defer c.connectorCertificateLock.Unlock()
+
+	if c.connectorCertificate != nil {
+		return c.connectorCertificate, nil
+	}
+
+	var keyFilePath, certFilePath string
+
+	if _, err := os.Stat(serviceConfigPath + connectorPrivateKeyFile); err == nil {
+		keyFilePath = serviceConfigPath + connectorPrivateKeyFile
+	}
+
+	if _, err := os.Stat(serviceConfigPath + connectorCertificateFile); err == nil {
+		certFilePath = serviceConfigPath + connectorCertificateFile
+	}
+
+	if keyFilePath == "" || certFilePath == "" {
+		u, err := user.Current()
+		if err == nil {
+			if _, err := os.Stat(u.HomeDir + "/.border0/" + connectorPrivateKeyFile); err == nil {
+				keyFilePath = u.HomeDir + "/.border0/" + connectorPrivateKeyFile
+			}
+
+			if _, err := os.Stat(u.HomeDir + "/.border0/" + connectorCertificateFile); err == nil {
+				certFilePath = u.HomeDir + "/.border0/" + connectorCertificateFile
+			}
+		}
+	}
+
+	if keyFilePath != "" && certFilePath != "" {
+		certificate, err := tls.LoadX509KeyPair(certFilePath, keyFilePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load certificate: %s", err)
+		}
+
+		c.connectorCertificate = &certificate
+		return c.connectorCertificate, nil
+	}
+
+	_, privKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate private key: %w", err)
+	}
+
+	csrTemplate := x509.CertificateRequest{
+		Subject:            pkix.Name{CommonName: "border0"},
+		SignatureAlgorithm: x509.PureEd25519,
+	}
+
+	csrBytes, err := x509.CreateCertificateRequest(rand.Reader, &csrTemplate, privKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create certificate request: %w", err)
+	}
+
+	csrPem := pem.Block{
+		Type:  "CERTIFICATE REQUEST",
+		Bytes: csrBytes,
+	}
+
+	requestId := uuid.New().String()
+	recChan := make(chan *pb.ControlStreamReponse)
+	c.requests.Store(requestId, recChan)
+	defer c.requests.Delete(requestId)
+
+	if err := c.sendControlStreamRequest(&pb.ControlStreamRequest{
+		RequestType: &pb.ControlStreamRequest_CertifcateSignRequest{
+			CertifcateSignRequest: &pb.CertifcateSignRequest{
+				RequestId:                 requestId,
+				CertificateSigningRequest: pem.EncodeToMemory(&csrPem),
+			},
+		},
+	}); err != nil {
+		return nil, fmt.Errorf("failed to send connector certificate sign request: %w", err)
+	}
+
+	var certificate []byte
+	select {
+	case <-time.After(5 * time.Second):
+		return nil, fmt.Errorf("timeout waiting for certificate sign response")
+	case r := <-recChan:
+		response := r.GetCertifcateSignResponse()
+		if response == nil {
+			return nil, fmt.Errorf("invalid response")
+		}
+
+		if response.GetRequestId() == "" {
+			return nil, fmt.Errorf("invalid response")
+		}
+
+		c.requests.Delete(response.GetRequestId())
+		certificate = response.GetCertificate()
+	}
+
+	privKeyBytes, err := x509.MarshalPKCS8PrivateKey(privKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal private key: %w", err)
+	}
+
+	privKeyPem := &pem.Block{
+		Type:  "PRIVATE KEY",
+		Bytes: privKeyBytes,
+	}
+
+	cert, err := tls.X509KeyPair(certificate, pem.EncodeToMemory(privKeyPem))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse certificate: %w", err)
+	}
+
+	c.connectorCertificate = &cert
+
+	serviceConfigPathErr := storeConnectorCertifcate(pem.EncodeToMemory(privKeyPem), certificate, serviceConfigPath, connectorPrivateKeyFile, connectorCertificateFile)
+	if serviceConfigPathErr != nil {
+		u, err := user.Current()
+		if err != nil {
+			return nil, fmt.Errorf("failed to store the certifcate files %s %s", err, serviceConfigPathErr)
+		}
+
+		err = storeConnectorCertifcate(pem.EncodeToMemory(privKeyPem), certificate, u.HomeDir+"/.border0/", connectorPrivateKeyFile, connectorCertificateFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to store the certifcate files %s %s", err, serviceConfigPathErr)
+		}
+	}
+
+	return c.connectorCertificate, nil
+}
+
+func storeConnectorCertifcate(key []byte, certficate []byte, path, keyFileName, certificateFileName string) error {
+	if _, err := os.Stat(path); err == nil {
+		if err := os.MkdirAll(path, 0700); err != nil {
+			return fmt.Errorf("failed to create directory %s %w", path, err)
+		}
+	}
+
+	if err := os.WriteFile(path+keyFileName, key, 0600); err != nil {
+		return fmt.Errorf("failed to write key file: %w", err)
+	}
+
+	if err := os.WriteFile(path+certificateFileName, certficate, 0600); err != nil {
+		return fmt.Errorf("failed to write certificate file: %w", err)
 	}
 
 	return nil

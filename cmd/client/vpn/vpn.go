@@ -2,6 +2,7 @@ package vpn
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"log"
 	"net"
@@ -58,12 +59,18 @@ var clientVpnCmd = &cobra.Command{
 			PrivateKey:  info.PrivateKey,
 		}
 
-		tlsConfig := tls.Config{
-			Certificates:       []tls.Certificate{certificate},
-			InsecureSkipVerify: true,
+		systemCertPool, err := x509.SystemCertPool()
+		if err != nil {
+			log.Fatalf("failed to get system cert pool: %v", err.Error())
 		}
 
-		conn, err := establishConnection(info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled, fmt.Sprintf("%s:%d", hostname, info.Port), &tlsConfig)
+		tlsConfig := tls.Config{
+			Certificates: []tls.Certificate{certificate},
+			RootCAs:      systemCertPool,
+			ServerName:   hostname,
+		}
+
+		conn, err := establishConnection(info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled, fmt.Sprintf("%s:%d", hostname, info.Port), &tlsConfig, info.CaCertificate)
 		if err != nil {
 			return fmt.Errorf("failed to connect: %v", err)
 		}
@@ -269,9 +276,9 @@ func cleanUpAfterSessionDown(routesToDelete []networkRoute) {
 	}
 }
 
-func establishConnection(connectorAuthenticationEnabled, end2EndEncryptionEnabled bool, addr string, tlsConfig *tls.Config) (conn net.Conn, err error) {
+func establishConnection(connectorAuthenticationEnabled, end2EndEncryptionEnabled bool, addr string, tlsConfig *tls.Config, caCertificate *x509.Certificate) (conn net.Conn, err error) {
 	if connectorAuthenticationEnabled || end2EndEncryptionEnabled {
-		conn, err = client.Connect(addr, tlsConfig, connectorAuthenticationEnabled, end2EndEncryptionEnabled)
+		conn, err = client.Connect(addr, tlsConfig, tlsConfig.Certificates[0], caCertificate, connectorAuthenticationEnabled, end2EndEncryptionEnabled)
 	} else {
 		conn, err = tls.Dial("tcp", addr, tlsConfig)
 	}

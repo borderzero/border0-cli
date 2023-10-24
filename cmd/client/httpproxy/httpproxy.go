@@ -2,13 +2,13 @@ package httpproxy
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"sync"
 
-	b0tls "github.com/borderzero/border0-cli/cmd/client/tls"
 	"github.com/borderzero/border0-cli/cmd/logger"
 	"github.com/borderzero/border0-cli/internal/client"
 	"github.com/borderzero/border0-cli/internal/enum"
@@ -69,9 +69,15 @@ var clientProxyCmd = &cobra.Command{
 			PrivateKey:  info.PrivateKey,
 		}
 
+		systemCertPool, err := x509.SystemCertPool()
+		if err != nil {
+			log.Fatalf("failed to get system cert pool: %v", err.Error())
+		}
+
 		tlsConfig := tls.Config{
-			Certificates:       []tls.Certificate{certificate},
-			InsecureSkipVerify: true,
+			Certificates: []tls.Certificate{certificate},
+			ServerName:   hostname,
+			RootCAs:      systemCertPool,
 		}
 
 		// Create a multiplexed session over multiple TCP connections
@@ -134,7 +140,7 @@ func (sm *SessionManager) addSession(session *yamux.Session, logStream *yamux.St
 }
 
 func (sm *SessionManager) createSession(info *client.ResourceInfo, tlsConfig *tls.Config, hostname string) (net.Conn, *yamux.Session, *yamux.Stream, error) {
-	conn, err := b0tls.EstablishConnection(info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled, fmt.Sprintf("%s:%d", hostname, info.Port), tlsConfig)
+	conn, err := establishConnection(info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled, fmt.Sprintf("%s:%d", hostname, info.Port), tlsConfig, info.CaCertificate)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -229,6 +235,16 @@ func handleClientConnection(clientConn net.Conn, session *yamux.Session) {
 
 	go io.Copy(clientConn, stream)
 	io.Copy(stream, clientConn)
+}
+
+func establishConnection(connectorAuthenticationEnabled, end2EndEncryptionEnabled bool, addr string, tlsConfig *tls.Config, caCertificate *x509.Certificate) (conn net.Conn, err error) {
+	if connectorAuthenticationEnabled || end2EndEncryptionEnabled {
+		conn, err = client.Connect(addr, tlsConfig, tlsConfig.Certificates[0], caCertificate, connectorAuthenticationEnabled, end2EndEncryptionEnabled)
+	} else {
+		conn, err = tls.Dial("tcp", addr, tlsConfig)
+	}
+
+	return
 }
 
 func AddCommandsTo(client *cobra.Command) {

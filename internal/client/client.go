@@ -141,10 +141,16 @@ func MTLSLogin(logger *zap.Logger, hostname string) (string, jwt.MapClaims, erro
 	return token, claims, nil
 }
 
-func ReadOrgCert(orgID string) (cert *x509.Certificate, key *rsa.PrivateKey, crtPath string, keyPath string, err error) {
+func ReadOrgCert(orgID string) (cert *x509.Certificate, key *rsa.PrivateKey, caCert *x509.Certificate, crtPath string, keyPath, caPath string, err error) {
 	home, err := util.GetUserHomeDir()
 	if err != nil {
 		err = fmt.Errorf("error: failed to get homedir : %w", err)
+		return
+	}
+
+	caPath = filepath.Join(home, ".border0", orgID+"-ca.crt")
+	if _, err = os.Stat(caPath); os.IsNotExist(err) {
+		err = fmt.Errorf("error: ca certificate file %s not found", caPath)
 		return
 	}
 
@@ -202,10 +208,28 @@ func ReadOrgCert(orgID string) (cert *x509.Certificate, key *rsa.PrivateKey, crt
 		return
 	}
 
+	caCertPEM, err := os.ReadFile(caPath)
+	if err != nil {
+		err = fmt.Errorf("error: failed to read ca certificate file : %w", err)
+		return
+	}
+
+	caCertBlock, _ := pem.Decode(caCertPEM)
+	if caCertBlock == nil {
+		err = fmt.Errorf("error: failed to decode ca certificate file : %w", err)
+		return
+	}
+
+	caCert, err = x509.ParseCertificate(caCertBlock.Bytes)
+	if err != nil {
+		err = fmt.Errorf("error: failed to parse ca certificate file : %w", err)
+		return
+	}
+
 	return
 }
 
-func WriteCertToFile(cert *CertificateResponse, socketDNS string) (crtPath, keyPath string, err error) {
+func WriteCertToFile(cert *CertificateResponse, socketDNS string) (crtPath, keyPath, caPath string, err error) {
 	home, err := util.GetUserHomeDir()
 	if err != nil {
 		err = fmt.Errorf("error: failed to get homedir : %w", err)
@@ -221,6 +245,7 @@ func WriteCertToFile(cert *CertificateResponse, socketDNS string) (crtPath, keyP
 		}
 	}
 
+	caPath = filepath.Join(dotDir, socketDNS+"-ca.crt")
 	crtPath = filepath.Join(dotDir, socketDNS+".crt")
 	keyPath = filepath.Join(dotDir, socketDNS+".key")
 
@@ -234,7 +259,12 @@ func WriteCertToFile(cert *CertificateResponse, socketDNS string) (crtPath, keyP
 		return
 	}
 
-	return crtPath, keyPath, nil
+	if err = os.WriteFile(caPath, []byte(cert.CaCertificate), 0600); err != nil {
+		err = fmt.Errorf("error: failed to write ca certificate file : %w", err)
+		return
+	}
+
+	return crtPath, keyPath, caPath, nil
 }
 
 func GetSocketPort(name string, token string) (socketPort int, err error) {
@@ -276,7 +306,7 @@ func IsClientCertValid() (crtPath, keyPath string, valid bool) {
 		return
 	}
 
-	cert, _, crtPath, keyPath, err := ReadOrgCert(orgID)
+	cert, _, _, crtPath, keyPath, _, err := ReadOrgCert(orgID)
 	if err != nil {
 		return
 	}
@@ -288,7 +318,7 @@ func IsClientCertValid() (crtPath, keyPath string, valid bool) {
 	return
 }
 
-func FetchCertAndReturnPaths(logger *zap.Logger, hostname string) (crtPath, keyPath string, err error) {
+func FetchCertAndReturnPaths(logger *zap.Logger, hostname string) (crtPath, keyPath, caPath string, err error) {
 	token, claims, err := MTLSLogin(logger, hostname)
 	if err != nil {
 		return
@@ -298,7 +328,7 @@ func FetchCertAndReturnPaths(logger *zap.Logger, hostname string) (crtPath, keyP
 	orgID := fmt.Sprint(claims["org_id"])
 
 	cert := GetCert(token, userEmail)
-	crtPath, keyPath, err = WriteCertToFile(cert, orgID)
+	crtPath, keyPath, caPath, err = WriteCertToFile(cert, orgID)
 	if err != nil {
 		return
 	}
@@ -309,8 +339,10 @@ func FetchCertAndReturnPaths(logger *zap.Logger, hostname string) (crtPath, keyP
 type ResourceInfo struct {
 	Certficate                     *x509.Certificate
 	PrivateKey                     *rsa.PrivateKey
+	CaCertificate                  *x509.Certificate
 	CertificatePath                string
 	PrivateKeyPath                 string
+	CaCertificatePath              string
 	Port                           int
 	ConnectorAuthenticationEnabled bool
 	EndToEndEncryptionEnabled      bool
@@ -333,7 +365,7 @@ func GetResourceInfo(logger *zap.Logger, hostname string) (info ResourceInfo, er
 
 	var ok bool
 	if info.CertificatePath, info.PrivateKeyPath, ok = IsClientCertValid(); !ok {
-		info.CertificatePath, info.PrivateKeyPath, err = FetchCertAndReturnPaths(logger, hostname)
+		info.CertificatePath, info.PrivateKeyPath, info.CaCertificatePath, err = FetchCertAndReturnPaths(logger, hostname)
 		if err != nil {
 			return
 		}
@@ -348,11 +380,7 @@ func GetResourceInfo(logger *zap.Logger, hostname string) (info ResourceInfo, er
 	info.ConnectorAuthenticationEnabled = resource.ConnectorAuthenticationEnabled
 	info.EndToEndEncryptionEnabled = resource.EndToEndEncryptionEnabled
 
-	if hostname == "ssh.bass.toonk.nl" {
-		info.EndToEndEncryptionEnabled = true
-	}
-
-	info.Certficate, info.PrivateKey, _, _, err = ReadOrgCert(claims["org_id"].(string))
+	info.Certficate, info.PrivateKey, info.CaCertificate, _, _, _, err = ReadOrgCert(claims["org_id"].(string))
 	if err != nil {
 		return
 	}
@@ -447,8 +475,9 @@ type CertificateSigningRequest struct {
 }
 
 type CertificateResponse struct {
-	PrivateKey  string `json:"client_private_key,omitempty"`
-	Certificate string `json:"client_certificate,omitempty"`
+	PrivateKey    string `json:"client_private_key,omitempty"`
+	Certificate   string `json:"client_certificate,omitempty"`
+	CaCertificate string `json:"ca_certificate,omitempty"`
 }
 
 func GetCert(token string, email string) *CertificateResponse {
@@ -696,7 +725,6 @@ func CertToKeyStore(cert *x509.Certificate, key *rsa.PrivateKey) (ks keystore.Ke
 
 	keyData, err := x509.MarshalPKCS8PrivateKey(key)
 	if err != nil {
-		fmt.Println("hier dus fout")
 		return
 	}
 
@@ -809,10 +837,16 @@ func OnInterruptDo(action func()) {
 	}()
 }
 
-func StartConnectorAuthListener(addr string, certificate tls.Certificate, port int, connectorAuthenticationEnabled bool, endToEndEncryptionEnabled bool) (int, error) {
+func StartConnectorAuthListener(addr string, certificate tls.Certificate, caCertificate *x509.Certificate, port int, connectorAuthenticationEnabled bool, endToEndEncryptionEnabled bool) (int, error) {
+	systemCertPool, err := x509.SystemCertPool()
+	if err != nil {
+		return 0, fmt.Errorf("failed to load system cert pool: %w", err)
+	}
+
 	tlsConfig := &tls.Config{
-		Certificates:       []tls.Certificate{certificate},
-		InsecureSkipVerify: true,
+		Certificates: []tls.Certificate{certificate},
+		RootCAs:      systemCertPool,
+		ServerName:   addr,
 	}
 
 	l, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
@@ -829,7 +863,7 @@ func StartConnectorAuthListener(addr string, certificate tls.Certificate, port i
 			}
 
 			go func() {
-				conn, err := Connect(addr, tlsConfig, connectorAuthenticationEnabled, endToEndEncryptionEnabled)
+				conn, err := Connect(addr, tlsConfig, certificate, caCertificate, connectorAuthenticationEnabled, endToEndEncryptionEnabled)
 				if err != nil {
 					log.Printf("failed to connect: %v", err)
 					return
@@ -843,8 +877,7 @@ func StartConnectorAuthListener(addr string, certificate tls.Certificate, port i
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
-func Connect(addr string, tlsConfig *tls.Config, connectorAuthenticationEnabled bool, endToEndEncryptionEnabled bool) (*tls.Conn, error) {
-	fmt.Printf("Connecting to %s\n", addr)
+func Connect(addr string, tlsConfig *tls.Config, certificate tls.Certificate, caCert *x509.Certificate, connectorAuthenticationEnabled bool, endToEndEncryptionEnabled bool) (*tls.Conn, error) {
 	conn, err := tls.Dial("tcp", addr, tlsConfig)
 	if err != nil {
 		return nil, err
@@ -854,12 +887,47 @@ func Connect(addr string, tlsConfig *tls.Config, connectorAuthenticationEnabled 
 		return nil, fmt.Errorf("failed to handshake with proxy: %w", err)
 	}
 
-	return ConnectWithConn(conn, tlsConfig, connectorAuthenticationEnabled, endToEndEncryptionEnabled)
+	return ConnectWithConn(conn, certificate, caCert, connectorAuthenticationEnabled, endToEndEncryptionEnabled)
 }
 
-func ConnectWithConn(conn *tls.Conn, tlsConfig *tls.Config, connectorAuthenticationEnabled bool, endToEndEncryptionEnabled bool) (*tls.Conn, error) {
+func ConnectWithConn(conn *tls.Conn, certificate tls.Certificate, caCert *x509.Certificate, connectorAuthenticationEnabled bool, endToEndEncryptionEnabled bool) (*tls.Conn, error) {
 	if !connectorAuthenticationEnabled && !endToEndEncryptionEnabled {
 		return conn, nil
+	}
+
+	var tlsConfig *tls.Config
+	if endToEndEncryptionEnabled {
+		caCertPool := x509.NewCertPool()
+		caCertPool.AddCert(caCert)
+
+		tlsConfig = &tls.Config{
+			Certificates:       []tls.Certificate{certificate},
+			RootCAs:            caCertPool,
+			InsecureSkipVerify: true,
+			VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+				// Convert raw certs to x509.Certificate
+				certs := make([]*x509.Certificate, len(rawCerts))
+				for i, asn1Data := range rawCerts {
+					cert, err := x509.ParseCertificate(asn1Data)
+					if err != nil {
+						return errors.New("failed to parse certificate from server: " + err.Error())
+					}
+					certs[i] = cert
+				}
+
+				// Use the root CA to verify the certificate chain
+				opts := x509.VerifyOptions{
+					Roots: caCertPool,
+				}
+				_, err := certs[0].Verify(opts)
+				return err
+			},
+		}
+	} else {
+		tlsConfig = &tls.Config{
+			Certificates:       []tls.Certificate{certificate},
+			InsecureSkipVerify: true,
+		}
 	}
 
 	connectorConn := tls.Client(conn, tlsConfig)

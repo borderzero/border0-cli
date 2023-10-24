@@ -50,7 +50,7 @@ var clientCertFetchCmd = &cobra.Command{
 	Short: "Fetch Client certificate",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if crtPath, keyPath, ok := client.IsClientCertValid(); !ok {
-			crtPath, keyPath, err := client.FetchCertAndReturnPaths(logger.Logger, hostname)
+			crtPath, keyPath, _, err := client.FetchCertAndReturnPaths(logger.Logger, hostname)
 			if err != nil {
 				return err
 			}

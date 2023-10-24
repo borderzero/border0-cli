@@ -3,6 +3,7 @@ package ssh
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -134,9 +135,15 @@ var sshCmd = &cobra.Command{
 			PrivateKey:  info.PrivateKey,
 		}
 
+		systemCertPool, err := x509.SystemCertPool()
+		if err != nil {
+			return fmt.Errorf("failed to load system cert pool: %w", err)
+		}
+
 		tlsConfig := tls.Config{
-			Certificates:       []tls.Certificate{certificate},
-			InsecureSkipVerify: true,
+			Certificates: []tls.Certificate{certificate},
+			ServerName:   hostname,
+			RootCAs:      systemCertPool,
 		}
 
 		var conn *tls.Conn
@@ -181,7 +188,7 @@ var sshCmd = &cobra.Command{
 		}
 
 		if info.ConnectorAuthenticationEnabled || info.EndToEndEncryptionEnabled {
-			conn, err = client.ConnectWithConn(conn, &tlsConfig, info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled)
+			conn, err = client.ConnectWithConn(conn, certificate, info.CaCertificate, info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled)
 			if err != nil {
 				return fmt.Errorf("failed to connect: %w", err)
 			}

@@ -2,6 +2,7 @@ package tls
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"log"
@@ -59,9 +60,15 @@ var clientTlsCmd = &cobra.Command{
 			PrivateKey:  info.PrivateKey,
 		}
 
+		systemCertPool, err := x509.SystemCertPool()
+		if err != nil {
+			log.Fatalf("failed to get system cert pool: %v", err.Error())
+		}
+
 		tlsConfig := tls.Config{
-			Certificates:       []tls.Certificate{certificate},
-			InsecureSkipVerify: true,
+			Certificates: []tls.Certificate{certificate},
+			RootCAs:      systemCertPool,
+			ServerName:   hostname,
 		}
 
 		if listener > 0 {
@@ -85,7 +92,7 @@ var clientTlsCmd = &cobra.Command{
 					}
 
 					if info.ConnectorAuthenticationEnabled || info.EndToEndEncryptionEnabled {
-						conn, err = client.ConnectWithConn(conn, &tlsConfig, info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled)
+						conn, err = client.ConnectWithConn(conn, certificate, info.CaCertificate, info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled)
 						if err != nil {
 							fmt.Printf("failed to connect: %s\n", err)
 						}
@@ -102,7 +109,7 @@ var clientTlsCmd = &cobra.Command{
 			}
 
 			if info.ConnectorAuthenticationEnabled || info.EndToEndEncryptionEnabled {
-				conn, err = client.ConnectWithConn(conn, &tlsConfig, info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled)
+				conn, err = client.ConnectWithConn(conn, certificate, info.CaCertificate, info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled)
 				if err != nil {
 					return fmt.Errorf("failed to connect: %w", err)
 				}
@@ -113,16 +120,6 @@ var clientTlsCmd = &cobra.Command{
 
 		return err
 	},
-}
-
-func EstablishConnection(connectorAuthenticationEnabled, end2EndEncryptionEnabled bool, addr string, tlsConfig *tls.Config) (conn net.Conn, err error) {
-	if connectorAuthenticationEnabled || end2EndEncryptionEnabled {
-		conn, err = client.Connect(addr, tlsConfig, connectorAuthenticationEnabled, end2EndEncryptionEnabled)
-	} else {
-		conn, err = tls.Dial("tcp", addr, tlsConfig)
-	}
-
-	return
 }
 
 func copy(con net.Conn, in io.Reader, out io.Writer) {
