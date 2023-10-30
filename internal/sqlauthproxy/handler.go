@@ -6,6 +6,7 @@ import (
 	"net"
 
 	"github.com/borderzero/border0-cli/internal/api/models"
+	"github.com/borderzero/border0-cli/internal/border0"
 	"github.com/borderzero/border0-cli/internal/cloudsql"
 	"github.com/borderzero/border0-go/types/common"
 	"go.uber.org/zap"
@@ -16,23 +17,26 @@ type handler interface {
 }
 
 type Config struct {
-	Logger            *zap.Logger
-	Hostname          string
-	Port              int
-	RdsIam            bool
-	Username          string
-	Password          string
-	UpstreamType      string
-	UpstreamCAFile    string
-	UpstreamCertFile  string
-	UpstreamKeyFile   string
-	UpstreamCABlock   []byte
-	UpstreamCertBlock []byte
-	UpstreamKeyBlock  []byte
-	UpstreamTLS       bool
-	AwsRegion         string
-	AwsCredentials    *common.AwsCredentials
-	DialerFunc        func(context.Context, string, string) (net.Conn, error)
+	Logger               *zap.Logger
+	Hostname             string
+	Port                 int
+	RdsIam               bool
+	Username             string
+	Password             string
+	UpstreamType         string
+	UpstreamCAFile       string
+	UpstreamCertFile     string
+	UpstreamKeyFile      string
+	UpstreamCABlock      []byte
+	UpstreamCertBlock    []byte
+	UpstreamKeyBlock     []byte
+	UpstreamTLS          bool
+	AwsRegion            string
+	AwsCredentials       *common.AwsCredentials
+	DialerFunc           func(context.Context, string, string) (net.Conn, error)
+	e2eEncryptionEnabled bool
+	socket               models.Socket
+	border0API           border0.Border0API
 }
 
 func Serve(l net.Listener, config Config) error {
@@ -63,29 +67,32 @@ func Serve(l net.Listener, config Config) error {
 	}
 }
 
-func BuildHandlerConfig(logger *zap.Logger, socket models.Socket) (*Config, error) {
+func BuildHandlerConfig(logger *zap.Logger, socket models.Socket, border0API border0.Border0API) (*Config, error) {
 	upstreamTLS := true
 	if socket.ConnectorLocalData.UpstreamTLS != nil {
 		upstreamTLS = *socket.ConnectorLocalData.UpstreamTLS
 	}
 
 	handlerConfig := &Config{
-		Logger:            logger,
-		Hostname:          socket.ConnectorData.TargetHostname,
-		Port:              socket.ConnectorData.Port,
-		RdsIam:            socket.ConnectorLocalData.RdsIAMAuth,
-		Username:          socket.ConnectorLocalData.UpstreamUsername,
-		Password:          socket.ConnectorLocalData.UpstreamPassword,
-		UpstreamType:      socket.UpstreamType,
-		AwsRegion:         socket.ConnectorLocalData.AWSRegion,
-		AwsCredentials:    socket.ConnectorLocalData.AwsCredentials,
-		UpstreamCAFile:    socket.ConnectorLocalData.UpstreamCACertFile,
-		UpstreamCertFile:  socket.ConnectorLocalData.UpstreamCertFile,
-		UpstreamKeyFile:   socket.ConnectorLocalData.UpstreamKeyFile,
-		UpstreamCABlock:   socket.ConnectorLocalData.UpstreamCACertBlock,
-		UpstreamCertBlock: socket.ConnectorLocalData.UpstreamCertBlock,
-		UpstreamKeyBlock:  socket.ConnectorLocalData.UpstreamKeyBlock,
-		UpstreamTLS:       upstreamTLS,
+		Logger:               logger,
+		Hostname:             socket.ConnectorData.TargetHostname,
+		Port:                 socket.ConnectorData.Port,
+		RdsIam:               socket.ConnectorLocalData.RdsIAMAuth,
+		Username:             socket.ConnectorLocalData.UpstreamUsername,
+		Password:             socket.ConnectorLocalData.UpstreamPassword,
+		UpstreamType:         socket.UpstreamType,
+		AwsRegion:            socket.ConnectorLocalData.AWSRegion,
+		AwsCredentials:       socket.ConnectorLocalData.AwsCredentials,
+		UpstreamCAFile:       socket.ConnectorLocalData.UpstreamCACertFile,
+		UpstreamCertFile:     socket.ConnectorLocalData.UpstreamCertFile,
+		UpstreamKeyFile:      socket.ConnectorLocalData.UpstreamKeyFile,
+		UpstreamCABlock:      socket.ConnectorLocalData.UpstreamCACertBlock,
+		UpstreamCertBlock:    socket.ConnectorLocalData.UpstreamCertBlock,
+		UpstreamKeyBlock:     socket.ConnectorLocalData.UpstreamKeyBlock,
+		UpstreamTLS:          upstreamTLS,
+		e2eEncryptionEnabled: socket.EndToEndEncryptionEnabled,
+		socket:               socket,
+		border0API:           border0API,
 	}
 
 	if socket.ConnectorLocalData.CloudSQLConnector {

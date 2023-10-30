@@ -130,8 +130,13 @@ func (p *mysqlClientProxy) handleConnection(ctx context.Context, clientConn net.
 
 	defer proxyConn.Close()
 
+	var tlsConfig *tls.Config
+	if !p.info.EndToEndEncryptionEnabled {
+		tlsConfig = p.tlsConfig
+	}
+
 	serverConn, err := mysqlClient.ConnectWithDialer(ctx, "tcp", fmt.Sprintf("%s:%d", p.resource.Hostname(), p.info.Port), proxyConn.GetUser(), "", "", p.Dialer, func(c *mysqlClient.Conn) {
-		c.SetTLSConfig(p.tlsConfig)
+		c.SetTLSConfig(tlsConfig)
 	})
 	if err != nil {
 		fmt.Println("failed to connect to socket:", err)

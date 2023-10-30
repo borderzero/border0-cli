@@ -1,8 +1,10 @@
 package session
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -19,6 +21,8 @@ import (
 	"github.com/aws/session-manager-plugin/src/message"
 	"github.com/aws/session-manager-plugin/src/retry"
 	awsSession "github.com/aws/session-manager-plugin/src/sessionmanagerplugin/session"
+	"github.com/borderzero/border0-cli/internal/api/models"
+	"github.com/borderzero/border0-cli/internal/border0"
 	"github.com/borderzero/border0-cli/internal/ssh/config"
 	"github.com/manifoldco/promptui"
 	"go.uber.org/zap"
@@ -38,10 +42,11 @@ type ssmSessionHandler struct {
 
 type ssmSession struct {
 	awsSession.Session
-	retryParams        retry.RepeatableExponentialRetryer
-	logger             *zap.Logger
 	config             *config.ProxyConfig
-	sessionKey         *string
+	logger             *zap.Logger
+	metadata           *border0.E2EEncryptionMetadata
+	sshServerConfig    *ssh.ServerConfig
+	retryParams        retry.RepeatableExponentialRetryer
 	downstreamSshConn  *ssh.ServerConn
 	downstreamSshChans <-chan ssh.NewChannel
 	downstreamSshReqs  <-chan *ssh.Request
@@ -52,7 +57,7 @@ type ssmSession struct {
 	ssmClient          *ssm.Client
 }
 
-func NewSsmSession(logger *zap.Logger, config *config.ProxyConfig) (*ssmSessionHandler, error) {
+func NewSsmSessionHandler(logger *zap.Logger, config *config.ProxyConfig) (*ssmSessionHandler, error) {
 	ssmClient := ssm.NewFromConfig(config.AwsConfig)
 
 	if config.ECSSSMProxy != nil {
@@ -83,32 +88,55 @@ func NewSsmSession(logger *zap.Logger, config *config.ProxyConfig) (*ssmSessionH
 func (s *ssmSessionHandler) Proxy(conn net.Conn) {
 	defer conn.Close()
 
-	sshConn, chans, reqs, sessionKey, _, err := newSSHServerConn(conn, s.config)
+	session := &ssmSession{
+		logger:          s.logger,
+		config:          s.config,
+		sshServerConfig: s.config.SshServerConfig,
+		sshWidth:        80,
+		sshHeight:       24,
+		awsSSMTarget:    s.config.AwsSSMTarget,
+		ssmClient:       s.ssmClient,
+	}
+
+	if s.config.EndToEndEncryption {
+		e2EEncryptionConn, ok := conn.(border0.E2EEncryptionConn)
+		if !ok {
+			conn.Close()
+			s.logger.Error("failed to cast connection to e2eencryption")
+			return
+		}
+
+		if e2EEncryptionConn.Metadata == nil {
+			s.logger.Error("invalid e2e metadata")
+			return
+		}
+
+		session.metadata = e2EEncryptionConn.Metadata
+		session.sshServerConfig.PublicKeyCallback = session.publicKeyCallback
+		session.logger = session.logger.With(zap.String("session_key", session.metadata.SessionKey))
+	}
+
+	var err error
+	session.downstreamSshConn, session.downstreamSshChans, session.downstreamSshReqs, err = ssh.NewServerConn(conn, session.config.SshServerConfig)
 	if err != nil {
-		s.logger.Sugar().Errorf("failed to accept ssh connection: %s", err)
+		session.logger.Error("failed to accept ssh connection", zap.Error(err))
 		return
 	}
 
-	session := &ssmSession{
-		config:             s.config,
-		downstreamSshConn:  sshConn,
-		downstreamSshChans: chans,
-		downstreamSshReqs:  reqs,
-		logger:             s.logger,
-		sshWidth:           80,
-		sshHeight:          24,
-		awsSSMTarget:       s.config.AwsSSMTarget,
-		ssmClient:          s.ssmClient,
-	}
-
-	if sessionKey != nil {
-		session.sessionKey = sessionKey
-		session.logger = session.logger.With(zap.String("session_key", *sessionKey))
+	if session.config.EndToEndEncryption {
+		if err := session.config.Border0API.UpdateSession(models.SessionUpdate{
+			SessionKey: session.metadata.SessionKey,
+			Socket:     session.config.Socket,
+			UserData:   ",sshuser=" + session.downstreamSshConn.User(),
+		}); err != nil {
+			session.logger.Error("failed to update session", zap.Error(err))
+			return
+		}
 	}
 
 	// we don't support global requests (yet)
 	// so we can disregard the reqs channel
-	go ssh.DiscardRequests(reqs)
+	go ssh.DiscardRequests(session.downstreamSshReqs)
 
 	if err := session.handleChannels(); err != nil {
 		s.logger.Error("failed to handle channels", zap.Error(err))
@@ -451,7 +479,7 @@ func (s *ssmSession) handleSSMShell(channel ssh.Channel, req *ssh.Request) {
 		pwc := NewPipeWriteChannel(channel)
 		channel = pwc
 
-		r := NewRecording(s.logger, pwc.reader, *s.sessionKey, s.config.Border0API, s.sshWidth, s.sshHeight)
+		r := NewRecording(s.logger, pwc.reader, s.metadata.SessionKey, s.config.Border0API, s.sshWidth, s.sshHeight)
 		if err := r.Record(); err != nil {
 			s.logger.Error("failed to record session", zap.Error(err))
 			return
@@ -628,4 +656,43 @@ func (s *ssmSession) handleWindowChange(width, height int) error {
 	}
 
 	return nil
+}
+
+func (s *ssmSession) publicKeyCallback(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
+	cert, ok := key.(*ssh.Certificate)
+	if !ok {
+		return nil, errors.New("can not cast certificate")
+	}
+
+	if s.config.OrgSshCA == nil {
+		return nil, errors.New("error: unable to validate certificate, no CA configured")
+	}
+
+	if bytes.Equal(cert.SignatureKey.Marshal(), s.config.OrgSshCA.Marshal()) {
+	} else {
+		return nil, errors.New("error: invalid client certificate")
+	}
+
+	if s.metadata.UserEmail != cert.KeyId {
+		return nil, errors.New("error: ssh certificate does not match tls certificate")
+	}
+
+	var certChecker ssh.CertChecker
+	if err := certChecker.CheckCert("mysocket_ssh_signed", cert); err != nil {
+		return nil, fmt.Errorf("error: invalid client certificate: %s", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	actions, _, err := s.config.Border0API.Evaluate(ctx, s.config.Socket, s.metadata.ClientIP, s.metadata.UserEmail, s.metadata.SessionKey)
+	if err != nil {
+		return nil, fmt.Errorf("error: failed to authorize: %s", err)
+	}
+
+	if len(actions) == 0 {
+		return nil, errors.New("error: authorization failed")
+	}
+
+	return &ssh.Permissions{}, nil
 }

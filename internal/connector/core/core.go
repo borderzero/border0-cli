@@ -95,7 +95,7 @@ func (c *ConnectorCore) TunnelConnnect(ctx context.Context, socket models.Socket
 
 	var handlerConfig *sqlauthproxy.Config
 	if socket.SocketType == "database" {
-		handlerConfig, err = sqlauthproxy.BuildHandlerConfig(c.logger, socket)
+		handlerConfig, err = sqlauthproxy.BuildHandlerConfig(c.logger, socket, nil)
 		if err != nil {
 			return fmt.Errorf("failed to create config for socket: %s", err)
 		}

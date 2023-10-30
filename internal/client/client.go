@@ -837,7 +837,7 @@ func OnInterruptDo(action func()) {
 	}()
 }
 
-func StartConnectorAuthListener(addr string, certificate tls.Certificate, caCertificate *x509.Certificate, port int, connectorAuthenticationEnabled bool, endToEndEncryptionEnabled bool) (int, error) {
+func StartConnectorAuthListener(hostname string, port int, certificate tls.Certificate, caCertificate *x509.Certificate, localPort int, connectorAuthenticationEnabled bool, endToEndEncryptionEnabled bool) (int, error) {
 	systemCertPool, err := x509.SystemCertPool()
 	if err != nil {
 		return 0, fmt.Errorf("failed to load system cert pool: %w", err)
@@ -846,13 +846,15 @@ func StartConnectorAuthListener(addr string, certificate tls.Certificate, caCert
 	tlsConfig := &tls.Config{
 		Certificates: []tls.Certificate{certificate},
 		RootCAs:      systemCertPool,
-		ServerName:   addr,
+		ServerName:   hostname,
 	}
 
-	l, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
+	l, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", localPort))
 	if err != nil {
 		return 0, fmt.Errorf("unable to start local TLS listener, %s", err)
 	}
+
+	addr := fmt.Sprintf("%s:%d", hostname, port)
 
 	go func() {
 		defer l.Close()
@@ -865,8 +867,7 @@ func StartConnectorAuthListener(addr string, certificate tls.Certificate, caCert
 			go func() {
 				conn, err := Connect(addr, tlsConfig, certificate, caCertificate, connectorAuthenticationEnabled, endToEndEncryptionEnabled)
 				if err != nil {
-					log.Printf("failed to connect: %v", err)
-					return
+					log.Fatalf("failed to connect: %s\n", err)
 				}
 
 				handleConnection(lcon, conn)

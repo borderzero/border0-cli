@@ -12,13 +12,27 @@ import (
 	"github.com/borderzero/border0-cli/internal/border0"
 	"github.com/borderzero/border0-cli/internal/util"
 	"github.com/go-mysql-org/go-mysql/client"
+	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/server"
 	"go.uber.org/zap"
 	"k8s.io/client-go/util/cert"
+
+	pe "github.com/pingcap/errors"
 )
+
+const (
+	serverVersion = "5.7.0"
+)
+
+type mysqlServerHandler interface {
+	server.Handler
+	Database() string
+	HandleConnection(serverConn *server.Conn, clientConn *client.Conn)
+}
 
 type mysqlHandler struct {
 	Config
+	logger          *zap.Logger
 	options         []func(*client.Conn)
 	awsCredentials  aws.CredentialsProvider
 	server          *server.Server
@@ -26,16 +40,6 @@ type mysqlHandler struct {
 }
 
 type dummyProvider struct{}
-
-type mysqlServerHandler struct {
-	server.EmptyHandler
-	Database string
-}
-
-func (h *mysqlServerHandler) UseDB(dbName string) error {
-	h.Database = dbName
-	return nil
-}
 
 func (p *dummyProvider) CheckUsername(username string) (found bool, err error) {
 	return true, nil
@@ -97,9 +101,17 @@ func newMysqlHandler(c Config) (*mysqlHandler, error) {
 		options = append(options, func(c *client.Conn) { c.SetTLSConfig(tlsConfig) })
 	}
 
+	var mysqlServer *server.Server
+	if c.e2eEncryptionEnabled {
+		mysqlServer = server.NewServer(serverVersion, mysql.DEFAULT_COLLATION_ID, mysql.AUTH_NATIVE_PASSWORD, nil, nil)
+	} else {
+		mysqlServer = server.NewDefaultServer()
+	}
+
 	mysqlHandler := &mysqlHandler{
 		Config:          c,
-		server:          server.NewDefaultServer(),
+		logger:          c.Logger,
+		server:          mysqlServer,
 		upstreamAddress: upstreamAddress,
 		awsCredentials:  awsCredentials,
 		options:         options,
@@ -111,21 +123,15 @@ func newMysqlHandler(c Config) (*mysqlHandler, error) {
 func (h mysqlHandler) handleClient(c net.Conn) {
 	defer c.Close()
 
-	serverHandler := &mysqlServerHandler{}
-	clientConn, err := server.NewCustomizedConn(c, h.server, &dummyProvider{}, serverHandler)
-	if err != nil {
-		h.Logger.Error("failed to accept connection", zap.Error(err))
-		return
-	}
-
+	password := h.Password
 	if h.RdsIam {
 		authenticationToken, err := auth.BuildAuthToken(context.TODO(), h.upstreamAddress, h.AwsRegion, h.Username, h.awsCredentials)
 		if err != nil {
-			h.Logger.Error("failed to create authentication token", zap.Error(err))
+			h.logger.Error("failed to create authentication token", zap.Error(err))
 			return
 		}
 
-		h.Password = authenticationToken
+		password = authenticationToken
 	}
 
 	if h.DialerFunc == nil {
@@ -134,11 +140,61 @@ func (h mysqlHandler) handleClient(c net.Conn) {
 		}
 	}
 
-	serverConn, err := client.ConnectWithDialer(context.Background(), "tcp", h.upstreamAddress, h.Username, h.Password, serverHandler.Database, h.DialerFunc, h.options...)
+	clientConn, err := client.ConnectWithDialer(context.Background(), "tcp", h.upstreamAddress, h.Username, password, "", h.DialerFunc, h.options...)
 	if err != nil {
-		h.Logger.Error("sqlauthproxy: failed to connect upstream:", zap.Error(err))
+		h.logger.Error("upstream mysql connection failed:", zap.Error(pe.Unwrap(err)))
 		return
 	}
 
-	border0.ProxyConnection(clientConn.Conn.Conn, serverConn.Conn.Conn)
+	defer func() {
+		if clientConn != nil {
+			clientConn.Close()
+		}
+	}()
+
+	var serverHandler mysqlServerHandler
+	if h.Config.e2eEncryptionEnabled {
+		e2EEncryptionConn, ok := c.(border0.E2EEncryptionConn)
+		if !ok {
+			c.Close()
+			h.logger.Error("failed to cast connection to e2eencryption")
+			return
+		}
+
+		if e2EEncryptionConn.Metadata == nil {
+			h.logger.Error("invalid e2e metadata")
+			return
+		}
+
+		serverHandler = &mysqlLocalHandler{
+			logger:          h.logger.With(zap.String("session_key", e2EEncryptionConn.Metadata.SessionKey)),
+			metadata:        e2EEncryptionConn.Metadata,
+			statements:      make(map[int64]*client.Stmt),
+			preparedQueries: make(map[int64]string),
+			border0API:      h.border0API,
+			socket:          h.socket,
+			lastAuth:        time.Now(),
+			recordingChan:   make(chan message, 100),
+			clientConn:      clientConn,
+		}
+	} else {
+		serverHandler = &mysqlEmptyHandler{
+			logger:     h.logger,
+			clientConn: clientConn,
+		}
+	}
+
+	serverConn, err := server.NewCustomizedConn(c, h.server, &dummyProvider{}, serverHandler)
+	if err != nil {
+		h.Logger.Error("failed to accept connection", zap.Error(pe.Unwrap(err)))
+		return
+	}
+
+	defer func() {
+		if serverConn != nil && !serverConn.Closed() {
+			serverConn.Close()
+		}
+	}()
+
+	serverHandler.HandleConnection(serverConn, clientConn)
 }

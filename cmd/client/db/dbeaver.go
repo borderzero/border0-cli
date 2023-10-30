@@ -62,7 +62,7 @@ var dbeaverCmd = &cobra.Command{
 		connectionName := hostname
 
 		if info.ConnectorAuthenticationEnabled || info.EndToEndEncryptionEnabled {
-			info.Port, err = client.StartConnectorAuthListener(fmt.Sprintf("%s:%d", hostname, info.Port), info.SetupTLSCertificate(), info.CaCertificate, 0, info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled)
+			info.Port, err = client.StartConnectorAuthListener(hostname, info.Port, info.SetupTLSCertificate(), info.CaCertificate, 0, info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled)
 			if err != nil {
 				return fmt.Errorf("could not start listener: %w", err)
 			}
@@ -136,7 +136,7 @@ var dbeaverCmd = &cobra.Command{
 			err = client.ExecCommand("dbeaver", "-con", conn)
 		}
 
-		if info.ConnectorAuthenticationEnabled {
+		if info.ConnectorAuthenticationEnabled || info.EndToEndEncryptionEnabled {
 			ch := make(chan os.Signal, 1)
 			signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
 			<-ch

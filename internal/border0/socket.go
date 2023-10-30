@@ -57,10 +57,11 @@ type Border0API interface {
 }
 
 type E2EEncryptionMetadata struct {
-	ClientIP   string `json:"client_ip"`
-	UserEmail  string `json:"user_email"`
-	SessionKey string `json:"session_key"`
-	SshTicket  []byte `json:"ssh_ticket,omitempty"`
+	ClientIP       string   `json:"client_ip"`
+	UserEmail      string   `json:"user_email"`
+	SessionKey     string   `json:"session_key"`
+	SshTicket      []byte   `json:"ssh_ticket,omitempty"`
+	AllowedActions []string `json:"allowed_actions,omitempty"`
 }
 
 type E2EEncryptionConn struct {
@@ -749,7 +750,8 @@ func (s *Socket) endToEndEncryptionAuthentication(ctx context.Context, conn net.
 		return nil, fmt.Errorf("unauthorized request for user")
 	}
 
-	s.logger.Info("end to end encryption authentication successful", zap.String("user", md.UserEmail), zap.String("clientIP", md.ClientIP))
+	md.AllowedActions = actions
+
 	return tlsConn, nil
 }
 

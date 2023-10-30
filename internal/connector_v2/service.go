@@ -666,7 +666,7 @@ func (c *ConnectorService) Listen(socket *border0.Socket) {
 
 	var handlerConfig *sqlauthproxy.Config
 	if socket.SocketType == "database" {
-		handlerConfig, err = sqlauthproxy.BuildHandlerConfig(logger, *socket.Socket)
+		handlerConfig, err = sqlauthproxy.BuildHandlerConfig(logger, *socket.Socket, c)
 		if err != nil {
 			logger.Error("failed to create config for socket", zap.String("socket", socket.SocketID), zap.Error(err))
 			return
