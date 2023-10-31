@@ -24,7 +24,7 @@ type message struct {
 	Command      string  `json:"command"`
 	Status       *uint16 `json:"status"`
 	Duration     int64   `json:"duration"`
-	Rows         *int    `json:"rows"`
+	Rows         *int64  `json:"rows"`
 	AffectedRows *uint64 `json:"affected_rows"`
 	Result       *string `json:"result"`
 }

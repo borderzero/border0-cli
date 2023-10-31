@@ -4,12 +4,17 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/borderzero/border0-cli/internal/api/models"
 	"github.com/borderzero/border0-cli/internal/border0"
 	"github.com/borderzero/border0-cli/internal/cloudsql"
 	"github.com/borderzero/border0-go/types/common"
 	"go.uber.org/zap"
+)
+
+const (
+	authTTL = 1 * time.Minute
 )
 
 type handler interface {

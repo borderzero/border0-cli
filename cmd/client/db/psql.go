@@ -87,6 +87,10 @@ var psqlCmd = &cobra.Command{
 			sslmode = "verify-ca"
 		}
 
+		if info.EndToEndEncryptionEnabled {
+			sslmode = "disable"
+		}
+
 		return client.ExecCommand("psql",
 			"--host", hostname,
 			"--port", fmt.Sprint(info.Port),

@@ -32,6 +32,10 @@ type postgresHandler struct {
 	tlsConfig      *tls.Config
 }
 
+type postgresServerHandler interface {
+	HandleConnection()
+}
+
 func newPostgresHandler(c Config) (*postgresHandler, error) {
 	var awsCredentials aws.CredentialsProvider
 	if c.RdsIam {
@@ -42,13 +46,16 @@ func newPostgresHandler(c Config) (*postgresHandler, error) {
 		awsCredentials = cfg.Credentials
 	}
 
-	generatedCert, err := generateX509KeyPair()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate tls certificate: %s", err)
-	}
+	var tlsConfig *tls.Config
+	if !c.e2eEncryptionEnabled {
+		generatedCert, err := generateX509KeyPair()
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate tls certificate: %s", err)
+		}
 
-	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{generatedCert},
+		tlsConfig = &tls.Config{
+			Certificates: []tls.Certificate{generatedCert},
+		}
 	}
 
 	var (
@@ -164,6 +171,8 @@ func (h postgresHandler) handleClient(c net.Conn) {
 		return
 	}
 
+	defer conn.Close(ctx)
+
 	pgconn, err := conn.Hijack()
 	if err != nil {
 		h.Logger.Error("sqlauthproxy: failed to connect to upstream", zap.Error(err))
@@ -175,10 +184,46 @@ func (h postgresHandler) handleClient(c net.Conn) {
 		return
 	}
 
-	border0.ProxyConnection(c, pgconn.Conn)
+	var serverHandler postgresServerHandler
+	if h.Config.e2eEncryptionEnabled {
+		e2EEncryptionConn, ok := c.(border0.E2EEncryptionConn)
+		if !ok {
+			c.Close()
+			h.Logger.Error("failed to cast connection to e2eencryption")
+			return
+		}
+
+		if e2EEncryptionConn.Metadata == nil {
+			h.Logger.Error("invalid e2e metadata")
+			return
+		}
+
+		serverHandler = &postgresLocalHandler{
+			logger:          h.Logger.With(zap.String("session_key", e2EEncryptionConn.Metadata.SessionKey)),
+			metadata:        e2EEncryptionConn.Metadata,
+			border0API:      h.border0API,
+			socket:          h.socket,
+			lastAuth:        time.Now(),
+			recordingChan:   make(chan message, 100),
+			clientConn:      pgconn,
+			serverConn:      c,
+			serverBackend:   clientConn,
+			preparedQueries: make(map[string]string),
+			binds:           make(map[string]bind),
+			database:        h.UpstreamConfig.Database,
+		}
+
+	} else {
+		serverHandler = &postgresCopyyHandler{
+			clientConn: pgconn,
+			serverConn: c,
+		}
+	}
+
+	serverHandler.HandleConnection()
 }
 
-func (h postgresHandler) handleClientStartup(conn net.Conn) (*pgproto3.StartupMessage, *tls.Conn, error) {
+func (h postgresHandler) handleClientStartup(conn net.Conn) (*pgproto3.StartupMessage, net.Conn, error) {
 	c := pgproto3.NewBackend(pgproto3.NewChunkReader(conn), conn)
 
 	message, err := c.ReceiveStartupMessage()
@@ -188,20 +233,31 @@ func (h postgresHandler) handleClientStartup(conn net.Conn) (*pgproto3.StartupMe
 
 	switch msg := message.(type) {
 	case *pgproto3.StartupMessage:
-		tlsConn, ok := conn.(*tls.Conn)
-		if !ok {
-			return nil, nil, fmt.Errorf("failed to get TLS connection info")
+		if !h.e2eEncryptionEnabled {
+			_, ok := conn.(*tls.Conn)
+			if !ok {
+				return nil, nil, fmt.Errorf("failed to get TLS connection info")
+			}
 		}
 
-		return msg, tlsConn, nil
+		return msg, conn, nil
 	case *pgproto3.SSLRequest:
-		_, err = conn.Write([]byte("S"))
-		if err != nil {
-			return nil, nil, err
-		}
+		if h.e2eEncryptionEnabled {
+			_, err := conn.Write([]byte("N"))
+			if err != nil {
+				return nil, nil, err
+			}
 
-		conn = tls.Server(conn, h.tlsConfig)
-		return h.handleClientStartup(conn)
+			return h.handleClientStartup(conn)
+		} else {
+			_, err = conn.Write([]byte("S"))
+			if err != nil {
+				return nil, nil, err
+			}
+
+			conn = tls.Server(conn, h.tlsConfig)
+			return h.handleClientStartup(conn)
+		}
 	case *pgproto3.CancelRequest:
 		conn.Close()
 		return nil, nil, nil

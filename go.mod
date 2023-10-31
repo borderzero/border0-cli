@@ -49,6 +49,7 @@ require (
 	github.com/pingcap/errors v0.11.5-0.20210425183316-da1aaba5fb63
 	github.com/satori/go.uuid v1.2.0
 	github.com/shirou/gopsutil/v3 v3.23.4
+	github.com/siddontang/go-log v0.0.0-20190221022429-1e957dd83bed
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.7.0
@@ -103,7 +104,6 @@ require (
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/shopspring/decimal v1.3.1 // indirect
 	github.com/siddontang/go v0.0.0-20180604090527-bdc77568d726 // indirect
-	github.com/siddontang/go-log v0.0.0-20190221022429-1e957dd83bed // indirect
 	github.com/tklauser/go-sysconf v0.3.11 // indirect
 	github.com/tklauser/numcpus v0.6.0 // indirect
 	github.com/twinj/uuid v0.0.0-20151029044442-89173bcdda19 // indirect
