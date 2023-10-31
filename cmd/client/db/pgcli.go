@@ -84,6 +84,10 @@ var pgcliCmd = &cobra.Command{
 			sslmode = "verify-ca"
 		}
 
+		if info.EndToEndEncryptionEnabled {
+			sslmode = "disable"
+		}
+
 		return client.ExecCommand("pgcli", fmt.Sprintf(
 			"postgres://:@%[1]s:%[2]d/%[3]s?sslmode=%[7]s&sslkey=%[4]s&sslcert=%[5]s&sslrootcert=%[6]s",
 			hostname, info.Port, dbName, info.PrivateKeyPath, info.CertificatePath, certChainPath, sslmode,

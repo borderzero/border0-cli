@@ -18,10 +18,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	authTTL = 1 * time.Minute
-)
-
 type mysqlLocalHandler struct {
 	logger          *zap.Logger
 	metadata        *border0.E2EEncryptionMetadata
@@ -115,7 +111,7 @@ func (h *mysqlLocalHandler) HandleQuery(query string) (*mysql.Result, error) {
 	start := time.Now()
 	var err error
 	var affectedRows *uint64
-	var rows *int
+	var rows *int64
 	var status *uint16
 
 	defer func() {
@@ -148,7 +144,7 @@ func (h *mysqlLocalHandler) HandleQuery(query string) (*mysql.Result, error) {
 	var res *mysql.Result
 	switch stmt.(type) {
 	case *sqlparser.Select:
-		streamRows := 0
+		var streamRows int64
 		res = &mysql.Result{}
 		err = h.clientConn.ExecuteSelectStreaming(query, res,
 			// called per row within result
@@ -171,7 +167,8 @@ func (h *mysqlLocalHandler) HandleQuery(query string) (*mysql.Result, error) {
 		res, err = h.clientConn.Execute(query)
 		if res != nil {
 			affectedRows = &res.AffectedRows
-			rows = pointer.To(res.RowNumber())
+			r := int64(res.RowNumber())
+			rows = pointer.To(r)
 			status = pointer.To(res.Status)
 		}
 
@@ -207,7 +204,7 @@ func (h *mysqlLocalHandler) HandleStmtExecute(context interface{}, query string,
 	queryStr := fmt.Sprintf("%s with args %v", query, args)
 	var affectedRows *uint64
 	var status *uint16
-	var rows *int
+	var rows *int64
 
 	defer func() {
 		var pErr *string
@@ -249,7 +246,8 @@ func (h *mysqlLocalHandler) HandleStmtExecute(context interface{}, query string,
 		res, err := inlineStmt.Execute(args...)
 		if res != nil {
 			affectedRows = &res.AffectedRows
-			rows = pointer.To(res.RowNumber())
+			r := int64(res.RowNumber())
+			rows = pointer.To(r)
 			status = pointer.To(res.Status)
 		}
 
@@ -264,7 +262,8 @@ func (h *mysqlLocalHandler) HandleStmtExecute(context interface{}, query string,
 		res, err := stmt.Execute(args...)
 		if res != nil {
 			affectedRows = &res.AffectedRows
-			rows = pointer.To(res.RowNumber())
+			r := int64(res.RowNumber())
+			rows = pointer.To(r)
 			status = pointer.To(res.Status)
 		}
 
@@ -305,7 +304,6 @@ func (h *mysqlLocalHandler) HandleStmtPrepare(query string) (int, int, interface
 
 func (h *mysqlLocalHandler) isAllowed(stmtType string) (bool, error) {
 	if time.Since(h.lastAuth) > authTTL {
-		h.logger.Debug("Evaluating policy")
 		actions, _, err := h.border0API.Evaluate(context.TODO(), &h.socket, h.metadata.ClientIP, h.metadata.UserEmail, h.metadata.SessionKey)
 		if err != nil {
 			return false, err
@@ -324,7 +322,7 @@ func (h *mysqlLocalHandler) isAllowed(stmtType string) (bool, error) {
 	return false, nil
 }
 
-func (h *mysqlLocalHandler) record(command string, status *uint16, result *string, duration int64, rows *int, affectedRows *uint64) {
+func (h *mysqlLocalHandler) record(command string, status *uint16, result *string, duration int64, rows *int64, affectedRows *uint64) {
 	if !h.socket.RecordingEnabled {
 		return
 	}

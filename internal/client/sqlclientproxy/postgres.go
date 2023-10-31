@@ -41,12 +41,19 @@ func newPostgresClientProxy(logger *zap.Logger, port int, resource models.Client
 		ServerName:   resource.Hostname(),
 	}
 
-	upstreamConfig, err := pgconn.ParseConfig(fmt.Sprintf("postgres://%s:%d/", resource.Hostname(), info.Port))
+	var sslmode string
+	if info.EndToEndEncryptionEnabled {
+		sslmode = "?sslmode=disable"
+	}
+
+	upstreamConfig, err := pgconn.ParseConfig(fmt.Sprintf("postgres://%s:%d/%s", resource.Hostname(), info.Port, sslmode))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse upstream config: %s", err)
 	}
 
-	upstreamConfig.TLSConfig = tlsConfig
+	if !info.EndToEndEncryptionEnabled {
+		upstreamConfig.TLSConfig = tlsConfig
+	}
 
 	return &postgresClientProxy{
 		sqlClientProxy: sqlClientProxy{
@@ -176,7 +183,7 @@ func (p *postgresClientProxy) handleClientStartup(c *pgproto3.Backend, conn net.
 }
 
 func (p *postgresClientProxy) Dialer(ctx context.Context, network, addr string) (net.Conn, error) {
-	if p.info.ConnectorAuthenticationEnabled {
+	if p.info.ConnectorAuthenticationEnabled || p.info.EndToEndEncryptionEnabled {
 		return client.Connect(addr, p.tlsConfig, p.tlsConfig.Certificates[0], p.info.CaCertificate, p.info.ConnectorAuthenticationEnabled, p.info.EndToEndEncryptionEnabled)
 	} else {
 		return net.DialTimeout("tcp", addr, 5*time.Second)
