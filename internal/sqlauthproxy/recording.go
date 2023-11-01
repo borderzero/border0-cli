@@ -4,10 +4,17 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"fmt"
+	"time"
 
 	"github.com/borderzero/border0-cli/internal/border0"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+)
+
+const (
+	uploadBufferThreshold = 1024 * 1024
+	uploadInterval        = 30 * time.Second
 )
 
 type recording struct {
@@ -16,6 +23,7 @@ type recording struct {
 	sessionKey  string
 	recordingID uuid.UUID
 	zipWriter   *gzip.Writer
+	buf         bytes.Buffer
 }
 
 type message struct {
@@ -39,65 +47,90 @@ func newRecording(logger *zap.Logger, sessionKey string, api border0.Border0API)
 }
 
 func (r *recording) Record(messageChan chan message) error {
-	var buf bytes.Buffer
-	r.zipWriter = gzip.NewWriter(&buf)
+	r.zipWriter = gzip.NewWriter(&r.buf)
 
 	go func() {
+		shouldUpload := true
+		dateWritten := false
+
+		defer func() {
+			if shouldUpload && dateWritten {
+				if err := r.upload(); err != nil {
+					r.logger.Error("failed to upload recording", zap.Error(err))
+					return
+				}
+			}
+		}()
+
+		timer := time.NewTimer(uploadInterval)
+
 		for {
-			message, open := <-messageChan
-			if !open {
-				break
-			}
-
-			logJson, _ := json.Marshal(message)
-			logJson = append([]byte(logJson), "\n"...)
-
-			if _, err := r.zipWriter.Write([]byte(logJson)); err != nil {
-				r.logger.Error("failed to write to recording", zap.Error(err))
-				return
-			}
-
-			if buf.Len() > 1024*1024 { // 1MB
-				if err := r.zipWriter.Flush(); err != nil {
-					r.logger.Error("failed to flush session log file", zap.Error(err))
+			select {
+			case message, open := <-messageChan:
+				if !open {
 					return
 				}
 
-				if err := r.zipWriter.Close(); err != nil {
-					r.logger.Error("failed to close session log file", zap.Error(err))
+				logJson, _ := json.Marshal(message)
+				logJson = append([]byte(logJson), "\n"...)
+
+				if _, err := r.zipWriter.Write([]byte(logJson)); err != nil {
+					r.logger.Error("failed to write to recording", zap.Error(err))
+					shouldUpload = false
 					return
 				}
 
-				uploadBuffer := make([]byte, buf.Len())
-				copy(uploadBuffer, buf.Bytes())
-				buf.Reset()
-				r.zipWriter = gzip.NewWriter(&buf)
+				dateWritten = true
 
-				go func(uploadBuffer []byte) {
-					if err := r.api.UploadRecording(uploadBuffer, r.sessionKey, r.recordingID.String()); err != nil {
+				if r.buf.Len() > uploadBufferThreshold {
+					if err := r.upload(); err != nil {
 						r.logger.Error("failed to upload recording", zap.Error(err))
+						shouldUpload = false
 						return
 					}
-				}(uploadBuffer)
+
+					timer.Reset(uploadInterval)
+					dateWritten = false
+				}
+			case <-timer.C:
+				if dateWritten {
+					if err := r.upload(); err != nil {
+						r.logger.Error("failed to upload recording", zap.Error(err))
+						shouldUpload = false
+						return
+					}
+
+					dateWritten = false
+				}
+
+				timer.Reset(uploadInterval)
 			}
 		}
+	}()
 
-		if err := r.zipWriter.Flush(); err != nil {
-			r.logger.Error("failed to flush session log file", zap.Error(err))
-			return
-		}
+	return nil
+}
 
-		if err := r.zipWriter.Close(); err != nil {
-			r.logger.Error("failed to close session log file", zap.Error(err))
-			return
-		}
+func (r *recording) upload() error {
+	if err := r.zipWriter.Flush(); err != nil {
+		return fmt.Errorf("failed to flush session log file: %s", err)
+	}
 
-		uploadBuffer := buf.Bytes()
+	if err := r.zipWriter.Close(); err != nil {
+		return fmt.Errorf("failed to close session log file: %s", err)
+	}
+
+	uploadBuffer := make([]byte, r.buf.Len())
+	copy(uploadBuffer, r.buf.Bytes())
+	r.buf.Reset()
+	r.zipWriter = gzip.NewWriter(&r.buf)
+
+	go func(uploadBuffer []byte) {
 		if err := r.api.UploadRecording(uploadBuffer, r.sessionKey, r.recordingID.String()); err != nil {
 			r.logger.Error("failed to upload recording", zap.Error(err))
 			return
 		}
-	}()
+	}(uploadBuffer)
 
 	return nil
 }
