@@ -26,7 +26,7 @@ const (
 	download_url = "https://download.border0.com"
 )
 
-var ErrUnauthorized = errors.New("unaouthorized")
+var ErrUnauthorized = errors.New("unauthorized")
 
 type ErrorMessage struct {
 	ErrorMessage string `json:"error_message,omitempty"`
