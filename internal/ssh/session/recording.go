@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/borderzero/border0-cli/internal/border0"
@@ -40,6 +41,7 @@ type Recording struct {
 	height      int
 	zipWriter   *gzip.Writer
 	buf         bytes.Buffer
+	uploadLock  sync.Mutex
 }
 
 func NewRecording(logger *zap.Logger, reader io.ReadCloser, sessionKey string, api border0.Border0API, width, height int) *Recording {
@@ -129,7 +131,13 @@ func (r *Recording) Record() error {
 					string("o"),
 					strings.ReplaceAll(string(readBuffer[:n]), "\n", "\r\n"),
 				}
-				logJson, _ := json.Marshal(message)
+				logJson, err := json.Marshal(message)
+				if err != nil {
+					r.logger.Error("failed to marshal message", zap.Error(err))
+					shouldUpload = false
+					return
+				}
+
 				logJson = append([]byte(logJson), "\n"...)
 
 				if _, err := r.zipWriter.Write([]byte(logJson)); err != nil {
@@ -191,6 +199,9 @@ func (r *Recording) upload() error {
 	r.zipWriter = gzip.NewWriter(&r.buf)
 
 	go func(uploadBuffer []byte) {
+		r.uploadLock.Lock()
+		defer r.uploadLock.Unlock()
+
 		if err := r.api.UploadRecording(uploadBuffer, r.sessionKey, r.recordingID.String()); err != nil {
 			r.logger.Error("failed to upload recording", zap.Error(err))
 			return

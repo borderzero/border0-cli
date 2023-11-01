@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/borderzero/border0-cli/internal/border0"
@@ -24,6 +25,7 @@ type recording struct {
 	recordingID uuid.UUID
 	zipWriter   *gzip.Writer
 	buf         bytes.Buffer
+	uploadLock  sync.Mutex
 }
 
 type message struct {
@@ -71,7 +73,13 @@ func (r *recording) Record(messageChan chan message) error {
 					return
 				}
 
-				logJson, _ := json.Marshal(message)
+				logJson, err := json.Marshal(message)
+				if err != nil {
+					r.logger.Error("failed to marshal message", zap.Error(err))
+					shouldUpload = false
+					return
+				}
+
 				logJson = append([]byte(logJson), "\n"...)
 
 				if _, err := r.zipWriter.Write([]byte(logJson)); err != nil {
@@ -112,6 +120,9 @@ func (r *recording) Record(messageChan chan message) error {
 }
 
 func (r *recording) upload() error {
+	r.uploadLock.Lock()
+	defer r.uploadLock.Unlock()
+
 	if err := r.zipWriter.Flush(); err != nil {
 		return fmt.Errorf("failed to flush session log file: %s", err)
 	}
@@ -126,6 +137,9 @@ func (r *recording) upload() error {
 	r.zipWriter = gzip.NewWriter(&r.buf)
 
 	go func(uploadBuffer []byte) {
+		r.uploadLock.Lock()
+		defer r.uploadLock.Unlock()
+
 		if err := r.api.UploadRecording(uploadBuffer, r.sessionKey, r.recordingID.String()); err != nil {
 			r.logger.Error("failed to upload recording", zap.Error(err))
 			return
