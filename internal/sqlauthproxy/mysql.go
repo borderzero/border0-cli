@@ -102,7 +102,7 @@ func newMysqlHandler(c Config) (*mysqlHandler, error) {
 	}
 
 	var mysqlServer *server.Server
-	if c.e2eEncryptionEnabled {
+	if c.E2eEncryptionEnabled {
 		mysqlServer = server.NewServer(serverVersion, mysql.DEFAULT_COLLATION_ID, mysql.AUTH_NATIVE_PASSWORD, nil, nil)
 	} else {
 		mysqlServer = server.NewDefaultServer()
@@ -153,7 +153,7 @@ func (h mysqlHandler) handleClient(c net.Conn) {
 	}()
 
 	var serverHandler mysqlServerHandler
-	if h.Config.e2eEncryptionEnabled {
+	if h.Config.E2eEncryptionEnabled {
 		e2EEncryptionConn, ok := c.(border0.E2EEncryptionConn)
 		if !ok {
 			c.Close()
@@ -171,8 +171,8 @@ func (h mysqlHandler) handleClient(c net.Conn) {
 			metadata:        e2EEncryptionConn.Metadata,
 			statements:      make(map[int64]*client.Stmt),
 			preparedQueries: make(map[int64]string),
-			border0API:      h.border0API,
-			socket:          h.socket,
+			border0API:      h.Border0API,
+			socket:          h.Socket,
 			lastAuth:        time.Now(),
 			recordingChan:   make(chan message, 100),
 			clientConn:      clientConn,

@@ -3,11 +3,14 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"mime/multipart"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -50,7 +53,8 @@ type API interface {
 	Evaluate(ctx context.Context, socket *models.Socket, clientIP, userEmail, sessionKey string) (allowedActions []string, info map[string][]string, err error)
 	UpdateSession(update models.SessionUpdate) error
 	SignSshOrgCertificate(ctx context.Context, socketID, sessionID, userEmail string, ticket, publicKey []byte) ([]byte, error)
-	UploadRecording(content []byte, sessionKey, recordingID string) error
+	UploadRecording(content []byte, socketID, sessionKey, recordingID string) error
+	ServerOrgCertificate(ctx context.Context, name string, csr []byte) ([]byte, error)
 }
 
 var once sync.Once
@@ -131,9 +135,17 @@ func tokenfile() string {
 }
 
 func (a *Border0API) Request(method string, url string, target interface{}, data interface{}, requireAccessToken bool) error {
-	jv, _ := json.Marshal(data)
+	jv, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request body: %w", err)
+	}
+
 	body := bytes.NewBuffer(jv)
 
+	return a.RequestAny(method, url, target, body, "application/json", requireAccessToken)
+}
+
+func (a *Border0API) RequestAny(method string, url string, target interface{}, body *bytes.Buffer, contentType string, requireAccessToken bool) error {
 	req, _ := http.NewRequest(method, fmt.Sprintf("%s/%s", APIURL(), url), body)
 
 	//try to find the token in the environment
@@ -150,7 +162,7 @@ func (a *Border0API) Request(method string, url string, target interface{}, data
 	if a.Version != "" {
 		req.Header.Add("x-client-version", a.Version)
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", contentType)
 
 	client := &http.Client{
 		Timeout: 10 * time.Second,
@@ -189,7 +201,7 @@ func (a *Border0API) Request(method string, url string, target interface{}, data
 
 	err = json.NewDecoder(resp.Body).Decode(target)
 	if err != nil {
-		return fmt.Errorf("failede to decode request body: %w", err)
+		return fmt.Errorf("failed to decode request body: %w", err)
 	}
 
 	return nil
@@ -624,18 +636,135 @@ func (a *Border0API) GetUserID() (string, error) {
 	return strings.ReplaceAll(tokenUserIdStr, "-", ""), nil
 }
 
-func (a *Border0API) Evaluate(ctx context.Context, socket *models.Socket, clientIP, userEmail, sessionKey string) ([]string, map[string][]string, error) {
-	return nil, nil, fmt.Errorf("not implemented")
+func (a *Border0API) Evaluate(ctx context.Context, socket *models.Socket, clientIP, userEmail, sessionKey string) (allowedActions []string, info map[string][]string, err error) {
+	if socket == nil {
+		err = fmt.Errorf("socket is nil")
+		return
+	}
+
+	if clientIP == "" || userEmail == "" || sessionKey == "" {
+		err = fmt.Errorf("metadata is invalid")
+		return
+	}
+
+	clientIP, _, err = net.SplitHostPort(clientIP)
+	if err != nil {
+		err = fmt.Errorf("failed to parse client ip: %w", err)
+		return
+	}
+
+	evaluateRequest := &models.EvaluatePolicyRequest{
+		ClientIP:   clientIP,
+		UserEmail:  userEmail,
+		SessionKey: sessionKey,
+	}
+
+	url := fmt.Sprintf("socket/%s/evaluate", socket.SocketID)
+	var evaluateResponse *models.EvaluatePolicyResponse
+
+	if err = a.Request("POST", url, &evaluateResponse, evaluateRequest, true); err != nil {
+		err = fmt.Errorf("evaluate request failed: %w", err)
+		return
+	}
+
+	for app, actions := range evaluateResponse.Actions {
+		if strings.EqualFold(socket.SocketType, app) || app == "*" {
+			for _, action := range actions {
+				allowedActions = append(allowedActions, strings.ToLower(action))
+			}
+		}
+	}
+
+	return
 }
 
-func (a *Border0API) UpdateSession(update models.SessionUpdate) error {
-	return fmt.Errorf("not implemented")
+func (a *Border0API) UpdateSession(update models.SessionUpdate) (err error) {
+	if update.Socket == nil {
+		err = fmt.Errorf("socket is nil")
+		return
+	}
+
+	evaluateRequest := &models.UpdateSessionRequest{
+		SessionKey: update.SessionKey,
+		UserData:   update.UserData,
+	}
+
+	url := fmt.Sprintf("socket/%s/update_session", update.Socket.SocketID)
+
+	if err = a.Request("POST", url, nil, evaluateRequest, true); err != nil {
+		err = fmt.Errorf("update session request failed: %w", err)
+		return
+	}
+
+	return
 }
 
 func (a *Border0API) SignSshOrgCertificate(ctx context.Context, socketID, sessionID, userEmail string, ticket, publicKey []byte) ([]byte, error) {
-	return nil, fmt.Errorf("not implemented")
+	signSshOrgCertificateRequest := &models.SignSshOrgCertificateRequest{
+		SocketID:   socketID,
+		SessionKey: sessionID,
+		UserEmail:  userEmail,
+		Ticket:     base64.StdEncoding.EncodeToString(ticket),
+		PublicKey:  string(publicKey),
+	}
+
+	var signSshOrgCertificateResponse models.SignSshOrgCertificateResponse
+	if err := a.Request("POST", "organizations/sign_ssh_certificate", &signSshOrgCertificateResponse, signSshOrgCertificateRequest, true); err != nil {
+		return nil, fmt.Errorf("sign ssh certificate request failed: %w", err)
+	}
+
+	return []byte(signSshOrgCertificateResponse.Certificate), nil
 }
 
-func (a *Border0API) UploadRecording(content []byte, sessionKey, recordingID string) error {
-	return fmt.Errorf("not implemented")
+func (a *Border0API) UploadRecording(content []byte, socketID, sessionKey, recordingID string) error {
+	jsonData, err := json.Marshal(struct {
+		RecordingId string `json:"recording_id"`
+	}{
+		RecordingId: recordingID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to marshal request body: %w", err)
+	}
+
+	var requestBody bytes.Buffer
+	multipartWriter := multipart.NewWriter(&requestBody)
+
+	err = multipartWriter.WriteField("json_data", string(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to write json_data field: %w", err)
+	}
+
+	filePart, err := multipartWriter.CreateFormFile("file", recordingID)
+	if err != nil {
+		return fmt.Errorf("failed to create form file: %w", err)
+	}
+	_, err = io.Copy(filePart, bytes.NewReader(content))
+	if err != nil {
+		return fmt.Errorf("failed to copy file part: %w", err)
+	}
+
+	multipartWriter.Close()
+
+	if err := a.RequestAny("POST", fmt.Sprintf("session/%s/%s/upload_recording", socketID, sessionKey), nil, &requestBody, multipartWriter.FormDataContentType(), true); err != nil {
+		return fmt.Errorf("upload recording request failed: %w", err)
+	}
+
+	return nil
+}
+
+func (a *Border0API) ServerOrgCertificate(ctx context.Context, name string, csr []byte) ([]byte, error) {
+	jsonData := struct {
+		Name                      string `json:"name"`
+		CertificateSigningRequest string `json:"csr"`
+	}{
+		CertificateSigningRequest: string(csr),
+		Name:                      name,
+	}
+
+	var signSshOrgCertificateResponse models.SignSshOrgCertificateResponse
+	if err := a.Request("POST", "organizations/sign_server_certificate", &signSshOrgCertificateResponse, jsonData, true); err != nil {
+		return nil, fmt.Errorf("sign server certificate request failed: %w", err)
+	}
+
+	return []byte(signSshOrgCertificateResponse.Certificate), nil
 }

@@ -53,7 +53,7 @@ type Border0API interface {
 	Evaluate(ctx context.Context, socket *models.Socket, clientIP, userEmail, sessionKey string) ([]string, map[string][]string, error)
 	UpdateSession(updates models.SessionUpdate) error
 	SignSshOrgCertificate(ctx context.Context, socketID, sessionID, userEmail string, ticket []byte, publicKey []byte) ([]byte, error)
-	UploadRecording(content []byte, sessionKey, recordingID string) error
+	UploadRecording(content []byte, socketID, sessionKey, recordingID string) error
 }
 
 type E2EEncryptionMetadata struct {
@@ -153,6 +153,7 @@ func NewSocket(ctx context.Context, border0API api.API, nameOrID string, logger 
 		acceptChan:                     make(chan connWithError),
 		RecordingEnabled:               socketFromApi.RecordingEnabled,
 		logger:                         logger,
+		Socket:                         socketFromApi,
 
 		context: sckContext,
 		cancel:  sckCancel,
@@ -186,6 +187,10 @@ func NewSocketFromConnectorAPI(ctx context.Context, border0API Border0API, socke
 
 func (s *Socket) WithVersion(version string) {
 	s.version = version
+}
+
+func (s *Socket) WithCertificate(certificate *tls.Certificate) {
+	s.certificate = certificate
 }
 
 func (s *Socket) WithProxy(proxyHost string) error {

@@ -829,6 +829,62 @@ func (_c *API_Login_Call) RunAndReturn(run func(string, string) (*models.LoginRe
 	return _c
 }
 
+// ServerOrgCertificate provides a mock function with given fields: ctx, name, csr
+func (_m *API) ServerOrgCertificate(ctx context.Context, name string, csr []byte) ([]byte, error) {
+	ret := _m.Called(ctx, name, csr)
+
+	var r0 []byte
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, []byte) ([]byte, error)); ok {
+		return rf(ctx, name, csr)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, []byte) []byte); ok {
+		r0 = rf(ctx, name, csr)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]byte)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, []byte) error); ok {
+		r1 = rf(ctx, name, csr)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// API_ServerOrgCertificate_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ServerOrgCertificate'
+type API_ServerOrgCertificate_Call struct {
+	*mock.Call
+}
+
+// ServerOrgCertificate is a helper method to define mock.On call
+//   - ctx context.Context
+//   - name string
+//   - csr []byte
+func (_e *API_Expecter) ServerOrgCertificate(ctx interface{}, name interface{}, csr interface{}) *API_ServerOrgCertificate_Call {
+	return &API_ServerOrgCertificate_Call{Call: _e.mock.On("ServerOrgCertificate", ctx, name, csr)}
+}
+
+func (_c *API_ServerOrgCertificate_Call) Run(run func(ctx context.Context, name string, csr []byte)) *API_ServerOrgCertificate_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].([]byte))
+	})
+	return _c
+}
+
+func (_c *API_ServerOrgCertificate_Call) Return(_a0 []byte, _a1 error) *API_ServerOrgCertificate_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *API_ServerOrgCertificate_Call) RunAndReturn(run func(context.Context, string, []byte) ([]byte, error)) *API_ServerOrgCertificate_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // SignSSHKey provides a mock function with given fields: ctx, socketID, key
 func (_m *API) SignSSHKey(ctx context.Context, socketID string, key []byte) (string, string, error) {
 	ret := _m.Called(ctx, socketID, key)
@@ -1068,13 +1124,13 @@ func (_c *API_UpdateSocket_Call) RunAndReturn(run func(context.Context, string, 
 	return _c
 }
 
-// UploadRecording provides a mock function with given fields: content, sessionKey, recordingID
-func (_m *API) UploadRecording(content []byte, sessionKey string, recordingID string) error {
-	ret := _m.Called(content, sessionKey, recordingID)
+// UploadRecording provides a mock function with given fields: content, socketID, sessionKey, recordingID
+func (_m *API) UploadRecording(content []byte, socketID string, sessionKey string, recordingID string) error {
+	ret := _m.Called(content, socketID, sessionKey, recordingID)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func([]byte, string, string) error); ok {
-		r0 = rf(content, sessionKey, recordingID)
+	if rf, ok := ret.Get(0).(func([]byte, string, string, string) error); ok {
+		r0 = rf(content, socketID, sessionKey, recordingID)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -1089,15 +1145,16 @@ type API_UploadRecording_Call struct {
 
 // UploadRecording is a helper method to define mock.On call
 //   - content []byte
+//   - socketID string
 //   - sessionKey string
 //   - recordingID string
-func (_e *API_Expecter) UploadRecording(content interface{}, sessionKey interface{}, recordingID interface{}) *API_UploadRecording_Call {
-	return &API_UploadRecording_Call{Call: _e.mock.On("UploadRecording", content, sessionKey, recordingID)}
+func (_e *API_Expecter) UploadRecording(content interface{}, socketID interface{}, sessionKey interface{}, recordingID interface{}) *API_UploadRecording_Call {
+	return &API_UploadRecording_Call{Call: _e.mock.On("UploadRecording", content, socketID, sessionKey, recordingID)}
 }
 
-func (_c *API_UploadRecording_Call) Run(run func(content []byte, sessionKey string, recordingID string)) *API_UploadRecording_Call {
+func (_c *API_UploadRecording_Call) Run(run func(content []byte, socketID string, sessionKey string, recordingID string)) *API_UploadRecording_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].([]byte), args[1].(string), args[2].(string))
+		run(args[0].([]byte), args[1].(string), args[2].(string), args[3].(string))
 	})
 	return _c
 }
@@ -1107,7 +1164,7 @@ func (_c *API_UploadRecording_Call) Return(_a0 error) *API_UploadRecording_Call 
 	return _c
 }
 
-func (_c *API_UploadRecording_Call) RunAndReturn(run func([]byte, string, string) error) *API_UploadRecording_Call {
+func (_c *API_UploadRecording_Call) RunAndReturn(run func([]byte, string, string, string) error) *API_UploadRecording_Call {
 	_c.Call.Return(run)
 	return _c
 }

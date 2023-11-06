@@ -302,7 +302,7 @@ func (c *localChannel) handleSftp(req *ssh.Request) {
 	if c.config.IsRecordingEnabled() {
 		pr, pw := io.Pipe()
 
-		r := NewRecording(c.logger, pr, c.metadata.SessionKey, c.config.Border0API, c.window.Width, c.window.Height)
+		r := NewRecording(c.logger, pr, c.config.Socket.SocketID, c.metadata.SessionKey, c.config.Border0API, c.window.Width, c.window.Height)
 		if err := r.Record(); err != nil {
 			c.logger.Error("failed to record session", zap.Error(err))
 			return
@@ -339,7 +339,7 @@ func (c *localChannel) handleExec(req *ssh.Request) {
 		pwc := NewPipeWriteChannel(c.downstreamChannel)
 		c.downstreamChannel = pwc
 
-		r := NewRecording(c.logger, pwc.reader, c.metadata.SessionKey, c.config.Border0API, c.window.Width, c.window.Height)
+		r := NewRecording(c.logger, pwc.reader, c.config.Socket.SocketID, c.metadata.SessionKey, c.config.Border0API, c.window.Width, c.window.Height)
 		if err := r.Record(); err != nil {
 			c.logger.Error("failed to record session", zap.Error(err))
 			return

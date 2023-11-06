@@ -43,7 +43,7 @@ func (h *mysqlLocalHandler) HandleConnection(serverConn *server.Conn, clientConn
 	h.serverConn = serverConn
 
 	if h.socket.RecordingEnabled {
-		r, err := newRecording(h.logger, h.metadata.SessionKey, h.border0API)
+		r, err := newRecording(h.logger, h.socket.SocketID, h.metadata.SessionKey, h.border0API)
 		if err != nil {
 			h.logger.Error("failed to record session", zap.Error(err))
 			return

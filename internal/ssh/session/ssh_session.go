@@ -176,6 +176,17 @@ func (s *sshSessionHandler) Proxy(conn net.Conn) {
 		}
 	}
 
+	sshConnUser := session.downstreamSshConn.User()
+
+	// We only use the user from the ssh connection if
+	// the ssh client config does not have a user defined.
+	// If the user in the ssh client config at this point
+	// is not empty string, then it came from the socket's
+	// upstream configuration (so we use that).
+	if session.sshClientConfig.User == "" {
+		session.sshClientConfig.User = sshConnUser
+	}
+
 	// we don't support global requests (yet)
 	// so we can disregard the reqs channel
 	go ssh.DiscardRequests(session.downstreamSshReqs)
@@ -633,7 +644,7 @@ func (s *sshChannel) record(reader *io.Reader) (*Recording, error) {
 		*reader = io.TeeReader(*reader, pw)
 	}
 
-	r := NewRecording(s.logger, pr, s.metadata.SessionKey, s.config.Border0API, s.width, s.height)
+	r := NewRecording(s.logger, pr, s.config.Socket.SocketID, s.metadata.SessionKey, s.config.Border0API, s.width, s.height)
 
 	if err := r.Record(); err != nil {
 		return nil, err

@@ -23,7 +23,7 @@ func (c *ConnectorService) UpdateSession(update models.SessionUpdate) error {
 	return nil
 }
 
-func (c *ConnectorService) UploadRecording(content []byte, sessionKey, recordingID string) error {
+func (c *ConnectorService) UploadRecording(content []byte, socketID, sessionKey, recordingID string) error {
 	if err := c.sendControlStreamRequest(&pb.ControlStreamRequest{
 		RequestType: &pb.ControlStreamRequest_UploadRecording{
 			UploadRecording: &pb.UploadRecording{

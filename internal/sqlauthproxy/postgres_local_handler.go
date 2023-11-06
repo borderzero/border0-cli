@@ -50,7 +50,7 @@ func (h *postgresLocalHandler) HandleConnection() {
 	h.clientFrontend = pgproto3.NewFrontend(pgproto3.NewChunkReader(h.clientConn.Conn), h.clientConn.Conn)
 
 	if h.socket.RecordingEnabled {
-		r, err := newRecording(h.logger, h.metadata.SessionKey, h.border0API)
+		r, err := newRecording(h.logger, h.socket.SocketID, h.metadata.SessionKey, h.border0API)
 		if err != nil {
 			h.logger.Error("failed to record session", zap.Error(err))
 			return

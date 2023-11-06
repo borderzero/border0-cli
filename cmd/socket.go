@@ -17,6 +17,12 @@ package cmd
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -46,6 +52,8 @@ import (
 	"github.com/songgao/water"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
+
+	gossh "golang.org/x/crypto/ssh"
 )
 
 // socketCmd represents the socket command
@@ -497,8 +505,12 @@ var socketConnectCmd = &cobra.Command{
 			log.Fatalf("error: %v", err)
 		}
 
-		if socket.EndToEndEncryptionEnabled {
-			return fmt.Errorf("error: end to end encryption is only supported with the connector")
+		if socket.Socket.ConnectorLocalData == nil {
+			socket.Socket.ConnectorLocalData = &models.ConnectorLocalData{}
+		}
+
+		if socket.Socket.ConnectorData == nil {
+			socket.Socket.ConnectorData = &models.ConnectorData{}
 		}
 
 		socket.WithVersion(version)
@@ -507,6 +519,71 @@ var socketConnectCmd = &cobra.Command{
 			if err := socket.WithProxy(proxyHost); err != nil {
 				log.Fatalf("error: %v", err)
 			}
+		}
+
+		if socket.EndToEndEncryptionEnabled {
+			certificate, err := util.GetEndToEndEncryptionCertificate(ctx, socket.Organization.ID)
+			if err != nil {
+				return fmt.Errorf("failed to get connector certificate: %w", err)
+			}
+
+			if certificate == nil {
+				_, privKey, err := ed25519.GenerateKey(rand.Reader)
+				if err != nil {
+					return fmt.Errorf("failed to generate private key: %w", err)
+				}
+
+				csrTemplate := x509.CertificateRequest{
+					Subject:            pkix.Name{CommonName: "border0"},
+					SignatureAlgorithm: x509.PureEd25519,
+				}
+
+				csrBytes, err := x509.CreateCertificateRequest(rand.Reader, &csrTemplate, privKey)
+				if err != nil {
+					return fmt.Errorf("failed to create certificate request: %w", err)
+				}
+
+				csrPem := pem.Block{
+					Type:  "CERTIFICATE REQUEST",
+					Bytes: csrBytes,
+				}
+
+				var name string
+				hostname, err := os.Hostname()
+				if err != nil {
+					name = "border0-cli"
+				} else {
+					name = hostname
+				}
+
+				cert, err := border0API.ServerOrgCertificate(ctx, name, pem.EncodeToMemory(&csrPem))
+				if err != nil {
+					return fmt.Errorf("failed to get certificate: %w", err)
+				}
+
+				privKeyBytes, err := x509.MarshalPKCS8PrivateKey(privKey)
+				if err != nil {
+					return fmt.Errorf("failed to marshal private key: %w", err)
+				}
+
+				privKeyPem := &pem.Block{
+					Type:  "PRIVATE KEY",
+					Bytes: privKeyBytes,
+				}
+
+				tlsCert, err := tls.X509KeyPair(cert, pem.EncodeToMemory(privKeyPem))
+				if err != nil {
+					return fmt.Errorf("failed to parse certificate: %w", err)
+				}
+
+				certificate = &tlsCert
+
+				if err := util.StoreConnectorCertifcate(privKey, cert, orgID); err != nil {
+					return fmt.Errorf("failed to store certificate: %w", err)
+				}
+			}
+
+			socket.WithCertificate(certificate)
 		}
 
 		SetRlimit()
@@ -537,20 +614,23 @@ var socketConnectCmd = &cobra.Command{
 
 		var sqlAuthProxy bool
 		var handlerConfig sqlauthproxy.Config
-		if socket.SocketType == "database" && (upstream_username != "" || upstream_password != "" || rdsIAM || upstream_cert_file != "" || upstream_key_file != "") {
+		if socket.SocketType == "database" && (upstream_username != "" || upstream_password != "" || rdsIAM || upstream_cert_file != "" || upstream_key_file != "" || socket.EndToEndEncryptionEnabled) {
 			handlerConfig = sqlauthproxy.Config{
-				Hostname:         hostname,
-				Port:             port,
-				RdsIam:           rdsIAM,
-				Username:         upstream_username,
-				Password:         upstream_password,
-				UpstreamType:     socket.UpstreamType,
-				AwsRegion:        awsRegion,
-				UpstreamCAFile:   upstream_ca_file,
-				UpstreamCertFile: upstream_cert_file,
-				UpstreamKeyFile:  upstream_key_file,
-				UpstreamTLS:      upstream_tls,
-				Logger:           logger.Logger,
+				Hostname:             hostname,
+				Port:                 port,
+				RdsIam:               rdsIAM,
+				Username:             upstream_username,
+				Password:             upstream_password,
+				UpstreamType:         socket.UpstreamType,
+				AwsRegion:            awsRegion,
+				UpstreamCAFile:       upstream_ca_file,
+				UpstreamCertFile:     upstream_cert_file,
+				UpstreamKeyFile:      upstream_key_file,
+				UpstreamTLS:          upstream_tls,
+				Logger:               logger.Logger,
+				E2eEncryptionEnabled: socket.EndToEndEncryptionEnabled,
+				Socket:               *socket.Socket,
+				Border0API:           border0API,
 			}
 
 			if cloudSqlConnector {
@@ -571,19 +651,42 @@ var socketConnectCmd = &cobra.Command{
 		var sshProxyConfig config.ProxyConfig
 
 		if socket.SocketType == "ssh" && (upstream_username != "" || upstream_password != "" || upstream_identify_file != "" || awsEc2InstanceId != "" || socket.UpstreamType == "aws-ssm" || socket.UpstreamType == "aws-ec2connect" || awsEc2InstanceConnect || socket.EndToEndEncryptionEnabled) {
+			sshProxyConfig = config.ProxyConfig{
+				Logger:             logger.Logger,
+				Recording:          socket.RecordingEnabled,
+				EndToEndEncryption: socket.EndToEndEncryptionEnabled,
+				Socket:             socket.Socket,
+				Border0API:         border0API,
+			}
+
+			if socket.EndToEndEncryptionEnabled {
+				hostkeySigner, err := util.Hostkey()
+				if err != nil {
+					return fmt.Errorf("failed to get hostkey: %s", err)
+				}
+
+				sshProxyConfig.Hostkey = hostkeySigner
+
+				if orgSshCA, ok := socket.Organization.Certificates["ssh_public_key"]; ok {
+					orgCa, _, _, _, err := gossh.ParseAuthorizedKey([]byte(orgSshCA))
+					if err != nil {
+						return fmt.Errorf("failed to parse org ssh ca: %s", err)
+					}
+
+					sshProxyConfig.OrgSshCA = orgCa
+				}
+			}
+
 			switch {
 			case socket.UpstreamType == "aws-ssm":
 				if awsECSCluster == "" && awsEc2InstanceId == "" {
 					return fmt.Errorf("aws_ecs_cluster flag or aws ec2 instance id is required for aws-ssm upstream services")
 				}
 
-				sshProxyConfig = config.ProxyConfig{
-					AwsSSMTarget:    awsEc2InstanceId,
-					AWSRegion:       awsRegion,
-					AWSProfile:      awsProfile,
-					AwsUpstreamType: "aws-ssm",
-					Logger:          logger.Logger,
-				}
+				sshProxyConfig.AwsSSMTarget = awsEc2InstanceId
+				sshProxyConfig.AWSRegion = awsRegion
+				sshProxyConfig.AWSProfile = awsProfile
+				sshProxyConfig.AwsUpstreamType = "aws-ssm"
 
 				if awsECSCluster != "" {
 					sshProxyConfig.ECSSSMProxy = &config.ECSSSMProxy{
@@ -598,44 +701,40 @@ var socketConnectCmd = &cobra.Command{
 					return fmt.Errorf("aws ec2 instance id is required for EC2 Instance Connect based upstream services")
 				}
 
-				sshProxyConfig = config.ProxyConfig{
-					AwsEC2InstanceId: awsEc2InstanceId,
-					AWSRegion:        awsRegion,
-					AWSProfile:       awsProfile,
-					Hostname:         hostname,
-					Port:             port,
-					Username:         upstream_username,
-					AwsUpstreamType:  "aws-ec2connect",
-					Logger:           logger.Logger,
-				}
+				sshProxyConfig.AwsEC2InstanceId = awsEc2InstanceId
+				sshProxyConfig.AWSRegion = awsRegion
+				sshProxyConfig.AWSProfile = awsProfile
+				sshProxyConfig.Hostname = hostname
+				sshProxyConfig.Port = port
+				sshProxyConfig.Username = upstream_username
+				sshProxyConfig.AwsUpstreamType = "aws-ec2connect"
 
 			default:
 				if awsECSCluster != "" || awsEc2InstanceId != "" {
 					return fmt.Errorf("aws_ecs_cluster flag or aws ec2 instance id is defined but socket is not configured with aws-ssm upstream type")
 				}
 
-				sshProxyConfig = config.ProxyConfig{
-					Hostname:           hostname,
-					Port:               port,
-					Username:           upstream_username,
-					Password:           upstream_password,
-					IdentityFile:       upstream_identify_file,
-					EndToEndEncryption: socket.EndToEndEncryptionEnabled,
-					Recording:          socket.RecordingEnabled,
-					Logger:             logger.Logger,
-				}
+				sshProxyConfig.Hostname = hostname
+				sshProxyConfig.Port = port
+				sshProxyConfig.Username = upstream_username
+				sshProxyConfig.Password = upstream_password
+				sshProxyConfig.IdentityFile = upstream_identify_file
+			}
+
+			if localssh {
+				sshProxyConfig.Socket.SSHServer = true
 			}
 			sshAuthProxy = true
-		}
-
-		if socket.SocketType != "database" && cloudSqlConnector {
-			cloudSqlConnector = false
 		}
 
 		if socket.SocketType == "ssh" && !localssh && !sshAuthProxy {
 			if port < 1 {
 				port = 22
 			}
+		}
+
+		if socket.SocketType != "database" && cloudSqlConnector {
+			cloudSqlConnector = false
 		}
 
 		border0API.StartRefreshAccessTokenJob(ctx)
@@ -661,7 +760,7 @@ var socketConnectCmd = &cobra.Command{
 			if err := http.StartLocalHTTPServer(httpserver_dir, l); err != nil {
 				return err
 			}
-		case localssh:
+		case localssh && !socket.EndToEndEncryptionEnabled:
 			opts := []server.Option{}
 			if socket.UpstreamUsername != "" {
 				opts = append(opts, server.WithUsername(socket.UpstreamUsername))

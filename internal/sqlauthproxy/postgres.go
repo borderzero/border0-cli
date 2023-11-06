@@ -47,7 +47,7 @@ func newPostgresHandler(c Config) (*postgresHandler, error) {
 	}
 
 	var tlsConfig *tls.Config
-	if !c.e2eEncryptionEnabled {
+	if !c.E2eEncryptionEnabled {
 		generatedCert, err := generateX509KeyPair()
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate tls certificate: %s", err)
@@ -185,7 +185,7 @@ func (h postgresHandler) handleClient(c net.Conn) {
 	}
 
 	var serverHandler postgresServerHandler
-	if h.Config.e2eEncryptionEnabled {
+	if h.Config.E2eEncryptionEnabled {
 		e2EEncryptionConn, ok := c.(border0.E2EEncryptionConn)
 		if !ok {
 			c.Close()
@@ -201,8 +201,8 @@ func (h postgresHandler) handleClient(c net.Conn) {
 		serverHandler = &postgresLocalHandler{
 			logger:          h.Logger.With(zap.String("session_key", e2EEncryptionConn.Metadata.SessionKey)),
 			metadata:        e2EEncryptionConn.Metadata,
-			border0API:      h.border0API,
-			socket:          h.socket,
+			border0API:      h.Border0API,
+			socket:          h.Socket,
 			lastAuth:        time.Now(),
 			recordingChan:   make(chan message, 100),
 			clientConn:      pgconn,
@@ -233,7 +233,7 @@ func (h postgresHandler) handleClientStartup(conn net.Conn) (*pgproto3.StartupMe
 
 	switch msg := message.(type) {
 	case *pgproto3.StartupMessage:
-		if !h.e2eEncryptionEnabled {
+		if !h.E2eEncryptionEnabled {
 			_, ok := conn.(*tls.Conn)
 			if !ok {
 				return nil, nil, fmt.Errorf("failed to get TLS connection info")
@@ -242,7 +242,7 @@ func (h postgresHandler) handleClientStartup(conn net.Conn) (*pgproto3.StartupMe
 
 		return msg, conn, nil
 	case *pgproto3.SSLRequest:
-		if h.e2eEncryptionEnabled {
+		if h.E2eEncryptionEnabled {
 			_, err := conn.Write([]byte("N"))
 			if err != nil {
 				return nil, nil, err

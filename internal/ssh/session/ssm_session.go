@@ -479,7 +479,7 @@ func (s *ssmSession) handleSSMShell(channel ssh.Channel, req *ssh.Request) {
 		pwc := NewPipeWriteChannel(channel)
 		channel = pwc
 
-		r := NewRecording(s.logger, pwc.reader, s.metadata.SessionKey, s.config.Border0API, s.sshWidth, s.sshHeight)
+		r := NewRecording(s.logger, pwc.reader, s.config.Socket.SocketID, s.metadata.SessionKey, s.config.Border0API, s.sshWidth, s.sshHeight)
 		if err := r.Record(); err != nil {
 			s.logger.Error("failed to record session", zap.Error(err))
 			return

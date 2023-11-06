@@ -22,6 +22,7 @@ type recording struct {
 	logger      *zap.Logger
 	api         border0.Border0API
 	sessionKey  string
+	socketID    string
 	recordingID uuid.UUID
 	zipWriter   *gzip.Writer
 	buf         bytes.Buffer
@@ -39,10 +40,11 @@ type message struct {
 	Result       *string `json:"result"`
 }
 
-func newRecording(logger *zap.Logger, sessionKey string, api border0.Border0API) (*recording, error) {
+func newRecording(logger *zap.Logger, socketID, sessionKey string, api border0.Border0API) (*recording, error) {
 	return &recording{
 		logger:      logger,
 		sessionKey:  sessionKey,
+		socketID:    socketID,
 		api:         api,
 		recordingID: uuid.New(),
 	}, nil
@@ -140,7 +142,7 @@ func (r *recording) upload() error {
 		r.uploadLock.Lock()
 		defer r.uploadLock.Unlock()
 
-		if err := r.api.UploadRecording(uploadBuffer, r.sessionKey, r.recordingID.String()); err != nil {
+		if err := r.api.UploadRecording(uploadBuffer, r.socketID, r.sessionKey, r.recordingID.String()); err != nil {
 			r.logger.Error("failed to upload recording", zap.Error(err))
 			return
 		}

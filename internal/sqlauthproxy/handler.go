@@ -39,9 +39,9 @@ type Config struct {
 	AwsRegion            string
 	AwsCredentials       *common.AwsCredentials
 	DialerFunc           func(context.Context, string, string) (net.Conn, error)
-	e2eEncryptionEnabled bool
-	socket               models.Socket
-	border0API           border0.Border0API
+	E2eEncryptionEnabled bool
+	Socket               models.Socket
+	Border0API           border0.Border0API
 }
 
 func Serve(l net.Listener, config Config) error {
@@ -95,9 +95,9 @@ func BuildHandlerConfig(logger *zap.Logger, socket models.Socket, border0API bor
 		UpstreamCertBlock:    socket.ConnectorLocalData.UpstreamCertBlock,
 		UpstreamKeyBlock:     socket.ConnectorLocalData.UpstreamKeyBlock,
 		UpstreamTLS:          upstreamTLS,
-		e2eEncryptionEnabled: socket.EndToEndEncryptionEnabled,
-		socket:               socket,
-		border0API:           border0API,
+		E2eEncryptionEnabled: socket.EndToEndEncryptionEnabled,
+		Socket:               socket,
+		Border0API:           border0API,
 	}
 
 	if socket.ConnectorLocalData.CloudSQLConnector {

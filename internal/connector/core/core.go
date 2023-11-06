@@ -2,9 +2,16 @@ package core
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -19,8 +26,10 @@ import (
 	"github.com/borderzero/border0-cli/internal/ssh"
 	sshConfig "github.com/borderzero/border0-cli/internal/ssh/config"
 	"github.com/borderzero/border0-cli/internal/ssh/server"
+	"github.com/borderzero/border0-cli/internal/util"
 	"github.com/borderzero/border0-go/lib/types/pointer"
 	"go.uber.org/zap"
+	gossh "golang.org/x/crypto/ssh"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -37,15 +46,18 @@ type ConnectorCore struct {
 	logger       *zap.Logger
 	version      string
 
-	discoverState    discover.DiscoverState
-	connectChan      chan connectTunnelData
-	connectedTunnels sync.Map
+	discoverState            discover.DiscoverState
+	connectChan              chan connectTunnelData
+	connectedTunnels         sync.Map
+	sshPrivateHostKeyLock    sync.Mutex
+	sshPrivateHostKey        *gossh.Signer
+	connectorCertificateLock sync.Mutex
+	connectorCertificate     *tls.Certificate
 
 	metadata models.Metadata // additionall metadata
 }
 
 func NewConnectorCore(logger *zap.Logger, cfg config.Config, discovery discover.Discover, border0API api.API, meta models.Metadata, version string) *ConnectorCore {
-	connectedTunnels := sync.Map{}
 	connectChan := make(chan connectTunnelData, 5)
 	discoverState := discover.DiscoverState{
 		State:     make(map[string]interface{}),
@@ -53,9 +65,8 @@ func NewConnectorCore(logger *zap.Logger, cfg config.Config, discovery discover.
 	}
 
 	return &ConnectorCore{
-		connectedTunnels: connectedTunnels,
-		connectChan:      connectChan,
-		logger:           logger, discovery: discovery, cfg: cfg,
+		connectChan: connectChan,
+		logger:      logger, discovery: discovery, cfg: cfg,
 		border0API:    border0API,
 		discoverState: discoverState,
 		metadata:      meta,
@@ -95,7 +106,7 @@ func (c *ConnectorCore) TunnelConnnect(ctx context.Context, socket models.Socket
 
 	var handlerConfig *sqlauthproxy.Config
 	if socket.SocketType == "database" {
-		handlerConfig, err = sqlauthproxy.BuildHandlerConfig(c.logger, socket, nil)
+		handlerConfig, err = sqlauthproxy.BuildHandlerConfig(c.logger, socket, c.border0API)
 		if err != nil {
 			return fmt.Errorf("failed to create config for socket: %s", err)
 		}
@@ -103,10 +114,34 @@ func (c *ConnectorCore) TunnelConnnect(ctx context.Context, socket models.Socket
 
 	var sshProxyConfig *sshConfig.ProxyConfig
 	if socket.SocketType == "ssh" {
-		sshProxyConfig, err = sshConfig.BuildProxyConfig(c.logger, socket, c.cfg.Connector.AwsRegion, c.cfg.Connector.AwsProfile, nil, nil, nil)
+		var hostkeySigner *gossh.Signer
+		var org *models.Organization
+		if socket.EndToEndEncryptionEnabled {
+			hostkeySigner, err = c.hostkey()
+			if err != nil {
+				return fmt.Errorf("failed to get hostkey: %s", err)
+			}
+
+			org, err = c.border0API.GetOrganizationInfo(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to get organization info: %s", err)
+			}
+		}
+
+		sshProxyConfig, err = sshConfig.BuildProxyConfig(c.logger, socket, c.cfg.Connector.AwsRegion, c.cfg.Connector.AwsProfile, hostkeySigner, org, c.border0API)
 		if err != nil {
 			return fmt.Errorf("failed to create config for socket: %s", err)
 		}
+	}
+
+	var certificate *tls.Certificate
+	if socket.EndToEndEncryptionEnabled {
+		certificate, err = c.certificate(ctx, conn.Socket.Organization.ID)
+		if err != nil {
+			return fmt.Errorf("failed to get connector certificate: %w", err)
+		}
+
+		conn.Socket.WithCertificate(certificate)
 	}
 
 	time.Sleep(1 * time.Second)
@@ -562,6 +597,95 @@ func (c *ConnectorCore) CreateSocket(ctx context.Context, s *models.Socket) (*mo
 	createdSocket.PolicyNames = s.PolicyNames
 
 	return createdSocket, nil
+}
+
+func (c *ConnectorCore) hostkey() (*gossh.Signer, error) {
+	c.sshPrivateHostKeyLock.Lock()
+	defer c.sshPrivateHostKeyLock.Unlock()
+
+	if c.sshPrivateHostKey != nil {
+		return c.sshPrivateHostKey, nil
+	}
+
+	signer, err := util.Hostkey()
+	if err != nil {
+		return nil, err
+	}
+
+	c.sshPrivateHostKey = signer
+	return c.sshPrivateHostKey, nil
+}
+
+func (c *ConnectorCore) certificate(ctx context.Context, orgID string) (*tls.Certificate, error) {
+	c.connectorCertificateLock.Lock()
+	defer c.connectorCertificateLock.Unlock()
+
+	if c.connectorCertificate != nil {
+		return c.connectorCertificate, nil
+	}
+
+	certificate, err := util.GetEndToEndEncryptionCertificate(ctx, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get connector certificate: %w", err)
+	}
+
+	if certificate == nil {
+		_, privKey, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate private key: %w", err)
+		}
+
+		csrTemplate := x509.CertificateRequest{
+			Subject:            pkix.Name{CommonName: "border0"},
+			SignatureAlgorithm: x509.PureEd25519,
+		}
+
+		csrBytes, err := x509.CreateCertificateRequest(rand.Reader, &csrTemplate, privKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create certificate request: %w", err)
+		}
+
+		csrPem := pem.Block{
+			Type:  "CERTIFICATE REQUEST",
+			Bytes: csrBytes,
+		}
+
+		var name string
+		hostname, err := os.Hostname()
+		if err != nil {
+			name = "border0-cli"
+		} else {
+			name = hostname
+		}
+
+		cert, err := c.border0API.ServerOrgCertificate(ctx, name, pem.EncodeToMemory(&csrPem))
+		if err != nil {
+			return nil, fmt.Errorf("failed to get certificate: %w", err)
+		}
+
+		privKeyBytes, err := x509.MarshalPKCS8PrivateKey(privKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal private key: %w", err)
+		}
+
+		privKeyPem := &pem.Block{
+			Type:  "PRIVATE KEY",
+			Bytes: privKeyBytes,
+		}
+
+		tlsCert, err := tls.X509KeyPair(cert, pem.EncodeToMemory(privKeyPem))
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse certificate: %w", err)
+		}
+
+		c.connectorCertificate = &tlsCert
+
+		if err := util.StoreConnectorCertifcate(privKey, cert, orgID); err != nil {
+			return nil, fmt.Errorf("failed to store certificate: %w", err)
+		}
+	}
+
+	return c.connectorCertificate, nil
 }
 
 func stringSlicesEqual(a, b []string) bool {

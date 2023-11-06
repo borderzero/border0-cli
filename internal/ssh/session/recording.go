@@ -34,6 +34,7 @@ type Recording struct {
 	logger      *zap.Logger
 	api         border0.Border0API
 	sessionKey  string
+	socketID    string
 	recordingID uuid.UUID
 	reader      io.ReadCloser
 	start       time.Time
@@ -44,10 +45,11 @@ type Recording struct {
 	uploadLock  sync.Mutex
 }
 
-func NewRecording(logger *zap.Logger, reader io.ReadCloser, sessionKey string, api border0.Border0API, width, height int) *Recording {
+func NewRecording(logger *zap.Logger, reader io.ReadCloser, socketID, sessionKey string, api border0.Border0API, width, height int) *Recording {
 	return &Recording{
 		logger:      logger,
 		sessionKey:  sessionKey,
+		socketID:    socketID,
 		api:         api,
 		reader:      reader,
 		recordingID: uuid.New(),
@@ -202,7 +204,7 @@ func (r *Recording) upload() error {
 		r.uploadLock.Lock()
 		defer r.uploadLock.Unlock()
 
-		if err := r.api.UploadRecording(uploadBuffer, r.sessionKey, r.recordingID.String()); err != nil {
+		if err := r.api.UploadRecording(uploadBuffer, r.socketID, r.sessionKey, r.recordingID.String()); err != nil {
 			r.logger.Error("failed to upload recording", zap.Error(err))
 			return
 		}

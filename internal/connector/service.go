@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -34,7 +37,9 @@ func NewConnectorService(cfg config.Config, logger *zap.Logger, version string) 
 func (c *ConnectorService) Start() error {
 	log.Println("starting the connector service")
 
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	border0API := api.NewAPI()
 
 	creds, err := c.fetchAccessToken(border0API)

@@ -54,3 +54,31 @@ type SshCsr struct {
 	SSHSignedCert string `json:"signed_ssh_cert,omitempty"`
 	HostKey       string `json:"host_key,omitempty"`
 }
+
+type EvaluatePolicyRequest struct {
+	ClientIP   string `json:"client_ip"`
+	UserEmail  string `json:"user_email"`
+	SessionKey string `json:"session_key"`
+}
+
+type EvaluatePolicyResponse struct {
+	Actions map[string][]string `json:"allowed_actions"`
+	Info    map[string][]string `json:"info"`
+}
+
+type UpdateSessionRequest struct {
+	UserData   string `json:"user_data"`
+	SessionKey string `json:"session_key"`
+}
+
+type SignSshOrgCertificateRequest struct {
+	SocketID   string `json:"socket_id"`
+	SessionKey string `json:"session_key"`
+	UserEmail  string `json:"user_email"`
+	Ticket     string `json:"ticket"`
+	PublicKey  string `json:"public_key"`
+}
+
+type SignSshOrgCertificateResponse struct {
+	Certificate string `json:"certificate"`
+}

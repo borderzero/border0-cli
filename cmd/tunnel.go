@@ -262,5 +262,5 @@ func init() {
 	})
 
 	tunnelConnectCmd.Flags().MarkDeprecated("identity_file", "identity file is no longer used")
-
+	tunnelConnectCmd.Deprecated = "use 'socket connect' instead"
 }

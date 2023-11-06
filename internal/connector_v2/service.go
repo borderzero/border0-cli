@@ -53,11 +53,9 @@ import (
 )
 
 const (
-	backoffMaxInterval       = 1 * time.Hour
-	serviceConfigPath        = "/etc/border0/"
-	sshHostKeyFile           = "ssh_host_ecdsa_key"
-	connectorCertificateFile = "connector.crt"
-	connectorPrivateKeyFile  = "connector.key"
+	backoffMaxInterval = 1 * time.Hour
+	serviceConfigPath  = "/etc/border0/"
+	sshHostKeyFile     = "ssh_host_ecdsa_key"
 )
 
 type ConnectorService struct {
@@ -898,6 +896,17 @@ func (c *ConnectorService) Certificate() (*tls.Certificate, error) {
 	if c.connectorCertificate != nil {
 		return c.connectorCertificate, nil
 	}
+
+	hasher := sha256.New()
+	_, err := hasher.Write([]byte(fmt.Sprintf("%s%s", c.organization.ID, c.config.ConnectorId)))
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash name: %s", err)
+	}
+
+	hashBytes := hasher.Sum(nil)
+	shortHash := fmt.Sprintf("%x", hashBytes)[:8]
+	connectorPrivateKeyFile := fmt.Sprintf("connector-%s.key", shortHash)
+	connectorCertificateFile := fmt.Sprintf("connector-%s.crt", shortHash)
 
 	var keyFilePath, certFilePath string
 
