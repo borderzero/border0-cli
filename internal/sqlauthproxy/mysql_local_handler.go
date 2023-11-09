@@ -142,7 +142,7 @@ func (h *mysqlLocalHandler) HandleQuery(query string) (*mysql.Result, error) {
 
 	start = time.Now()
 	var res *mysql.Result
-	switch stmt.(type) {
+	switch s := stmt.(type) {
 	case *sqlparser.Select:
 		var streamRows int64
 		res = &mysql.Result{}
@@ -161,6 +161,18 @@ func (h *mysqlLocalHandler) HandleQuery(query string) (*mysql.Result, error) {
 		status = pointer.To(res.Status)
 		rows = pointer.To(streamRows)
 		affectedRows = &res.AffectedRows
+
+		return res, err
+	case *sqlparser.Use:
+		res, err = h.clientConn.Execute(query)
+		if res != nil {
+			affectedRows = &res.AffectedRows
+			r := int64(res.RowNumber())
+			rows = pointer.To(r)
+			status = pointer.To(res.Status)
+
+			h.database = s.DBName.String()
+		}
 
 		return res, err
 	default:
