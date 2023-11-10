@@ -32,6 +32,7 @@ import (
 	"github.com/borderzero/border0-cli/internal/ssh"
 	sshConfig "github.com/borderzero/border0-cli/internal/ssh/config"
 	"github.com/borderzero/border0-cli/internal/ssh/server"
+	b0Util "github.com/borderzero/border0-cli/internal/util"
 	"github.com/borderzero/border0-go/lib/types/set"
 	"github.com/borderzero/border0-go/types/connector"
 	"github.com/borderzero/border0-go/types/service"
@@ -859,34 +860,21 @@ func (c *ConnectorService) hostkey() (*gossh.Signer, error) {
 		Bytes: pkcs8Bytes,
 	}
 
-	serviceConfigPathErr := storeHostkey(pem.EncodeToMemory(privKeyPEM), serviceConfigPath, sshHostKeyFile)
+	serviceConfigPathErr := b0Util.StoreHostkey(pem.EncodeToMemory(privKeyPEM), serviceConfigPath, sshHostKeyFile)
 	if serviceConfigPathErr != nil {
 		u, err := user.Current()
 		if err != nil {
 			return nil, fmt.Errorf("failed to store the ssh hostkey file %w %w", err, serviceConfigPathErr)
 		}
 
-		err = storeHostkey(pem.EncodeToMemory(privKeyPEM), u.HomeDir+"/.border0/", sshHostKeyFile)
+		err = b0Util.StoreHostkey(pem.EncodeToMemory(privKeyPEM), u.HomeDir+"/.border0/", sshHostKeyFile)
 		if err != nil {
-			return nil, fmt.Errorf("failed to store the ssh hostkey file %w %w", err, serviceConfigPathErr)
+			c.logger.Warn("failed to store the ssh hostkey file", zap.Error(serviceConfigPathErr), zap.Error(err))
+			return c.sshPrivateHostKey, nil
 		}
 	}
 
 	return c.sshPrivateHostKey, nil
-}
-
-func storeHostkey(key []byte, path, filename string) error {
-	if _, err := os.Stat(path); err == nil {
-		if err := os.MkdirAll(path, 0700); err != nil {
-			return fmt.Errorf("failed to create directory %s %w", path, err)
-		}
-	}
-
-	if err := os.WriteFile(path+filename, key, 0600); err != nil {
-		return fmt.Errorf("failed to write host key: %w", err)
-	}
-
-	return nil
 }
 
 func (c *ConnectorService) Certificate() (*tls.Certificate, error) {
@@ -1012,36 +1000,20 @@ func (c *ConnectorService) Certificate() (*tls.Certificate, error) {
 
 	c.connectorCertificate = &cert
 
-	serviceConfigPathErr := storeConnectorCertifcate(pem.EncodeToMemory(privKeyPem), certificate, serviceConfigPath, connectorPrivateKeyFile, connectorCertificateFile)
+	serviceConfigPathErr := b0Util.StoreCertificateFiles(pem.EncodeToMemory(privKeyPem), certificate, serviceConfigPath, connectorPrivateKeyFile, connectorCertificateFile)
 	if serviceConfigPathErr != nil {
 		u, err := user.Current()
 		if err != nil {
-			return nil, fmt.Errorf("failed to store the certifcate files %s %s", err, serviceConfigPathErr)
+			c.logger.Warn("failed to store the certifcate files", zap.Error(serviceConfigPathErr), zap.Error(err))
+			return c.connectorCertificate, nil
 		}
 
-		err = storeConnectorCertifcate(pem.EncodeToMemory(privKeyPem), certificate, u.HomeDir+"/.border0/", connectorPrivateKeyFile, connectorCertificateFile)
+		err = b0Util.StoreCertificateFiles(pem.EncodeToMemory(privKeyPem), certificate, u.HomeDir+"/.border0/", connectorPrivateKeyFile, connectorCertificateFile)
 		if err != nil {
-			return nil, fmt.Errorf("failed to store the certifcate files %s %s", err, serviceConfigPathErr)
+			c.logger.Warn("failed to store the certifcate files", zap.Error(serviceConfigPathErr), zap.Error(err))
+			return c.connectorCertificate, nil
 		}
 	}
 
 	return c.connectorCertificate, nil
-}
-
-func storeConnectorCertifcate(key []byte, certficate []byte, path, keyFileName, certificateFileName string) error {
-	if _, err := os.Stat(path); err == nil {
-		if err := os.MkdirAll(path, 0700); err != nil {
-			return fmt.Errorf("failed to create directory %s %w", path, err)
-		}
-	}
-
-	if err := os.WriteFile(path+keyFileName, key, 0600); err != nil {
-		return fmt.Errorf("failed to write key file: %w", err)
-	}
-
-	if err := os.WriteFile(path+certificateFileName, certficate, 0600); err != nil {
-		return fmt.Errorf("failed to write certificate file: %w", err)
-	}
-
-	return nil
 }

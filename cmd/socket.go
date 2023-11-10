@@ -579,7 +579,7 @@ var socketConnectCmd = &cobra.Command{
 				certificate = &tlsCert
 
 				if err := util.StoreConnectorCertifcate(privKey, cert, orgID); err != nil {
-					return fmt.Errorf("failed to store certificate: %w", err)
+					logger.Logger.Warn("failed to store certificate", zap.Error(err))
 				}
 			}
 
@@ -662,7 +662,11 @@ var socketConnectCmd = &cobra.Command{
 			if socket.EndToEndEncryptionEnabled {
 				hostkeySigner, err := util.Hostkey()
 				if err != nil {
-					return fmt.Errorf("failed to get hostkey: %s", err)
+					if hostkeySigner == nil {
+						return fmt.Errorf("failed to get hostkey: %s", err)
+					} else {
+						logger.Logger.Warn("failed to store hostkey", zap.Error(err))
+					}
 				}
 
 				sshProxyConfig.Hostkey = hostkeySigner

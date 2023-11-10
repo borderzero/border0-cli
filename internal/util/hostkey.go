@@ -57,7 +57,7 @@ func Hostkey() (*ssh.Signer, error) {
 
 	pkcs8Bytes, err := x509.MarshalPKCS8PrivateKey(privKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal private key to PKCS#8: %w", err)
+		return &sshPrivKey, fmt.Errorf("failed to marshal private key to PKCS#8: %w", err)
 	}
 
 	privKeyPEM := &pem.Block{
@@ -65,23 +65,23 @@ func Hostkey() (*ssh.Signer, error) {
 		Bytes: pkcs8Bytes,
 	}
 
-	serviceConfigPathErr := storeHostkey(pem.EncodeToMemory(privKeyPEM), serviceConfigPath, sshHostKeyFile)
+	serviceConfigPathErr := StoreHostkey(pem.EncodeToMemory(privKeyPEM), serviceConfigPath, sshHostKeyFile)
 	if serviceConfigPathErr != nil {
 		u, err := user.Current()
 		if err != nil {
-			return nil, fmt.Errorf("failed to store the ssh hostkey file %w %w", err, serviceConfigPathErr)
+			return &sshPrivKey, fmt.Errorf("failed to store the ssh hostkey file %w %w", err, serviceConfigPathErr)
 		}
 
-		err = storeHostkey(pem.EncodeToMemory(privKeyPEM), u.HomeDir+"/.border0/", sshHostKeyFile)
+		err = StoreHostkey(pem.EncodeToMemory(privKeyPEM), u.HomeDir+"/.border0/", sshHostKeyFile)
 		if err != nil {
-			return nil, fmt.Errorf("failed to store the ssh hostkey file %w %w", err, serviceConfigPathErr)
+			return &sshPrivKey, fmt.Errorf("failed to store the ssh hostkey file %w %w", err, serviceConfigPathErr)
 		}
 	}
 
 	return &sshPrivKey, nil
 }
 
-func storeHostkey(key []byte, path, filename string) error {
+func StoreHostkey(key []byte, path, filename string) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		if err := os.MkdirAll(path, 0700); err != nil {
 			return fmt.Errorf("failed to create directory %s: %w", path, err)

@@ -74,13 +74,14 @@ func generateNames(orgID string) (string, string, error) {
 	return privateKeyFile, certificateFile, nil
 }
 
-func storeFiles(key []byte, certficate []byte, path, keyFileName, certificateFileName string) error {
-	if _, err := os.Stat(path); err == nil {
+func StoreCertificateFiles(key []byte, certficate []byte, path, keyFileName, certificateFileName string) error {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
 		if err := os.MkdirAll(path, 0700); err != nil {
-			return fmt.Errorf("failed to create directory %s %w", path, err)
+			return fmt.Errorf("failed to create directory %s: %w", path, err)
 		}
+	} else if err != nil {
+		return fmt.Errorf("failed to check directory %s: %w", path, err)
 	}
-
 	if err := os.WriteFile(path+keyFileName, key, 0600); err != nil {
 		return fmt.Errorf("failed to write key file: %w", err)
 	}
@@ -88,7 +89,6 @@ func storeFiles(key []byte, certficate []byte, path, keyFileName, certificateFil
 	if err := os.WriteFile(path+certificateFileName, certficate, 0600); err != nil {
 		return fmt.Errorf("failed to write certificate file: %w", err)
 	}
-
 	return nil
 }
 
@@ -108,14 +108,14 @@ func StoreConnectorCertifcate(privateKey ed25519.PrivateKey, certificate []byte,
 		Bytes: privKeyBytes,
 	}
 
-	serviceConfigPathErr := storeFiles(pem.EncodeToMemory(privKeyPem), certificate, serviceConfigPath, privateKeyFile, certificateFile)
+	serviceConfigPathErr := StoreCertificateFiles(pem.EncodeToMemory(privKeyPem), certificate, serviceConfigPath, privateKeyFile, certificateFile)
 	if serviceConfigPathErr != nil {
 		u, err := user.Current()
 		if err != nil {
 			return fmt.Errorf("failed to store the certifcate files %s %s", err, serviceConfigPathErr)
 		}
 
-		err = storeFiles(pem.EncodeToMemory(privKeyPem), certificate, u.HomeDir+"/.border0/", privateKeyFile, certificateFile)
+		err = StoreCertificateFiles(pem.EncodeToMemory(privKeyPem), certificate, u.HomeDir+"/.border0/", privateKeyFile, certificateFile)
 		if err != nil {
 			return fmt.Errorf("failed to store the certifcate files %s %s", err, serviceConfigPathErr)
 		}
