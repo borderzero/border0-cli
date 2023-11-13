@@ -316,7 +316,88 @@ var socketConnectProxyCmd = &cobra.Command{
 			log.Fatalf("error: %v", err)
 		}
 
+		if socket.Socket.ConnectorLocalData == nil {
+			socket.Socket.ConnectorLocalData = &models.ConnectorLocalData{}
+		}
+
+		if socket.Socket.ConnectorData == nil {
+			socket.Socket.ConnectorData = &models.ConnectorData{}
+		}
+
 		socket.WithVersion(version)
+
+		if proxyHost != "" {
+			if err := socket.WithProxy(proxyHost); err != nil {
+				log.Fatalf("error: %v", err)
+			}
+		}
+
+		if socket.EndToEndEncryptionEnabled {
+			certificate, err := util.GetEndToEndEncryptionCertificate(ctx, socket.Organization.ID)
+			if err != nil {
+				return fmt.Errorf("failed to get connector certificate: %w", err)
+			}
+
+			if certificate == nil {
+				_, privKey, err := ed25519.GenerateKey(rand.Reader)
+				if err != nil {
+					return fmt.Errorf("failed to generate private key: %w", err)
+				}
+
+				csrTemplate := x509.CertificateRequest{
+					Subject:            pkix.Name{CommonName: "border0"},
+					SignatureAlgorithm: x509.PureEd25519,
+				}
+
+				csrBytes, err := x509.CreateCertificateRequest(rand.Reader, &csrTemplate, privKey)
+				if err != nil {
+					return fmt.Errorf("failed to create certificate request: %w", err)
+				}
+
+				csrPem := pem.Block{
+					Type:  "CERTIFICATE REQUEST",
+					Bytes: csrBytes,
+				}
+
+				var name string
+				hostname, err := os.Hostname()
+				if err != nil {
+					name = "border0-cli"
+				} else {
+					name = hostname
+				}
+
+				cert, err := border0API.ServerOrgCertificate(ctx, name, pem.EncodeToMemory(&csrPem))
+				if err != nil {
+					return fmt.Errorf("failed to get certificate: %w", err)
+				}
+
+				privKeyBytes, err := x509.MarshalPKCS8PrivateKey(privKey)
+				if err != nil {
+					return fmt.Errorf("failed to marshal private key: %w", err)
+				}
+
+				privKeyPem := &pem.Block{
+					Type:  "PRIVATE KEY",
+					Bytes: privKeyBytes,
+				}
+
+				tlsCert, err := tls.X509KeyPair(cert, pem.EncodeToMemory(privKeyPem))
+				if err != nil {
+					return fmt.Errorf("failed to parse certificate: %w", err)
+				}
+
+				certificate = &tlsCert
+
+				if err := util.StoreConnectorCertifcate(privKey, cert, orgID); err != nil {
+					logger.Logger.Warn("failed to store certificate", zap.Error(err))
+				}
+			}
+
+			socket.WithCertificate(certificate)
+		}
+
+		SetRlimit()
 
 		border0API.StartRefreshAccessTokenJob(ctx)
 
@@ -369,7 +450,88 @@ var socketConnectVpnCmd = &cobra.Command{
 			log.Fatalf("error: %v", err)
 		}
 
+		if socket.Socket.ConnectorLocalData == nil {
+			socket.Socket.ConnectorLocalData = &models.ConnectorLocalData{}
+		}
+
+		if socket.Socket.ConnectorData == nil {
+			socket.Socket.ConnectorData = &models.ConnectorData{}
+		}
+
 		socket.WithVersion(version)
+
+		if proxyHost != "" {
+			if err := socket.WithProxy(proxyHost); err != nil {
+				log.Fatalf("error: %v", err)
+			}
+		}
+
+		if socket.EndToEndEncryptionEnabled {
+			certificate, err := util.GetEndToEndEncryptionCertificate(ctx, socket.Organization.ID)
+			if err != nil {
+				return fmt.Errorf("failed to get connector certificate: %w", err)
+			}
+
+			if certificate == nil {
+				_, privKey, err := ed25519.GenerateKey(rand.Reader)
+				if err != nil {
+					return fmt.Errorf("failed to generate private key: %w", err)
+				}
+
+				csrTemplate := x509.CertificateRequest{
+					Subject:            pkix.Name{CommonName: "border0"},
+					SignatureAlgorithm: x509.PureEd25519,
+				}
+
+				csrBytes, err := x509.CreateCertificateRequest(rand.Reader, &csrTemplate, privKey)
+				if err != nil {
+					return fmt.Errorf("failed to create certificate request: %w", err)
+				}
+
+				csrPem := pem.Block{
+					Type:  "CERTIFICATE REQUEST",
+					Bytes: csrBytes,
+				}
+
+				var name string
+				hostname, err := os.Hostname()
+				if err != nil {
+					name = "border0-cli"
+				} else {
+					name = hostname
+				}
+
+				cert, err := border0API.ServerOrgCertificate(ctx, name, pem.EncodeToMemory(&csrPem))
+				if err != nil {
+					return fmt.Errorf("failed to get certificate: %w", err)
+				}
+
+				privKeyBytes, err := x509.MarshalPKCS8PrivateKey(privKey)
+				if err != nil {
+					return fmt.Errorf("failed to marshal private key: %w", err)
+				}
+
+				privKeyPem := &pem.Block{
+					Type:  "PRIVATE KEY",
+					Bytes: privKeyBytes,
+				}
+
+				tlsCert, err := tls.X509KeyPair(cert, pem.EncodeToMemory(privKeyPem))
+				if err != nil {
+					return fmt.Errorf("failed to parse certificate: %w", err)
+				}
+
+				certificate = &tlsCert
+
+				if err := util.StoreConnectorCertifcate(privKey, cert, orgID); err != nil {
+					logger.Logger.Warn("failed to store certificate", zap.Error(err))
+				}
+			}
+
+			socket.WithCertificate(certificate)
+		}
+
+		SetRlimit()
 
 		border0API.StartRefreshAccessTokenJob(ctx)
 
