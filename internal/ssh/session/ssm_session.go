@@ -639,6 +639,10 @@ func (s *ssmSession) OpenDataChannel(log log.T) (err error) {
 }
 
 func (s *ssmSession) handleWindowChange(width, height int) error {
+	if s.DataChannel == nil {
+		return nil
+	}
+
 	sizeData := message.SizeData{
 		Cols: uint32(width),
 		Rows: uint32(height),
