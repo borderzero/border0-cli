@@ -289,6 +289,7 @@ func (s *sshSession) handleChannels() error {
 
 	defer s.upstreamSshConn.Close()
 	go ssh.DiscardRequests(s.upstreamSshReqs)
+	go s.keepAlive(ctx)
 
 	for {
 		select {
@@ -322,6 +323,20 @@ func (s *sshSession) handleChannels() error {
 			}
 		case <-ctx.Done():
 			return nil
+		}
+	}
+}
+
+func (s *sshSession) keepAlive(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(30 * time.Second):
+			if _, _, err := s.upstreamSshConn.SendRequest("keepalive@openssh.com", true, nil); err != nil {
+				s.logger.Error("failed to send keepalive request", zap.Error(err))
+				return
+			}
 		}
 	}
 }
