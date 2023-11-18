@@ -328,11 +328,14 @@ func (s *sshSession) handleChannels() error {
 }
 
 func (s *sshSession) keepAlive(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(30 * time.Second):
+		case <-ticker.C:
 			if _, _, err := s.upstreamSshConn.SendRequest("keepalive@openssh.com", true, nil); err != nil {
 				s.logger.Error("failed to send keepalive request", zap.Error(err))
 				return
