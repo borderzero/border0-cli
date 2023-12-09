@@ -84,7 +84,8 @@ func Proxy(l net.Listener, c config.ProxyConfig) error {
 	case c.AwsUpstreamType == "aws-ec2connect":
 		handler = session.NewEc2InstanceConnectSessionHandler(c.Logger, &c)
 	case c.IsKubectlExec:
-		handler = session.NewKubectlExecSessionHandler(c.Logger, &c)
+		// handler = session.NewKubectlExecSessionHandler(c.Logger, &c)
+		handler = session.NewDockerExecSessionHandler(c.Logger, &c)
 	default:
 		var err error
 		handler, err = session.NewSshSessionHandler(c.Logger, &c)

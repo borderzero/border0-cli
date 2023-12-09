@@ -315,6 +315,7 @@ func (q *terminalWindowSizeQueue) Next() *remotecommand.TerminalSize {
 	case size := <-q.c:
 		return size
 	case <-q.ctx.Done():
+		close(q.c)
 		return nil
 	}
 }
@@ -354,9 +355,12 @@ func (s *kubectlExecSession) handleChannel(
 	}
 	channel.Write([]byte("\n"))
 
-	shells := set.New[string]("bash", "zsh", "ash", "sh")
-	for _, shell := range shells.Slice() {
-		if shells.Size() == 0 {
+	// we iterate over the slice and not the set
+	// because order is not maintained for the set
+	shells := []string{"bash", "zsh", "ash", "sh"}
+	shellSet := set.New(shells...)
+	for _, shell := range shells {
+		if shellSet.Size() == 0 {
 			channel.Write([]byte("No shells available in the target container :("))
 			s.logger.Error("no shells available in the target container", zap.Error(err))
 			return
@@ -392,7 +396,7 @@ func (s *kubectlExecSession) handleChannel(
 		if err != nil {
 			if strings.Contains(err.Error(), "executable file not found") ||
 				strings.Contains(err.Error(), "command terminated with exit code 127") {
-				shells.Remove(shell)
+				shellSet.Remove(shell)
 				continue // try next shell
 			}
 			if !errors.Is(err, io.EOF) && !errors.Is(err, context.Canceled) {
