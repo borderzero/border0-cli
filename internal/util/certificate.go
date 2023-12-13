@@ -1,7 +1,6 @@
 package util
 
 import (
-	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"crypto/tls"
@@ -12,13 +11,14 @@ import (
 	"os/user"
 )
 
-func GetEndToEndEncryptionCertificate(ctx context.Context, orgID string) (*tls.Certificate, error) {
-	privateKeyFile, certificateFile, err := generateNames(orgID)
+func GetEndToEndEncryptionCertificate(orgID, connectorID string) (*tls.Certificate, error) {
+	privateKeyFile, certificateFile, err := generateNames(orgID, connectorID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate names: %s", err)
 	}
 
 	var keyFilePath, certFilePath string
+	var errors []error
 
 	if _, err := os.Stat(serviceConfigPath + privateKeyFile); err == nil {
 		keyFilePath = serviceConfigPath + privateKeyFile
@@ -28,40 +28,68 @@ func GetEndToEndEncryptionCertificate(ctx context.Context, orgID string) (*tls.C
 		certFilePath = serviceConfigPath + certificateFile
 	}
 
-	if keyFilePath == "" || certFilePath == "" {
-		u, err := user.Current()
-		if err == nil {
-			if _, err := os.Stat(u.HomeDir + "/.border0/" + privateKeyFile); err == nil {
-				keyFilePath = u.HomeDir + "/.border0/" + privateKeyFile
-			}
+	if keyFilePath != "" && certFilePath != "" {
+		certificate, err := readCertificate(keyFilePath, certFilePath)
+		if err != nil {
+			errors = append(errors, err)
+		} else {
+			fmt.Println("Loaded certificate from service config path")
+			return certificate, nil
+		}
+	}
 
-			if _, err := os.Stat(u.HomeDir + "/.border0/" + certificateFile); err == nil {
-				certFilePath = u.HomeDir + "/.border0/" + certificateFile
-			}
+	u, err := user.Current()
+	if err == nil {
+		if _, err := os.Stat(u.HomeDir + "/.border0/" + privateKeyFile); err == nil {
+			keyFilePath = u.HomeDir + "/.border0/" + privateKeyFile
+		}
+
+		if _, err := os.Stat(u.HomeDir + "/.border0/" + certificateFile); err == nil {
+			certFilePath = u.HomeDir + "/.border0/" + certificateFile
 		}
 	}
 
 	if keyFilePath != "" && certFilePath != "" {
-		certificate, err := tls.LoadX509KeyPair(certFilePath, keyFilePath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load certificate: %s", err)
+		if keyFilePath != "" && certFilePath != "" {
+			certificate, err2 := readCertificate(keyFilePath, certFilePath)
+			if err != nil {
+				errors = append(errors, err2)
+			} else {
+				fmt.Println("Loaded certificate from user home directory")
+				return certificate, nil
+			}
 		}
-
-		return &certificate, nil
 	}
 
-	return nil, nil
+	if len(errors) > 0 {
+		return nil, fmt.Errorf("failed to load certificate: %s", errors)
+	} else {
+		return nil, nil
+	}
 }
 
-func generateNames(orgID string) (string, string, error) {
+func readCertificate(keyFilePath, certFilePath string) (*tls.Certificate, error) {
+	certificate, err := tls.LoadX509KeyPair(certFilePath, keyFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load certificate: %s", err)
+	}
+
+	return &certificate, nil
+}
+
+func generateNames(orgID, connectorID string) (string, string, error) {
 	name := orgID
-	hostname, err := os.Hostname()
-	if err == nil && hostname != "" {
-		name = fmt.Sprintf("%s%s", orgID, hostname)
+	if connectorID != "" {
+		name = fmt.Sprintf("%s%s", orgID, connectorID)
+	} else {
+		hostname, err := os.Hostname()
+		if err == nil {
+			name = fmt.Sprintf("%s%s", orgID, hostname)
+		}
 	}
 
 	hasher := sha256.New()
-	_, err = hasher.Write([]byte(name))
+	_, err := hasher.Write([]byte(name))
 	if err != nil {
 		return "", "", fmt.Errorf("failed to hash name: %s", err)
 	}
@@ -92,8 +120,8 @@ func StoreCertificateFiles(key []byte, certficate []byte, path, keyFileName, cer
 	return nil
 }
 
-func StoreConnectorCertifcate(privateKey ed25519.PrivateKey, certificate []byte, orgID string) error {
-	privateKeyFile, certificateFile, err := generateNames(orgID)
+func StoreConnectorCertifcate(privateKey ed25519.PrivateKey, certificate []byte, orgID, connectorID string) error {
+	privateKeyFile, certificateFile, err := generateNames(orgID, connectorID)
 	if err != nil {
 		return fmt.Errorf("failed to generate names: %s", err)
 	}

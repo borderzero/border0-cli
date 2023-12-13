@@ -617,6 +617,53 @@ func (c *ConnectorService) GetUserID() (string, error) {
 	return "", fmt.Errorf("failed to get user id")
 }
 
+func (c *ConnectorService) connectorIDFromToken() (string, error) {
+	token, _ := jwt.Parse(c.config.Token, nil)
+	if token == nil {
+		return "", fmt.Errorf("failed to parse token")
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", fmt.Errorf("failed to parse token")
+	}
+
+	connectorId, connectorIdPresent := claims["connector_id"]
+	if connectorIdPresent {
+		connectorIdStr, ok := connectorId.(string)
+		if !ok {
+			return "", fmt.Errorf("failed to parse token")
+		}
+		return connectorIdStr, nil
+	}
+
+	return "", fmt.Errorf("failed to get connector id")
+}
+
+func (c *ConnectorService) orgIDFromToken() (string, error) {
+	token, _ := jwt.Parse(c.config.Token, nil)
+	if token == nil {
+		return "", fmt.Errorf("failed to parse token")
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", fmt.Errorf("failed to parse token")
+	}
+
+	orgId, ok := claims["org_id"]
+	if !ok {
+		return "", fmt.Errorf("failed to get org id")
+	}
+
+	orgIdStr, ok := orgId.(string)
+	if !ok {
+		return "", fmt.Errorf("failed to parse token")
+	}
+
+	return orgIdStr, nil
+}
+
 func (c *ConnectorService) SignSSHKey(ctx context.Context, socketID string, publicKey []byte) (string, string, error) {
 	requestId := uuid.New().String()
 	if err := c.sendControlStreamRequest(&pb.ControlStreamRequest{
@@ -885,48 +932,69 @@ func (c *ConnectorService) Certificate() (*tls.Certificate, error) {
 		return c.connectorCertificate, nil
 	}
 
-	hasher := sha256.New()
-	_, err := hasher.Write([]byte(fmt.Sprintf("%s%s", c.organization.ID, c.config.ConnectorId)))
-	if err != nil {
-		return nil, fmt.Errorf("failed to hash name: %s", err)
-	}
-
-	hashBytes := hasher.Sum(nil)
-	shortHash := fmt.Sprintf("%x", hashBytes)[:8]
-	connectorPrivateKeyFile := fmt.Sprintf("connector-%s.key", shortHash)
-	connectorCertificateFile := fmt.Sprintf("connector-%s.crt", shortHash)
-
-	var keyFilePath, certFilePath string
-
-	if _, err := os.Stat(serviceConfigPath + connectorPrivateKeyFile); err == nil {
-		keyFilePath = serviceConfigPath + connectorPrivateKeyFile
-	}
-
-	if _, err := os.Stat(serviceConfigPath + connectorCertificateFile); err == nil {
-		certFilePath = serviceConfigPath + connectorCertificateFile
-	}
-
-	if keyFilePath == "" || certFilePath == "" {
-		u, err := user.Current()
-		if err == nil {
-			if _, err := os.Stat(u.HomeDir + "/.border0/" + connectorPrivateKeyFile); err == nil {
-				keyFilePath = u.HomeDir + "/.border0/" + connectorPrivateKeyFile
-			}
-
-			if _, err := os.Stat(u.HomeDir + "/.border0/" + connectorCertificateFile); err == nil {
-				certFilePath = u.HomeDir + "/.border0/" + connectorCertificateFile
-			}
-		}
-	}
-
-	if keyFilePath != "" && certFilePath != "" {
-		certificate, err := tls.LoadX509KeyPair(certFilePath, keyFilePath)
+	var connectorID string
+	if c.config.ConnectorId != "" {
+		connectorID = c.config.ConnectorId
+	} else {
+		var err error
+		connectorID, err = c.connectorIDFromToken()
 		if err != nil {
-			return nil, fmt.Errorf("failed to load certificate: %s", err)
+			return nil, fmt.Errorf("failed to get connector id: %w", err)
 		}
+	}
 
-		c.connectorCertificate = &certificate
-		return c.connectorCertificate, nil
+	orgID, err := c.orgIDFromToken()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get org id: %w", err)
+	}
+
+	// hasher := sha256.New()
+	// _, err = hasher.Write([]byte(fmt.Sprintf("%s%s", orgID, connectorID)))
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to hash name: %s", err)
+	// }
+
+	// hashBytes := hasher.Sum(nil)
+	// shortHash := fmt.Sprintf("%x", hashBytes)[:8]
+	// connectorPrivateKeyFile := fmt.Sprintf("connector-%s.key", shortHash)
+	// connectorCertificateFile := fmt.Sprintf("connector-%s.crt", shortHash)
+
+	// var keyFilePath, certFilePath string
+
+	// if _, err := os.Stat(serviceConfigPath + connectorPrivateKeyFile); err == nil {
+	// 	keyFilePath = serviceConfigPath + connectorPrivateKeyFile
+	// }
+
+	// if _, err := os.Stat(serviceConfigPath + connectorCertificateFile); err == nil {
+	// 	certFilePath = serviceConfigPath + connectorCertificateFile
+	// }
+
+	// if keyFilePath == "" || certFilePath == "" {
+	// 	u, err := user.Current()
+	// 	if err == nil {
+	// 		if _, err := os.Stat(u.HomeDir + "/.border0/" + connectorPrivateKeyFile); err == nil {
+	// 			keyFilePath = u.HomeDir + "/.border0/" + connectorPrivateKeyFile
+	// 		}
+
+	// 		if _, err := os.Stat(u.HomeDir + "/.border0/" + connectorCertificateFile); err == nil {
+	// 			certFilePath = u.HomeDir + "/.border0/" + connectorCertificateFile
+	// 		}
+	// 	}
+	// }
+
+	// if keyFilePath != "" && certFilePath != "" {
+	// 	certificate, err := tls.LoadX509KeyPair(certFilePath, keyFilePath)
+	// 	if err != nil {
+	// 		return nil, fmt.Errorf("failed to load certificate: %s", err)
+	// 	}
+
+	// 	c.connectorCertificate = &certificate
+	// 	return c.connectorCertificate, nil
+	// }
+
+	c.connectorCertificate, err = b0Util.GetEndToEndEncryptionCertificate(orgID, connectorID)
+	if err != nil {
+		return nil, err
 	}
 
 	_, privKey, err := ed25519.GenerateKey(rand.Reader)
@@ -1000,19 +1068,8 @@ func (c *ConnectorService) Certificate() (*tls.Certificate, error) {
 
 	c.connectorCertificate = &cert
 
-	serviceConfigPathErr := b0Util.StoreCertificateFiles(pem.EncodeToMemory(privKeyPem), certificate, serviceConfigPath, connectorPrivateKeyFile, connectorCertificateFile)
-	if serviceConfigPathErr != nil {
-		u, err := user.Current()
-		if err != nil {
-			c.logger.Warn("failed to store the certifcate files", zap.Error(serviceConfigPathErr), zap.Error(err))
-			return c.connectorCertificate, nil
-		}
-
-		err = b0Util.StoreCertificateFiles(pem.EncodeToMemory(privKeyPem), certificate, u.HomeDir+"/.border0/", connectorPrivateKeyFile, connectorCertificateFile)
-		if err != nil {
-			c.logger.Warn("failed to store the certifcate files", zap.Error(serviceConfigPathErr), zap.Error(err))
-			return c.connectorCertificate, nil
-		}
+	if err := b0Util.StoreConnectorCertifcate(privKeyBytes, certificate, orgID, connectorID); err != nil {
+		c.logger.Warn("failed to store the end to end encryption certificate", zap.Error(err))
 	}
 
 	return c.connectorCertificate, nil

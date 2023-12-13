@@ -333,7 +333,7 @@ var socketConnectProxyCmd = &cobra.Command{
 		}
 
 		if socket.EndToEndEncryptionEnabled {
-			certificate, err := util.GetEndToEndEncryptionCertificate(ctx, socket.Organization.ID)
+			certificate, err := util.GetEndToEndEncryptionCertificate(socket.Organization.ID, "")
 			if err != nil {
 				return fmt.Errorf("failed to get connector certificate: %w", err)
 			}
@@ -389,7 +389,7 @@ var socketConnectProxyCmd = &cobra.Command{
 
 				certificate = &tlsCert
 
-				if err := util.StoreConnectorCertifcate(privKey, cert, orgID); err != nil {
+				if err := util.StoreConnectorCertifcate(privKey, cert, orgID, ""); err != nil {
 					logger.Logger.Warn("failed to store certificate", zap.Error(err))
 				}
 			}
@@ -467,7 +467,7 @@ var socketConnectVpnCmd = &cobra.Command{
 		}
 
 		if socket.EndToEndEncryptionEnabled {
-			certificate, err := util.GetEndToEndEncryptionCertificate(ctx, socket.Organization.ID)
+			certificate, err := util.GetEndToEndEncryptionCertificate(socket.Organization.ID, "")
 			if err != nil {
 				return fmt.Errorf("failed to get connector certificate: %w", err)
 			}
@@ -523,7 +523,7 @@ var socketConnectVpnCmd = &cobra.Command{
 
 				certificate = &tlsCert
 
-				if err := util.StoreConnectorCertifcate(privKey, cert, orgID); err != nil {
+				if err := util.StoreConnectorCertifcate(privKey, cert, orgID, ""); err != nil {
 					logger.Logger.Warn("failed to store certificate", zap.Error(err))
 				}
 			}
@@ -684,7 +684,7 @@ var socketConnectCmd = &cobra.Command{
 		}
 
 		if socket.EndToEndEncryptionEnabled {
-			certificate, err := util.GetEndToEndEncryptionCertificate(ctx, socket.Organization.ID)
+			certificate, err := util.GetEndToEndEncryptionCertificate(socket.Organization.ID, "")
 			if err != nil {
 				return fmt.Errorf("failed to get connector certificate: %w", err)
 			}
@@ -740,7 +740,7 @@ var socketConnectCmd = &cobra.Command{
 
 				certificate = &tlsCert
 
-				if err := util.StoreConnectorCertifcate(privKey, cert, orgID); err != nil {
+				if err := util.StoreConnectorCertifcate(privKey, cert, orgID, ""); err != nil {
 					logger.Logger.Warn("failed to store certificate", zap.Error(err))
 				}
 			}

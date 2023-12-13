@@ -628,7 +628,7 @@ func (c *ConnectorCore) certificate(ctx context.Context, orgID string) (*tls.Cer
 		return c.connectorCertificate, nil
 	}
 
-	certificate, err := util.GetEndToEndEncryptionCertificate(ctx, orgID)
+	certificate, err := util.GetEndToEndEncryptionCertificate(orgID, "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get connector certificate: %w", err)
 	}
@@ -684,7 +684,7 @@ func (c *ConnectorCore) certificate(ctx context.Context, orgID string) (*tls.Cer
 
 		c.connectorCertificate = &tlsCert
 
-		if err := util.StoreConnectorCertifcate(privKey, cert, orgID); err != nil {
+		if err := util.StoreConnectorCertifcate(privKey, cert, orgID, ""); err != nil {
 			c.logger.Warn("failed to store certificate", zap.Error(err))
 		}
 	}
