@@ -948,50 +948,6 @@ func (c *ConnectorService) Certificate() (*tls.Certificate, error) {
 		return nil, fmt.Errorf("failed to get org id: %w", err)
 	}
 
-	// hasher := sha256.New()
-	// _, err = hasher.Write([]byte(fmt.Sprintf("%s%s", orgID, connectorID)))
-	// if err != nil {
-	// 	return nil, fmt.Errorf("failed to hash name: %s", err)
-	// }
-
-	// hashBytes := hasher.Sum(nil)
-	// shortHash := fmt.Sprintf("%x", hashBytes)[:8]
-	// connectorPrivateKeyFile := fmt.Sprintf("connector-%s.key", shortHash)
-	// connectorCertificateFile := fmt.Sprintf("connector-%s.crt", shortHash)
-
-	// var keyFilePath, certFilePath string
-
-	// if _, err := os.Stat(serviceConfigPath + connectorPrivateKeyFile); err == nil {
-	// 	keyFilePath = serviceConfigPath + connectorPrivateKeyFile
-	// }
-
-	// if _, err := os.Stat(serviceConfigPath + connectorCertificateFile); err == nil {
-	// 	certFilePath = serviceConfigPath + connectorCertificateFile
-	// }
-
-	// if keyFilePath == "" || certFilePath == "" {
-	// 	u, err := user.Current()
-	// 	if err == nil {
-	// 		if _, err := os.Stat(u.HomeDir + "/.border0/" + connectorPrivateKeyFile); err == nil {
-	// 			keyFilePath = u.HomeDir + "/.border0/" + connectorPrivateKeyFile
-	// 		}
-
-	// 		if _, err := os.Stat(u.HomeDir + "/.border0/" + connectorCertificateFile); err == nil {
-	// 			certFilePath = u.HomeDir + "/.border0/" + connectorCertificateFile
-	// 		}
-	// 	}
-	// }
-
-	// if keyFilePath != "" && certFilePath != "" {
-	// 	certificate, err := tls.LoadX509KeyPair(certFilePath, keyFilePath)
-	// 	if err != nil {
-	// 		return nil, fmt.Errorf("failed to load certificate: %s", err)
-	// 	}
-
-	// 	c.connectorCertificate = &certificate
-	// 	return c.connectorCertificate, nil
-	// }
-
 	c.connectorCertificate, err = b0Util.GetEndToEndEncryptionCertificate(orgID, connectorID)
 	if err != nil {
 		return nil, err
