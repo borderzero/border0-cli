@@ -14,7 +14,6 @@ import (
 	"github.com/borderzero/border0-cli/internal/border0"
 	sshConfig "github.com/borderzero/border0-cli/internal/ssh/config"
 	"github.com/borderzero/border0-cli/internal/ssh/session/common"
-	"github.com/borderzero/border0-go/lib/types/set"
 	"github.com/borderzero/border0-go/lib/types/slice"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
@@ -223,9 +222,10 @@ func (s *dockerExecSession) handleChannel(
 	// we iterate over the slice and not the set
 	// because order is not maintained for the set
 	shells := []string{"bash", "zsh", "ash", "sh"}
-	shellSet := set.New(shells...)
+	nShells := len(shells)
+
 	for _, shell := range shells {
-		if shellSet.Size() == 0 {
+		if nShells == 0 {
 			channel.Write([]byte("No shells available in the target container :("))
 			s.logger.Error("no shells available in the target container", zap.Error(err))
 			return
@@ -283,9 +283,8 @@ func (s *dockerExecSession) handleChannel(
 				zap.Error(err),
 			)
 		}
-		if strings.Contains(string(buf[:n]), "executable file not found") ||
-			strings.Contains(string(buf[:n]), "command terminated with exit code 127") {
-			shellSet.Remove(shell)
+		if common.IsBinaryNotFound(string(buf[:n])) {
+			nShells--
 			continue // try next shell
 		}
 		// if no error, we need to write that first read back to the ssh channel

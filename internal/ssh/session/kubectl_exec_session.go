@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -22,7 +23,6 @@ import (
 	sshConfig "github.com/borderzero/border0-cli/internal/ssh/config"
 	"github.com/borderzero/border0-cli/internal/ssh/session/common"
 	"github.com/borderzero/border0-go/lib/types/maps"
-	"github.com/borderzero/border0-go/lib/types/set"
 	"github.com/borderzero/border0-go/lib/types/slice"
 	"github.com/manifoldco/promptui"
 	"go.uber.org/zap"
@@ -340,9 +340,10 @@ func (s *kubectlExecSession) handleChannel(
 	// we iterate over the slice and not the set
 	// because order is not maintained for the set
 	shells := []string{"bash", "zsh", "ash", "sh"}
-	shellSet := set.New(shells...)
+	nShells := len(shells)
+
 	for _, shell := range shells {
-		if shellSet.Size() == 0 {
+		if nShells == 0 {
 			channel.Write([]byte("No shells available in the target container :("))
 			s.logger.Error("no shells available in the target container", zap.Error(err))
 			return
@@ -368,17 +369,18 @@ func (s *kubectlExecSession) handleChannel(
 			return
 		}
 
+		teeTarget, _ := os.Create(fmt.Sprintf("./%s", shell))
+
 		err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
-			Stdin:             channel,
+			Stdin:             io.TeeReader(channel, teeTarget),
 			Stdout:            channel,
 			Stderr:            channel.Stderr(),
 			Tty:               true,
 			TerminalSizeQueue: terminalSizeQ,
 		})
 		if err != nil {
-			if strings.Contains(err.Error(), "executable file not found") ||
-				strings.Contains(err.Error(), "command terminated with exit code 127") {
-				shellSet.Remove(shell)
+			if common.IsBinaryNotFound(err.Error()) {
+				nShells--
 				continue // try next shell
 			}
 			if !errors.Is(err, io.EOF) && !errors.Is(err, context.Canceled) {
@@ -580,7 +582,7 @@ func getRemoteCommandExecutor(
 		Command:   []string{shell},
 		Stdin:     true,
 		Stdout:    true,
-		Stderr:    true,
+		Stderr:    false,
 		TTY:       true,
 	}
 	req = req.VersionedParams(option, scheme.ParameterCodec)
