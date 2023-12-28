@@ -1339,4 +1339,3 @@ sigs.k8s.io/structured-merge-diff/v4/value
 ## explicit; go 1.12
 sigs.k8s.io/yaml
 sigs.k8s.io/yaml/goyaml.v2
-# github.com/Microsoft/go-mssqldb v1.6.0 => github.com/btoonk/go-mssqldb v0.0.0-20231228101453-dbeeb0d7da1c
