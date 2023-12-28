@@ -9,7 +9,7 @@ BUCKET=pub-mysocketctl-bin
 
 DATE := $(shell git log -1 --format=%cd --date=format:"%Y%m%d")
 # BORDER0_VERSION is supplied by the build script
-BORDER0_VERSION ?= $(git describe --long --dirty --tags)
+BORDER0_VERSION ?= $(shell git describe --long --dirty --tags)
 VERSION=$(BORDER0_VERSION)
 # strip debugging information with -s and -w linker flags
 # -s: disable symbol table
