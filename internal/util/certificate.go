@@ -33,7 +33,6 @@ func GetEndToEndEncryptionCertificate(orgID, connectorID string) (*tls.Certifica
 		if err != nil {
 			errors = append(errors, err)
 		} else {
-			fmt.Println("Loaded certificate from service config path")
 			return certificate, nil
 		}
 	}
@@ -55,7 +54,6 @@ func GetEndToEndEncryptionCertificate(orgID, connectorID string) (*tls.Certifica
 			if err != nil {
 				errors = append(errors, err2)
 			} else {
-				fmt.Println("Loaded certificate from user home directory")
 				return certificate, nil
 			}
 		}

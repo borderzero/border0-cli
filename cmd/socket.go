@@ -150,8 +150,8 @@ var socketCreateCmd = &cobra.Command{
 
 		var upstream_cert, upstream_key, upstream_ca *string
 		if socketType == "database" {
-			if upstreamType != "mysql" && upstreamType != "postgres" && upstreamType != "" {
-				log.Fatalf("error: --upstream_type should be mysql or postgres, defaults to mysql")
+			if upstreamType != "mysql" && upstreamType != "postgres" && upstreamType != "mssql" && upstreamType != "" {
+				log.Fatalf("error: --upstream_type should be mysql, mssql or postgres, defaults to mysql")
 			}
 
 			if upstream_cert_file != "" {
@@ -1035,7 +1035,7 @@ func init() {
 	socketCreateCmd.Flags().StringVarP(&upstream_username, "upstream_username", "j", "", "Upstream username used to connect to upstream database")
 	socketCreateCmd.Flags().StringVarP(&upstream_password, "upstream_password", "k", "", "Upstream password used to connect to upstream database")
 	socketCreateCmd.Flags().StringVarP(&upstream_http_hostname, "upstream_http_hostname", "", "", "Upstream http hostname")
-	socketCreateCmd.Flags().StringVarP(&upstream_type, "upstream_type", "", "", "Upstream type: http, https for http sockets or mysql, postgres for database sockets and aws-ssm for ssh sockets")
+	socketCreateCmd.Flags().StringVarP(&upstream_type, "upstream_type", "", "", "Upstream type: http, https for http sockets or mysql, mssql, postgres for database sockets and aws-ssm for ssh sockets")
 	socketCreateCmd.Flags().StringVarP(&socketType, "type", "t", "http", "Socket type: http, https, ssh, tls, database")
 	socketCreateCmd.Flags().BoolVarP(&connectorAuthEnabled, "connector_auth", "c", false, "Enables connector authentication")
 	socketCreateCmd.Flags().StringVarP(&orgCustomDomain, "domain", "o", "", "Use custom domain for socket")

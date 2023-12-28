@@ -89,6 +89,9 @@ func (s *K8Discover) buildSocket(connectorName string, group config.K8Plugin, se
 		socket.SocketType = "ssh"
 	case "database":
 		socket.SocketType = "database"
+	case "mssql":
+		socket.SocketType = "database"
+		socket.UpstreamType = "mssql"
 	case "postgres":
 		socket.SocketType = "database"
 		socket.UpstreamType = "postgres"

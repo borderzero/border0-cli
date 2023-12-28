@@ -54,6 +54,11 @@ func Serve(l net.Listener, config Config) error {
 		if err != nil {
 			return err
 		}
+	case "mssql":
+		handler, err = newMssqlHandler(config)
+		if err != nil {
+			return err
+		}
 	default:
 		handler, err = newMysqlHandler(config)
 		if err != nil {

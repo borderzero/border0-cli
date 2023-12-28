@@ -55,8 +55,8 @@ var connectCmd = &cobra.Command{
 		}
 
 		if socketType == "database" {
-			if upstreamType != "mysql" && upstreamType != "postgres" && upstreamType != "" {
-				log.Fatalf("error: --upstream_type should be  mysql or postgres, defaults to mysql")
+			if upstreamType != "mysql" && upstreamType != "postgres" && upstreamType != "mssql" && upstreamType != "" {
+				log.Fatalf("error: --upstream_type should be  mysql, mssql or postgres, defaults to mysql")
 			}
 		}
 
@@ -164,7 +164,7 @@ func init() {
 	connectCmd.Flags().StringVarP(&upstream_username, "upstream_username", "j", "", "Upstream username used to connect to upstream database")
 	connectCmd.Flags().StringVarP(&upstream_password, "upstream_password", "k", "", "Upstream password used to connect to upstream database")
 	connectCmd.Flags().StringVarP(&upstream_http_hostname, "upstream_http_hostname", "", "", "Upstream http hostname")
-	connectCmd.Flags().StringVarP(&upstream_type, "upstream_type", "", "", "Upstream type: Upstream type: http, https for http sockets or mysql, postgres for database sockets")
+	connectCmd.Flags().StringVarP(&upstream_type, "upstream_type", "", "", "Upstream type: Upstream type: http, https for http sockets or mysql, mssql, postgres for database sockets")
 	connectCmd.Flags().StringVarP(&proxyHost, "proxy", "", "", "Proxy host used for connection to border0")
 	connectCmd.Flags().BoolVarP(&localssh, "localssh", "", false, "Start a local SSH server to accept SSH sessions on this host")
 	connectCmd.Flags().BoolVarP(&localssh, "sshserver", "l", false, "Start a local SSH server to accept SSH sessions on this host")

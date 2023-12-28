@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"runtime"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/borderzero/border0-cli/client/preference"
@@ -27,6 +28,8 @@ func AddCommandsTo(client *cobra.Command) {
 	addOneCommandTo(psqlCmd, client)
 	addOneCommandTo(pgcliCmd, client)
 	addOneCommandTo(dataGripCmd, client)
+	addOneCommandTo(sqlcmdCmd, client)
+	addOneCommandTo(ssmsCmd, client)
 
 	dbCmd.Flags().BoolVarP(&local, "local", "l", false, "start a local listener")
 	dbCmd.Flags().IntVarP(&port, "port", "p", 0, "local listener port")
@@ -86,11 +89,17 @@ var dbCmd = &cobra.Command{
 			dbClients           = []string{"local listener"}
 			dbClientsMySQL      = []string{"mysql", "mysqlworkbench", "mycli", "dbeaver", "datagrip"}
 			dbClientsPostgreSQL = []string{"psql", "pgcli", "datagrip"}
+			dbClientsMssql      = []string{"sqlcmd", "dbeaver", "datagrip"}
 		)
 
 		switch pickedHost.DatabaseType {
 		case "mysql":
 			dbClients = append(dbClients, dbClientsMySQL...)
+		case "mssql":
+			dbClients = append(dbClients, dbClientsMssql...)
+			if runtime.GOOS == "windows" {
+				dbClients = append(dbClients, "ssms (SQL Server Management Studio)")
+			}
 		case "postgres":
 			dbClients = append(dbClients, dbClientsPostgreSQL...)
 		default:
@@ -125,6 +134,10 @@ var dbCmd = &cobra.Command{
 		dbName, err = client.EnterDBName(dbName, suggestedDBName)
 		if err != nil {
 			return err
+		}
+
+		if dbClient == "ssms (SQL Server Management Studio)" {
+			dbClient = "ssms"
 		}
 
 		cmdToCall := "db:" + dbClient

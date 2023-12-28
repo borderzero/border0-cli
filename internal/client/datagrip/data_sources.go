@@ -10,7 +10,7 @@ import (
 )
 
 type Config struct {
-	Type        string // mysql or postgres
+	Type        string // mysql, mssql or postgres
 	Name        string
 	Host        string
 	Port        int
@@ -42,6 +42,9 @@ func DataSourcesXML(c *Config) (string, error) {
 			Enabled:    true,
 			Mode:       "REQUIRE",
 		}
+	case "mssql":
+		jdbcDriver = "com.microsoft.sqlserver.jdbc.SQLServerDriver"
+		jdbcURL = fmt.Sprintf("jdbc:sqlserver://%s:%d;databaseName=%s", c.Host, c.Port, c.Database)
 	case "postgres":
 		jdbcDriver = "org.postgresql.Driver"
 		jdbcURL = fmt.Sprintf("jdbc:postgresql://%s:%d/%s", c.Host, c.Port, c.Database)

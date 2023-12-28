@@ -26,6 +26,8 @@ func NewSqlClientProxy(logger *zap.Logger, port int, resource models.ClientResou
 		return newMysqlClientProxy(logger, port, resource)
 	case "postgres":
 		return newPostgresClientProxy(logger, port, resource)
+	case "mssql":
+		return newTcpProxy(logger, port, resource)
 	default:
 		return nil, fmt.Errorf("unsupported database type: %s", resource.DatabaseType)
 	}

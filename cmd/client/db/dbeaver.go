@@ -87,6 +87,18 @@ var dbeaverCmd = &cobra.Command{
 		keyStorePath := filepath.Join(home, ".border0", orgID+".jks")
 		client.WriteKeyStore(keyStore, keyStorePath, keyStorePassword)
 
+		var driver string
+		switch pickedHost.DatabaseType {
+		case "mysql":
+			driver = "mariadb"
+		case "mssql":
+			driver = "microsoft"
+		case "postgres":
+			driver = "postgresql"
+		default:
+			driver = "mariadb"
+		}
+
 		// for more about jdbc driver properties, see:
 		// https://dev.mysql.com/doc/connector-j/5.1/en/connector-j-connp-props-security.html
 		// also see this page for connection parameters:
@@ -97,7 +109,7 @@ var dbeaverCmd = &cobra.Command{
 			"database=" + dbName,
 			"prop.clientCertificateKeyStoreUrl=file:" + keyStorePath,
 			"prop.clientCertificateKeyStorePassword=" + string(keyStorePassword),
-			"driver=mariadb",
+			"driver=" + driver,
 			"user=placeholder",
 			"savePassword=true", // does not ask user for a password on connection
 			"openConsole=true",  // opens the SQL console for this database (also sets connect to true)
