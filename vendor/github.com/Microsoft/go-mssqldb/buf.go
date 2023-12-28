@@ -11,7 +11,7 @@ type packetType uint8
 
 type header struct {
 	PacketType packetType
-	Status     byte
+	Status     uint8
 	Size       uint16
 	Spid       uint16
 	PacketNo   uint8
@@ -45,7 +45,6 @@ type tdsBuffer struct {
 	wpos        int
 	wPacketSeq  byte
 	wPacketType packetType
-	wSpid       uint16
 
 	// Read fields.
 	rbuf        []byte
@@ -58,8 +57,6 @@ type tdsBuffer struct {
 	// before the first use. It is executed after the first packet is
 	// written and then removed.
 	afterFirst func()
-
-	serverConn *tdsSession
 }
 
 func newTdsBuffer(bufsize uint16, transport io.ReadWriteCloser) *tdsBuffer {
@@ -89,7 +86,6 @@ func (w *tdsBuffer) flush() (err error) {
 	// Write packet size.
 	w.wbuf[0] = byte(w.wPacketType)
 	binary.BigEndian.PutUint16(w.wbuf[2:], uint16(w.wpos))
-	binary.BigEndian.PutUint16(w.wbuf[4:], w.wSpid)
 	w.wbuf[6] = w.wPacketSeq
 
 	// Write packet into underlying transport.
@@ -173,14 +169,12 @@ func (r *tdsBuffer) readNextPacket() error {
 		PacketNo:   buf[6],
 		Pad:        buf[7],
 	}
-
 	if int(h.Size) > r.packetSize {
 		return errors.New("invalid packet size, it is longer than buffer size")
 	}
 	if headerSize > int(h.Size) {
 		return errors.New("invalid packet size, it is shorter than header size")
 	}
-
 	_, err = io.ReadFull(r.transport, r.rbuf[headerSize:h.Size])
 	//s := base64.StdEncoding.EncodeToString(r.rbuf[headerSize:h.Size])
 	//fmt.Print(s)
@@ -189,34 +183,12 @@ func (r *tdsBuffer) readNextPacket() error {
 	}
 	r.rpos = headerSize
 	r.rsize = int(h.Size)
-	r.final = h.Status&0x1 != 0
+	r.final = h.Status != 0
 	r.rPacketType = h.PacketType
-
-	if r.serverConn != nil {
-		_, err := r.serverConn.buf.Write(r.rbuf[r.rpos:r.rsize])
-		if err != nil {
-			return err
-		}
-
-		if r.final {
-			r.serverConn.buf.wSpid = h.Spid
-			if err := r.serverConn.buf.FinishPacket(); err != nil {
-				return err
-			}
-		} else {
-			if err := r.serverConn.buf.flush(); err != nil {
-				return err
-			}
-		}
-	}
 	return nil
 }
 
 func (r *tdsBuffer) BeginRead() (packetType, error) {
-	if r.serverConn != nil {
-		r.serverConn.buf.BeginPacket(r.rPacketType, false)
-	}
-
 	err := r.readNextPacket()
 	if err != nil {
 		return 0, err

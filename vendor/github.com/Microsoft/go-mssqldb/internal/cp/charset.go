@@ -1,9 +1,5 @@
 package cp
 
-import (
-	"strings"
-)
-
 type charsetMap struct {
 	sb [256]rune    // single byte runes, -1 for a double byte character lead byte
 	db map[int]rune // double byte runes
@@ -95,9 +91,7 @@ func CharsetToUTF8(col Collation, s []byte) string {
 	if cm == nil {
 		return string(s)
 	}
-
-	buf := strings.Builder{}
-	buf.Grow(len(s))
+	buf := make([]rune, 0, len(s))
 	for i := 0; i < len(s); i++ {
 		ch := cm.sb[s[i]]
 		if ch == -1 {
@@ -113,7 +107,7 @@ func CharsetToUTF8(col Collation, s []byte) string {
 				}
 			}
 		}
-		buf.WriteRune(ch)
+		buf = append(buf, ch)
 	}
-	return buf.String()
+	return string(buf)
 }
