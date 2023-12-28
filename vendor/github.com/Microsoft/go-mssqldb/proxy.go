@@ -120,13 +120,21 @@ func (s *Server) ReadLogin(conn net.Conn) (*ServerSession, *login, error) {
 }
 
 func (s *tdsSession) ReadCommand() (packetType, error) {
+	var buf []byte
 	for {
 		_, err := s.buf.BeginRead()
 		if err != nil {
 			return 0, err
 		}
 
+		bytes := make([]byte, s.buf.rsize-s.buf.rpos)
+		s.buf.ReadFull(bytes)
+		buf = append(buf, bytes...)
+
 		if s.buf.final {
+			copy(s.buf.rbuf, buf)
+			s.buf.rsize = len(buf)
+			s.buf.rpos = 0
 			return s.buf.rPacketType, nil
 		}
 	}
@@ -218,7 +226,6 @@ func (s *Server) preparePreloginResponseFields() map[uint8][]byte {
 
 func (s *Server) readLogin(r *tdsBuffer) (login, error) {
 	var login login
-
 	packet_type, err := r.BeginRead()
 	if err != nil {
 		return login, err
@@ -243,6 +250,7 @@ func (s *Server) readLogin(r *tdsBuffer) (login, error) {
 	}
 
 	login.TDSVersion = loginHeader.TDSVersion
+	login.ClientProgVer = loginHeader.ClientProgVer
 	login.ClientPID = loginHeader.ClientPID
 	login.ConnectionID = loginHeader.ConnectionID
 	login.OptionFlags1 = loginHeader.OptionFlags1
@@ -306,11 +314,11 @@ func readLoginFieldString(b []byte, offset uint16, length uint16) (string, error
 }
 
 func readLoginFieldBytes(b []byte, offset uint16, length uint16) ([]byte, error) {
-	if len(b) < int(offset)+int(length)*2 {
-		return nil, fmt.Errorf("invalid login packet, expected %d bytes, got %d", offset+length*2, len(b))
+	if len(b) < int(offset)+int(length) {
+		return nil, fmt.Errorf("invalid login packet, expected %d bytes, got %d", offset+length, len(b))
 	}
 
-	return b[offset : offset+length*2], nil
+	return b[offset : offset+length], nil
 }
 
 func (s *Server) WriteLogin(session *ServerSession, loginEnvBytes []byte) error {
@@ -384,6 +392,60 @@ func (s *tdsSession) ParseSQLBatch() ([]headerStruct, string, error) {
 	return headers, query, nil
 }
 
+func (s *tdsSession) ParseTransMgrReq() ([]headerStruct, uint16, isoLevel, string, string, uint8, error) {
+	headers, err := readAllHeaders(s.buf)
+	if err != nil {
+		return nil, 0, 0, "", "", 0, err
+	}
+
+	var rqtype uint16
+	if err := binary.Read(s.buf, binary.LittleEndian, &rqtype); err != nil {
+		return nil, 0, 0, "", "", 0, err
+	}
+
+	switch rqtype {
+	case tmBeginXact:
+		var isolationLevel isoLevel
+		if err := binary.Read(s.buf, binary.LittleEndian, &isolationLevel); err != nil {
+			return nil, 0, 0, "", "", 0, err
+		}
+
+		name, err := readBVarChar(s.buf)
+		if err != nil {
+			return nil, 0, 0, "", "", 0, err
+		}
+
+		return headers, rqtype, isolationLevel, name, "", 0, nil
+	case tmCommitXact, tmRollbackXact:
+		name, err := readBVarChar(s.buf)
+		if err != nil {
+			return nil, 0, 0, "", "", 0, err
+		}
+
+		var flags uint8
+		if err := binary.Read(s.buf, binary.LittleEndian, &flags); err != nil {
+			return nil, 0, 0, "", "", 0, err
+		}
+
+		var newname string
+		if flags&fBeginXact != 0 {
+			var isolationLevel isoLevel
+			if err := binary.Read(s.buf, binary.LittleEndian, &isolationLevel); err != nil {
+				return nil, 0, 0, "", "", 0, err
+			}
+
+			newname, err = readBVarChar(s.buf)
+			if err != nil {
+				return nil, 0, 0, "", "", 0, err
+			}
+		}
+
+		return headers, rqtype, 0, name, newname, flags, nil
+	default:
+		return nil, 0, 0, "", "", 0, fmt.Errorf("invalid transaction manager request type: %d", rqtype)
+	}
+}
+
 func (s *tdsSession) ParseRPC() ([]headerStruct, procId, uint16, []param, []interface{}, error) {
 	headers, err := readAllHeaders(s.buf)
 	if err != nil {
@@ -443,11 +505,9 @@ func parseParams(b *tdsBuffer) ([]param, []interface{}, error) {
 		}
 
 		p.Flags = flags
-
 		p.ti = readTypeInfo(b, b.byte(), nil)
 		val := p.ti.Reader(&p.ti, b, nil)
 		p.buffer = p.ti.Buffer
-
 		params = append(params, p)
 		values = append(values, val)
 	}
@@ -612,6 +672,27 @@ func (c *Client) SendRpc(ctx context.Context, serverConn *ServerSession, headers
 	return c.processResponse(ctx, serverConn)
 }
 
+func (c *Client) TransMgrReq(ctx context.Context, serverConn *ServerSession, headers []headerStruct, rqtype uint16, isolationLevel isoLevel, name, newname string, flags uint8, resetSession bool) ([]doneStruct, error) {
+	switch rqtype {
+	case tmBeginXact:
+		if err := sendBeginXact(c.Conn.sess.buf, headers, isolationLevel, name, resetSession); err != nil {
+			return nil, err
+		}
+	case tmCommitXact:
+		if err := sendCommitXact(c.Conn.sess.buf, headers, name, flags, uint8(isolationLevel), newname, resetSession); err != nil {
+			return nil, err
+		}
+	case tmRollbackXact:
+		if err := sendRollbackXact(c.Conn.sess.buf, headers, name, flags, uint8(isolationLevel), newname, resetSession); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("invalid transaction manager request type: %d", rqtype)
+	}
+
+	return c.processResponse(ctx, serverConn)
+}
+
 func (c *Client) processResponse(ctx context.Context, sess *ServerSession) ([]doneStruct, error) {
 	c.Conn.sess.buf.serverConn = sess.tdsSession
 
@@ -708,4 +789,12 @@ func (c *Client) LoginEnvBytes() []byte {
 
 func (c *Client) Database() string {
 	return c.Conn.sess.database
+}
+
+func (c *Client) SendAttention(ctx context.Context, serverConn *ServerSession) ([]doneStruct, error) {
+	if err := sendAttention(c.Conn.sess.buf); err != nil {
+		return nil, err
+	}
+
+	return c.processResponse(ctx, serverConn)
 }
