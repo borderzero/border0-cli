@@ -169,7 +169,7 @@ lint:
 	$(GOFMT) -w .
 
 test:
-	$(GOTEST) -cover ./...
+	$(GOTEST) -mod=vendor -cover ./...
 
 clean:
 	$(GOCLEAN)
