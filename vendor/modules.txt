@@ -568,7 +568,7 @@ github.com/mdp/qrterminal
 # github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
 ## explicit
 github.com/mgutz/ansi
-# github.com/microsoft/go-mssqldb v1.6.0
+# github.com/microsoft/go-mssqldb v1.6.0 => github.com/btoonk/go-mssqldb v0.0.0-20231228101453-dbeeb0d7da1c
 ## explicit; go 1.17
 github.com/microsoft/go-mssqldb
 github.com/microsoft/go-mssqldb/aecmk

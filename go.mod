@@ -208,3 +208,5 @@ require (
 )
 
 replace github.com/Microsoft/go-mssqldb v1.6.0 => github.com/btoonk/go-mssqldb v0.0.0-20231228101453-dbeeb0d7da1c
+
+replace github.com/microsoft/go-mssqldb v1.6.0 => github.com/btoonk/go-mssqldb v0.0.0-20231228101453-dbeeb0d7da1c
