@@ -2,6 +2,7 @@ package sqlauthproxy
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"time"
@@ -11,6 +12,7 @@ import (
 	mssql "github.com/microsoft/go-mssqldb"
 	"github.com/microsoft/go-mssqldb/msdsn"
 	"go.uber.org/zap"
+	"k8s.io/client-go/util/cert"
 )
 
 type mssqlHandler struct {
@@ -23,6 +25,43 @@ func newMssqlHandler(c Config) (*mssqlHandler, error) {
 	config, err := msdsn.Parse(fmt.Sprintf("sqlserver://%s:%s@%s:%d", c.Username, c.Password, c.Hostname, c.Port))
 	if err != nil {
 		return nil, err
+	}
+
+	if c.UpstreamTLS {
+		if len(c.UpstreamCABlock) > 0 {
+			caPool, err := cert.NewPoolFromBytes(c.UpstreamCABlock)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load upstream CA: %s", err)
+			}
+			config.TLSConfig.RootCAs = caPool
+			config.TLSConfig.ServerName = c.Hostname
+		} else if c.UpstreamCAFile != "" {
+			caPool, err := cert.NewPool(c.UpstreamCAFile)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load upstream CA: %s", err)
+			}
+			config.TLSConfig.RootCAs = caPool
+			config.TLSConfig.ServerName = c.Hostname
+		} else {
+			config.TLSConfig.InsecureSkipVerify = true
+		}
+
+		if len(c.UpstreamCertBlock) > 0 && len(c.UpstreamKeyBlock) > 0 {
+			cert, err := tls.X509KeyPair(c.UpstreamCertBlock, c.UpstreamKeyBlock)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load upstream cert: %s", err)
+			}
+			config.TLSConfig.Certificates = []tls.Certificate{cert}
+		} else if c.UpstreamCertFile != "" && c.UpstreamKeyFile != "" {
+			cert, err := tls.LoadX509KeyPair(c.UpstreamCertFile, c.UpstreamKeyFile)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load upstream cert: %s", err)
+			}
+			config.TLSConfig.Certificates = []tls.Certificate{cert}
+		} else if c.UpstreamCertFile != "" || c.UpstreamKeyFile != "" {
+			return nil, fmt.Errorf("upstream cert and key must both be provided")
+		}
+
 	}
 
 	if !c.E2eEncryptionEnabled {
