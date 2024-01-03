@@ -57,8 +57,6 @@ func newMssqlHandler(c Config) (*mssqlHandler, error) {
 			}
 			config.TLSConfig.RootCAs = caPool
 			config.TLSConfig.ServerName = c.Hostname
-		} else {
-			config.TLSConfig.InsecureSkipVerify = true
 		}
 
 		if len(c.UpstreamCertBlock) > 0 && len(c.UpstreamKeyBlock) > 0 {
