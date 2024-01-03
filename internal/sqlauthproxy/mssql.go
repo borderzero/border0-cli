@@ -7,7 +7,10 @@ import (
 	"net"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/feature/rds/auth"
 	"github.com/borderzero/border0-cli/internal/border0"
+	"github.com/borderzero/border0-cli/internal/util"
 	"github.com/borderzero/border0-go/lib/types/pointer"
 	mssql "github.com/microsoft/go-mssqldb"
 	"github.com/microsoft/go-mssqldb/msdsn"
@@ -17,14 +20,26 @@ import (
 
 type mssqlHandler struct {
 	Config
-	UpstreamConfig msdsn.Config
-	server         *mssql.Server
+	UpstreamConfig  msdsn.Config
+	server          *mssql.Server
+	awsCredentials  aws.CredentialsProvider
+	upstreamAddress string
 }
 
 func newMssqlHandler(c Config) (*mssqlHandler, error) {
 	config, err := msdsn.Parse(fmt.Sprintf("sqlserver://%s:%s@%s:%d", c.Username, c.Password, c.Hostname, c.Port))
 	if err != nil {
 		return nil, err
+	}
+
+	upstreamAddress := net.JoinHostPort(c.Hostname, fmt.Sprintf("%d", c.Port))
+	var awsCredentials aws.CredentialsProvider
+	if c.RdsIam {
+		cfg, err := util.GetAwsConfig(context.Background(), c.AwsRegion, c.AwsCredentials)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize AWS client: %v", err)
+		}
+		awsCredentials = cfg.Credentials
 	}
 
 	if c.UpstreamTLS {
@@ -77,10 +92,20 @@ func newMssqlHandler(c Config) (*mssqlHandler, error) {
 	}
 
 	return &mssqlHandler{
-		Config:         c,
-		UpstreamConfig: config,
-		server:         server,
+		Config:          c,
+		UpstreamConfig:  config,
+		server:          server,
+		awsCredentials:  awsCredentials,
+		upstreamAddress: upstreamAddress,
 	}, nil
+}
+
+type gcpDialer struct {
+	DialContextFunc func(ctx context.Context, network, addr string) (net.Conn, error)
+}
+
+func (d gcpDialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	return d.DialContextFunc(ctx, network, addr)
 }
 
 func (h mssqlHandler) handleClient(c net.Conn) {
@@ -96,9 +121,27 @@ func (h mssqlHandler) handleClient(c net.Conn) {
 	}
 
 	h.UpstreamConfig.Database = login.Database
+	var tokenProvider func(ctx context.Context) (string, error)
+
+	if h.RdsIam {
+		tokenProvider = func(ctx context.Context) (string, error) {
+			authToken, err := auth.BuildAuthToken(ctx, h.upstreamAddress, h.AwsRegion, h.Username, h.awsCredentials)
+			if err != nil {
+				h.Logger.Error("failed to create authentication token", zap.Error(err))
+				return "", err
+
+			}
+			return authToken, nil
+		}
+	}
+
+	var dialer mssql.Dialer
+	if h.DialerFunc != nil {
+		dialer = gcpDialer{DialContextFunc: h.DialerFunc}
+	}
 
 	// connect upstream
-	upstreamConn, err := mssql.NewClient(ctx, h.UpstreamConfig)
+	upstreamConn, err := mssql.NewClient(ctx, h.UpstreamConfig, tokenProvider, dialer)
 	if err != nil {
 		h.Logger.Error("failed to connect upstream", zap.Error(err))
 		return

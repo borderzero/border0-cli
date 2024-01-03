@@ -634,8 +634,18 @@ func writeLoginAck(l loginAckStruct) []byte {
 	return data
 }
 
-func NewClient(ctx context.Context, params msdsn.Config) (*Client, error) {
+func NewClient(ctx context.Context, params msdsn.Config, tokenProvider func(ctx context.Context) (string, error), dialer Dialer) (*Client, error) {
 	c := newConnector(params, driverInstanceNoProcess)
+
+	if tokenProvider != nil {
+		c.fedAuthRequired = true
+		c.fedAuthLibrary = FedAuthLibrarySecurityToken
+		c.securityTokenProvider = tokenProvider
+	}
+
+	if dialer != nil {
+		c.Dialer = dialer
+	}
 
 	conn, err := c.Connect(ctx)
 	if err != nil {

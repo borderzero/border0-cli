@@ -145,8 +145,8 @@ github.com/borderzero/border0-proto v1.0.19 h1:2L/cg/f7kZpbqxSdx28wsMO/r5ZzDmoD1
 github.com/borderzero/border0-proto v1.0.19/go.mod h1:BhNopgYg3o/p5bYLVcKYISS4S49Ci6iAWNCbQpTzzqs=
 github.com/borderzero/discovery v0.1.30 h1:7FQB/wH6Q5GLiX9B2UbbP3qMzpvSvQPFJr+eqwsGcD4=
 github.com/borderzero/discovery v0.1.30/go.mod h1:gyp4pGzlzzVz3Xr7+cMDqkzWAhKO+MlNcdgY95J86rQ=
-github.com/borderzero/go-mssqldb v1.6.1 h1:SSxizUxa8SbJge6s05UomtLIZfQ++XVB/r3srdkLV3Y=
-github.com/borderzero/go-mssqldb v1.6.1/go.mod h1:00mDtPbeQCRGC1HwOOR5K/gr30P1NcEG0vx6Kbv2aJU=
+github.com/borderzero/go-mssqldb v1.6.2 h1:XuTotditOiezp7KVBIZ3C60SXdNKPn5fmLQiVu6JXTs=
+github.com/borderzero/go-mssqldb v1.6.2/go.mod h1:00mDtPbeQCRGC1HwOOR5K/gr30P1NcEG0vx6Kbv2aJU=
 github.com/brianvoe/gofakeit v3.18.0+incompatible h1:wDOmHc9DLG4nRjUVVaxA+CEglKOW72Y5+4WNxUIkjM8=
 github.com/brianvoe/gofakeit v3.18.0+incompatible/go.mod h1:kfwdRA90vvNhPutZWfH7WPaDzUjz+CZFqG+rPkOjGOc=
 github.com/cenkalti/backoff/v4 v4.2.1 h1:y4OZtCnogmCPw98Zjyt5a6+QwPLGkiQsYW5oUqylYbM=
