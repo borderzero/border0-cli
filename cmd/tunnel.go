@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/borderzero/border0-cli/cmd/logger"
+	"github.com/borderzero/border0-cli/internal"
 	"github.com/borderzero/border0-cli/internal/api"
 	"github.com/borderzero/border0-cli/internal/api/models"
 	"github.com/borderzero/border0-cli/internal/border0"
@@ -132,7 +133,7 @@ var tunnelConnectCmd = &cobra.Command{
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		border0API := api.NewAPI(api.WithVersion(version))
+		border0API := api.NewAPI(api.WithVersion(internal.Version))
 
 		socket, err := border0.NewSocket(ctx, border0API, socketID, logger.Logger)
 		if err != nil {

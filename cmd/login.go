@@ -28,6 +28,7 @@ import (
 
 	"os"
 
+	"github.com/borderzero/border0-cli/internal"
 	"github.com/borderzero/border0-cli/internal/http"
 	"github.com/cenkalti/backoff/v4"
 	jwt "github.com/golang-jwt/jwt"
@@ -80,7 +81,7 @@ var loginCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("error while checking for latest version: %v", err)
 		}
-		if latest_version != version {
+		if latest_version != internal.Version {
 			binary_path := os.Args[0]
 			fmt.Printf("New version available. Please upgrade:\n%s version upgrade\n\n", binary_path)
 		}

@@ -36,6 +36,7 @@ import (
 	"strings"
 
 	"github.com/borderzero/border0-cli/cmd/logger"
+	"github.com/borderzero/border0-cli/internal"
 	"github.com/borderzero/border0-cli/internal/api"
 	"github.com/borderzero/border0-cli/internal/api/models"
 	"github.com/borderzero/border0-cli/internal/border0"
@@ -209,7 +210,7 @@ var socketCreateCmd = &cobra.Command{
 			UpstreamKey:                    upstream_key,
 			UpstreamCa:                     upstream_ca,
 		}
-		err = client.WithVersion(version).Request("POST", "socket", &s, newSocket)
+		err = client.WithVersion(internal.Version).Request("POST", "socket", &s, newSocket)
 		if err != nil {
 			log.Fatalf(fmt.Sprintf("Error: %v", err))
 		}
@@ -302,7 +303,7 @@ var socketConnectProxyCmd = &cobra.Command{
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		border0API := api.NewAPI(api.WithVersion(version))
+		border0API := api.NewAPI(api.WithVersion(internal.Version))
 
 		if socketID == "" && (len(args) == 0) {
 			return fmt.Errorf("error: no socket provided")
@@ -324,7 +325,7 @@ var socketConnectProxyCmd = &cobra.Command{
 			socket.Socket.ConnectorData = &models.ConnectorData{}
 		}
 
-		socket.WithVersion(version)
+		socket.WithVersion(internal.Version)
 
 		if proxyHost != "" {
 			if err := socket.WithProxy(proxyHost); err != nil {
@@ -436,7 +437,7 @@ var socketConnectVpnCmd = &cobra.Command{
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		border0API := api.NewAPI(api.WithVersion(version))
+		border0API := api.NewAPI(api.WithVersion(internal.Version))
 
 		if socketID == "" && (len(args) == 0) {
 			return fmt.Errorf("error: no socket provided")
@@ -458,7 +459,7 @@ var socketConnectVpnCmd = &cobra.Command{
 			socket.Socket.ConnectorData = &models.ConnectorData{}
 		}
 
-		socket.WithVersion(version)
+		socket.WithVersion(internal.Version)
 
 		if proxyHost != "" {
 			if err := socket.WithProxy(proxyHost); err != nil {
@@ -652,7 +653,7 @@ var socketConnectCmd = &cobra.Command{
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		border0API := api.NewAPI(api.WithVersion(version))
+		border0API := api.NewAPI(api.WithVersion(internal.Version))
 
 		if socketID == "" && (len(args) == 0) {
 			return fmt.Errorf("error: no socket provided")
@@ -675,7 +676,7 @@ var socketConnectCmd = &cobra.Command{
 			socket.Socket.ConnectorData = &models.ConnectorData{}
 		}
 
-		socket.WithVersion(version)
+		socket.WithVersion(internal.Version)
 
 		if proxyHost != "" {
 			if err := socket.WithProxy(proxyHost); err != nil {

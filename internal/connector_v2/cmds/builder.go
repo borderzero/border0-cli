@@ -5,6 +5,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
+	"github.com/borderzero/border0-cli/internal"
 	"github.com/borderzero/border0-go/types/connector"
 )
 
@@ -14,6 +15,7 @@ func MetadataFromContext(ctx context.Context) *connector.Metadata {
 	metadata := &connector.Metadata{}
 
 	trySetAwsEc2IdentityMetadata(ctx, metadata)
+	setConnectorInternalMetadata(metadata)
 
 	return metadata
 }
@@ -40,6 +42,14 @@ func trySetAwsEc2IdentityMetadata(ctx context.Context, cmd *connector.Metadata) 
 		RamdiskId:           identityDoc.RamdiskID,
 		Architecture:        identityDoc.Architecture,
 		PrivateIpAddress:    identityDoc.PrivateIP,
+	}
+	return
+}
+
+func setConnectorInternalMetadata(cmd *connector.Metadata) {
+	cmd.ConnectorInternalMetadata = &connector.ConnectorInternalMetadata{
+		Version:   internal.Version,
+		BuiltDate: internal.Date,
 	}
 	return
 }

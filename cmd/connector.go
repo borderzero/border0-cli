@@ -13,6 +13,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/borderzero/border0-cli/internal"
 	"github.com/borderzero/border0-cli/internal/connector"
 	"github.com/borderzero/border0-cli/internal/connector/config"
 	"github.com/borderzero/border0-cli/internal/connector_v2/daemon"
@@ -240,7 +241,7 @@ var connectorStartCmd = &cobra.Command{
 				config.ConnectorId = connectorId
 			}
 
-			connectorv2.NewConnectorService(ctx, log, version, config).Start()
+			connectorv2.NewConnectorService(ctx, log, internal.Version, config).Start()
 			return
 		}
 
@@ -277,7 +278,7 @@ var connectorStartCmd = &cobra.Command{
 				}
 			}
 
-			if err := connector.NewConnectorService(*cfg, log, version).Start(); err != nil {
+			if err := connector.NewConnectorService(*cfg, log, internal.Version).Start(); err != nil {
 				log.Error("failed to start connector", zap.String("error", err.Error()))
 			}
 		}
@@ -304,7 +305,7 @@ func connectorInstallAws(cmd *cobra.Command) {
 	}()
 
 	loginCmd.Run(cmd, []string{})
-	if err := install.RunCloudInstallWizardForAWS(ctx, version); err != nil {
+	if err := install.RunCloudInstallWizardForAWS(ctx, internal.Version); err != nil {
 		fmt.Printf("\nError: %s\n", err)
 		os.Exit(1)
 	}
@@ -323,7 +324,7 @@ func connectorInstallLocal(cmd *cobra.Command) {
 	if !daemonOnly {
 		loginCmd.Run(cmd, []string{})
 	}
-	err := install.RunInstallWizard(cmd.Context(), version, daemonOnly, token)
+	err := install.RunInstallWizard(cmd.Context(), internal.Version, daemonOnly, token)
 	if err != nil {
 		fmt.Printf("\nError: %s\n", err)
 		os.Exit(1)

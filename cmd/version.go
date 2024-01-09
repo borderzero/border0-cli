@@ -24,6 +24,7 @@ import (
 	"os/exec"
 	"runtime"
 
+	"github.com/borderzero/border0-cli/internal"
 	"github.com/borderzero/border0-cli/internal/http"
 	osrename "github.com/jbenet/go-os-rename"
 	"github.com/spf13/cobra"
@@ -43,14 +44,14 @@ var checkLatestVersionCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("error while checking for latest version: %v", err)
 		}
-		if latest_version != version {
+		if latest_version != internal.Version {
 			binary_path := os.Args[0]
-			fmt.Printf("You're running version %s\n\n", version)
+			fmt.Printf("You're running version %s\n\n", internal.Version)
 			fmt.Printf("There is a newer version available (%s)!\n", latest_version)
 			fmt.Printf("Please upgrade:\n%s version upgrade\n", binary_path)
 		} else {
 			fmt.Printf("You are up to date!\n")
-			fmt.Printf("You're running version %s\n", version)
+			fmt.Printf("You're running version %s\n", internal.Version)
 		}
 	},
 }
@@ -66,7 +67,7 @@ var upgradeVersionCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("error while checking for latest version: %v", err)
 		}
-		if latest_version != version {
+		if latest_version != internal.Version {
 			fmt.Printf("Upgrading %s to version %s\n", binary_path, latest_version)
 		} else {
 			fmt.Printf("You are up to date already :)\n")

@@ -25,6 +25,7 @@ import (
 	"syscall"
 
 	"github.com/borderzero/border0-cli/cmd/logger"
+	"github.com/borderzero/border0-cli/internal"
 	"github.com/borderzero/border0-cli/internal/api"
 	"github.com/borderzero/border0-cli/internal/api/models"
 	"github.com/borderzero/border0-cli/internal/border0"
@@ -75,7 +76,7 @@ var connectCmd = &cobra.Command{
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		border0API := api.NewAPI(api.WithVersion(version))
+		border0API := api.NewAPI(api.WithVersion(internal.Version))
 		socketFromAPI, err := border0API.CreateSocket(ctx, socketToCreate)
 		if err != nil {
 			log.Fatalf("failed to create socket: %s", err)
@@ -114,7 +115,7 @@ var connectCmd = &cobra.Command{
 			log.Fatalf("error: %v", err)
 		}
 
-		socket.WithVersion(version)
+		socket.WithVersion(internal.Version)
 
 		if proxyHost != "" {
 			if err := socket.WithProxy(proxyHost); err != nil {
