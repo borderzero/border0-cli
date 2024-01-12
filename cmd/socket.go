@@ -794,6 +794,7 @@ var socketConnectCmd = &cobra.Command{
 				E2eEncryptionEnabled: socket.EndToEndEncryptionEnabled,
 				Socket:               *socket.Socket,
 				Border0API:           border0API,
+				AzureAD:              azureAD,
 			}
 
 			if cloudSqlConnector {
@@ -1135,6 +1136,7 @@ func init() {
 	socketConnectCmd.Flags().StringSliceVarP(&awsECSServices, "aws_ecs_service", "", []string{}, "If specified, the list will only show service that has the specified service names")
 	socketConnectCmd.Flags().StringSliceVarP(&awsECSTasks, "aws_ecs_task", "", []string{}, "If specified, the list will only show tasks that starts with the specified task names")
 	socketConnectCmd.Flags().StringSliceVarP(&awsECSContainers, "aws_ecs_container", "", []string{}, "If specified, the list will only show containers that has the specified container names")
+	socketConnectCmd.Flags().BoolVarP(&azureAD, "azure_ad", "", false, "Use Azure Active Directory authentication")
 
 	socketConnectCmd.RegisterFlagCompletionFunc("socket_id", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return getSockets(toComplete), cobra.ShellCompDirectiveNoFileComp

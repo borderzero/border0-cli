@@ -634,31 +634,29 @@ func writeLoginAck(l loginAckStruct) []byte {
 	return data
 }
 
-func NewClient(ctx context.Context, params msdsn.Config, tokenProvider func(ctx context.Context) (string, error), dialer Dialer) (*Client, error) {
-	c := newConnector(params, driverInstanceNoProcess)
+func NewConnectorFromConfig(config msdsn.Config) *Connector {
+	return newConnector(config, driverInstanceNoProcess)
+}
 
-	if tokenProvider != nil {
-		c.fedAuthRequired = true
-		c.fedAuthLibrary = FedAuthLibrarySecurityToken
-		c.securityTokenProvider = tokenProvider
-	}
-
+func NewClient(ctx context.Context, c *Connector, dialer Dialer, database string) (*Client, error) {
 	if dialer != nil {
 		c.Dialer = dialer
 	}
 
-	conn, err := c.Connect(ctx)
+	params := c.params
+	params.Database = database
+
+	conn, err := c.driver.connect(ctx, c, params)
+	if err != nil {
+		return nil, err
+	}
+	err = conn.ResetSession(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	mssqlConn, ok := conn.(*Conn)
-	if !ok {
-		return nil, fmt.Errorf("invalid conn")
-	}
-
 	return &Client{
-		Conn: mssqlConn,
+		Conn: conn,
 	}, nil
 }
 

@@ -26,6 +26,7 @@ type Config struct {
 	Hostname             string
 	Port                 int
 	RdsIam               bool
+	AzureAD              bool
 	Username             string
 	Password             string
 	UpstreamType         string
@@ -120,6 +121,10 @@ func BuildHandlerConfig(logger *zap.Logger, socket models.Socket, border0API bor
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create dialer for cloudSQL: %s", err)
+		}
+
+		handlerConfig.DialerFunc = func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return dialer.Dial(ctx, socket.ConnectorLocalData.CloudSQLInstance)
 		}
 
 		handlerConfig.DialerFunc = func(ctx context.Context, _, _ string) (net.Conn, error) {
