@@ -607,17 +607,19 @@ func (c *ConnectorCore) hostkey() (*gossh.Signer, error) {
 		return c.sshPrivateHostKey, nil
 	}
 
-	signer, err := util.Hostkey()
+	hostkeySigner, err := util.Hostkey()
 	if err != nil {
-		if signer == nil {
-			return nil, err
+		if hostkeySigner == nil {
+			return nil, fmt.Errorf("failed to get hostkey: %s", err)
 		} else {
 			c.logger.Warn("failed to store hostkey", zap.Error(err))
 		}
 	}
 
-	c.sshPrivateHostKey = signer
+	c.sshPrivateHostKey = hostkeySigner
+
 	return c.sshPrivateHostKey, nil
+
 }
 
 func (c *ConnectorCore) certificate(ctx context.Context, orgID string) (*tls.Certificate, error) {
