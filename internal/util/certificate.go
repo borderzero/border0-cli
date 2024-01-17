@@ -37,24 +37,25 @@ func GetEndToEndEncryptionCertificate(orgID, connectorID string) (*tls.Certifica
 		}
 	}
 
-	var userKeyFilePath, userCertFilePath string
 	u, err := user.Current()
 	if err == nil {
 		if _, err := os.Stat(u.HomeDir + "/.border0/" + privateKeyFile); err == nil {
-			userKeyFilePath = u.HomeDir + "/.border0/" + privateKeyFile
+			keyFilePath = u.HomeDir + "/.border0/" + privateKeyFile
 		}
 
 		if _, err := os.Stat(u.HomeDir + "/.border0/" + certificateFile); err == nil {
-			userCertFilePath = u.HomeDir + "/.border0/" + certificateFile
+			certFilePath = u.HomeDir + "/.border0/" + certificateFile
 		}
 	}
 
-	if userKeyFilePath != "" && userCertFilePath != "" {
-		certificate, err := readCertificate(userKeyFilePath, userCertFilePath)
-		if err != nil {
-			errors = append(errors, err)
-		} else {
-			return certificate, nil
+	if keyFilePath != "" && certFilePath != "" {
+		if keyFilePath != "" && certFilePath != "" {
+			certificate, err2 := readCertificate(keyFilePath, certFilePath)
+			if err != nil {
+				errors = append(errors, err2)
+			} else {
+				return certificate, nil
+			}
 		}
 	}
 
