@@ -24,7 +24,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.44.3
 	github.com/aws/session-manager-plugin v0.0.0-20230808183647-dbfa0bfdb04b
 	github.com/bluele/factory-go v0.0.1
-	github.com/borderzero/border0-go v1.4.5
+	github.com/borderzero/border0-go v1.4.8
 	github.com/borderzero/border0-proto v1.0.19
 	github.com/borderzero/discovery v0.1.30
 	github.com/brianvoe/gofakeit v3.18.0+incompatible

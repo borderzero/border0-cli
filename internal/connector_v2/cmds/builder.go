@@ -7,6 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
 	"github.com/borderzero/border0-cli/internal"
 	"github.com/borderzero/border0-go/types/connector"
+	"github.com/shirou/gopsutil/v3/host"
 )
 
 // MetadataFromContext gathers all metadata
@@ -15,7 +16,7 @@ func MetadataFromContext(ctx context.Context) *connector.Metadata {
 	metadata := &connector.Metadata{}
 
 	trySetAwsEc2IdentityMetadata(ctx, metadata)
-	setConnectorInternalMetadata(metadata)
+	trySetConnectorInternalMetadata(ctx, metadata)
 
 	return metadata
 }
@@ -46,10 +47,25 @@ func trySetAwsEc2IdentityMetadata(ctx context.Context, cmd *connector.Metadata) 
 	return
 }
 
-func setConnectorInternalMetadata(cmd *connector.Metadata) {
-	cmd.ConnectorInternalMetadata = &connector.ConnectorInternalMetadata{
-		Version:   internal.Version,
-		BuiltDate: internal.Date,
+func trySetConnectorInternalMetadata(ctx context.Context, cmd *connector.Metadata) {
+	var hostMetadata connector.HostMetadata
+
+	info, _ := host.InfoWithContext(ctx) // ignored error
+	if info != nil {
+		hostMetadata = connector.HostMetadata{
+			Hostname:        info.Hostname,
+			Uptime:          info.Uptime,
+			OS:              info.OS,
+			Platform:        info.Platform,
+			PlatformVersion: info.PlatformVersion,
+			KernelVersion:   info.KernelVersion,
+			KernelArch:      info.KernelArch,
+		}
 	}
-	return
+
+	cmd.ConnectorInternalMetadata = &connector.ConnectorInternalMetadata{
+		Version:      internal.Version,
+		BuiltDate:    internal.Date,
+		HostMetadata: &hostMetadata,
+	}
 }
