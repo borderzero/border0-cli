@@ -336,7 +336,7 @@ var socketConnectProxyCmd = &cobra.Command{
 		if socket.EndToEndEncryptionEnabled {
 			certificate, err := util.GetEndToEndEncryptionCertificate(socket.Organization.ID, "")
 			if err != nil {
-				return fmt.Errorf("failed to get connector certificate: %w", err)
+				log.Printf("failed to get connector certificate: %s", err)
 			}
 
 			if certificate == nil {
@@ -390,8 +390,8 @@ var socketConnectProxyCmd = &cobra.Command{
 
 				certificate = &tlsCert
 
-				if err := util.StoreConnectorCertifcate(privKey, cert, orgID, ""); err != nil {
-					logger.Logger.Warn("failed to store certificate", zap.Error(err))
+				if err := util.StoreConnectorCertifcate(pem.EncodeToMemory(privKeyPem), cert, orgID, ""); err != nil {
+					log.Printf("failed to store certificate: %s", err)
 				}
 			}
 
@@ -470,7 +470,7 @@ var socketConnectVpnCmd = &cobra.Command{
 		if socket.EndToEndEncryptionEnabled {
 			certificate, err := util.GetEndToEndEncryptionCertificate(socket.Organization.ID, "")
 			if err != nil {
-				return fmt.Errorf("failed to get connector certificate: %w", err)
+				log.Printf("failed to get connector certificate: %s", err)
 			}
 
 			if certificate == nil {
@@ -524,8 +524,8 @@ var socketConnectVpnCmd = &cobra.Command{
 
 				certificate = &tlsCert
 
-				if err := util.StoreConnectorCertifcate(privKey, cert, orgID, ""); err != nil {
-					logger.Logger.Warn("failed to store certificate", zap.Error(err))
+				if err := util.StoreConnectorCertifcate(pem.EncodeToMemory(privKeyPem), cert, orgID, ""); err != nil {
+					log.Printf("failed to store certificate: %s", err)
 				}
 			}
 
@@ -687,7 +687,7 @@ var socketConnectCmd = &cobra.Command{
 		if socket.EndToEndEncryptionEnabled {
 			certificate, err := util.GetEndToEndEncryptionCertificate(socket.Organization.ID, "")
 			if err != nil {
-				return fmt.Errorf("failed to get connector certificate: %w", err)
+				log.Printf("failed to get connector certificate: %s", err)
 			}
 
 			if certificate == nil {
@@ -741,8 +741,8 @@ var socketConnectCmd = &cobra.Command{
 
 				certificate = &tlsCert
 
-				if err := util.StoreConnectorCertifcate(privKey, cert, orgID, ""); err != nil {
-					logger.Logger.Warn("failed to store certificate", zap.Error(err))
+				if err := util.StoreConnectorCertifcate(pem.EncodeToMemory(privKeyPem), cert, orgID, ""); err != nil {
+					log.Printf("failed to store certificate: %s", err)
 				}
 			}
 

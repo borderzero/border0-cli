@@ -632,63 +632,66 @@ func (c *ConnectorCore) certificate(ctx context.Context, orgID string) (*tls.Cer
 
 	certificate, err := util.GetEndToEndEncryptionCertificate(orgID, "")
 	if err != nil {
-		return nil, fmt.Errorf("failed to get connector certificate: %w", err)
+		c.logger.Warn("failed to get certificate", zap.Error(err))
 	}
 
-	if certificate == nil {
-		_, privKey, err := ed25519.GenerateKey(rand.Reader)
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate private key: %w", err)
-		}
+	if certificate != nil {
+		c.connectorCertificate = certificate
+		return c.connectorCertificate, nil
+	}
 
-		csrTemplate := x509.CertificateRequest{
-			Subject:            pkix.Name{CommonName: "border0"},
-			SignatureAlgorithm: x509.PureEd25519,
-		}
+	_, privKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate private key: %w", err)
+	}
 
-		csrBytes, err := x509.CreateCertificateRequest(rand.Reader, &csrTemplate, privKey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create certificate request: %w", err)
-		}
+	csrTemplate := x509.CertificateRequest{
+		Subject:            pkix.Name{CommonName: "border0"},
+		SignatureAlgorithm: x509.PureEd25519,
+	}
 
-		csrPem := pem.Block{
-			Type:  "CERTIFICATE REQUEST",
-			Bytes: csrBytes,
-		}
+	csrBytes, err := x509.CreateCertificateRequest(rand.Reader, &csrTemplate, privKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create certificate request: %w", err)
+	}
 
-		var name string
-		hostname, err := os.Hostname()
-		if err != nil {
-			name = "border0-cli"
-		} else {
-			name = hostname
-		}
+	csrPem := pem.Block{
+		Type:  "CERTIFICATE REQUEST",
+		Bytes: csrBytes,
+	}
 
-		cert, err := c.border0API.ServerOrgCertificate(ctx, name, pem.EncodeToMemory(&csrPem))
-		if err != nil {
-			return nil, fmt.Errorf("failed to get certificate: %w", err)
-		}
+	var name string
+	hostname, err := os.Hostname()
+	if err != nil {
+		name = "border0-cli"
+	} else {
+		name = hostname
+	}
 
-		privKeyBytes, err := x509.MarshalPKCS8PrivateKey(privKey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal private key: %w", err)
-		}
+	cert, err := c.border0API.ServerOrgCertificate(ctx, name, pem.EncodeToMemory(&csrPem))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get certificate: %w", err)
+	}
 
-		privKeyPem := &pem.Block{
-			Type:  "PRIVATE KEY",
-			Bytes: privKeyBytes,
-		}
+	privKeyBytes, err := x509.MarshalPKCS8PrivateKey(privKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal private key: %w", err)
+	}
 
-		tlsCert, err := tls.X509KeyPair(cert, pem.EncodeToMemory(privKeyPem))
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse certificate: %w", err)
-		}
+	privKeyPem := &pem.Block{
+		Type:  "PRIVATE KEY",
+		Bytes: privKeyBytes,
+	}
 
-		c.connectorCertificate = &tlsCert
+	tlsCert, err := tls.X509KeyPair(cert, pem.EncodeToMemory(privKeyPem))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse certificate: %w", err)
+	}
 
-		if err := util.StoreConnectorCertifcate(privKey, cert, orgID, ""); err != nil {
-			c.logger.Warn("failed to store certificate", zap.Error(err))
-		}
+	c.connectorCertificate = &tlsCert
+
+	if err := util.StoreConnectorCertifcate(pem.EncodeToMemory(privKeyPem), cert, orgID, ""); err != nil {
+		c.logger.Warn("failed to store certificate", zap.Error(err))
 	}
 
 	return c.connectorCertificate, nil

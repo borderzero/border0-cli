@@ -971,7 +971,11 @@ func (c *ConnectorService) Certificate() (*tls.Certificate, error) {
 
 	c.connectorCertificate, err = b0Util.GetEndToEndEncryptionCertificate(orgID, connectorID)
 	if err != nil {
-		return nil, err
+		c.logger.Warn("failed to get end to end encryption certificate", zap.Error(err))
+	}
+
+	if c.connectorCertificate != nil {
+		return c.connectorCertificate, nil
 	}
 
 	_, privKey, err := ed25519.GenerateKey(rand.Reader)
@@ -1045,7 +1049,7 @@ func (c *ConnectorService) Certificate() (*tls.Certificate, error) {
 
 	c.connectorCertificate = &cert
 
-	if err := b0Util.StoreConnectorCertifcate(privKeyBytes, certificate, orgID, connectorID); err != nil {
+	if err := b0Util.StoreConnectorCertifcate(pem.EncodeToMemory(privKeyPem), certificate, orgID, connectorID); err != nil {
 		c.logger.Warn("failed to store the end to end encryption certificate", zap.Error(err))
 	}
 
