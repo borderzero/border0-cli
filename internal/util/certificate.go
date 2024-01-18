@@ -47,7 +47,6 @@ func GetEndToEndEncryptionCertificate(orgID, connectorID string) (*tls.Certifica
 	}
 
 	if userKeyFilePath != "" && userCertFilePath != "" {
-		fmt.Printf("Using certificate files: %s %s\n", userKeyFilePath, userCertFilePath)
 		certificate, err := readCertificate(userKeyFilePath, userCertFilePath)
 		if err != nil {
 			errors = append(errors, err)
