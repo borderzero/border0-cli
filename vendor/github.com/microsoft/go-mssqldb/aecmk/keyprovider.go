@@ -1,7 +1,6 @@
 package aecmk
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -37,7 +36,7 @@ func NewCekProvider(provider ColumnEncryptionKeyProvider) *CekProvider {
 	return &CekProvider{Provider: provider, decryptedKeys: make(cekCache), mutex: sync.Mutex{}}
 }
 
-func (cp *CekProvider) GetDecryptedKey(ctx context.Context, keyPath string, encryptedBytes []byte) (decryptedKey []byte, err error) {
+func (cp *CekProvider) GetDecryptedKey(keyPath string, encryptedBytes []byte) (decryptedKey []byte, err error) {
 	cp.mutex.Lock()
 	ev, cachedKey := cp.decryptedKeys[keyPath]
 	if cachedKey {
@@ -54,9 +53,9 @@ func (cp *CekProvider) GetDecryptedKey(ctx context.Context, keyPath string, encr
 	// but there'd be high value in having a queue of waiters for decrypting a key stored in the cloud.
 	cp.mutex.Unlock()
 	if !cachedKey {
-		decryptedKey, err = cp.Provider.DecryptColumnEncryptionKey(ctx, keyPath, KeyEncryptionAlgorithm, encryptedBytes)
+		decryptedKey = cp.Provider.DecryptColumnEncryptionKey(keyPath, KeyEncryptionAlgorithm, encryptedBytes)
 	}
-	if err == nil && !cachedKey {
+	if !cachedKey {
 		duration := cp.Provider.KeyLifetime()
 		if duration == nil {
 			duration = &ColumnEncryptionKeyLifetime
@@ -79,23 +78,22 @@ var globalCekProviderFactoryMap = ColumnEncryptionKeyProviderMap{}
 type ColumnEncryptionKeyProvider interface {
 	// DecryptColumnEncryptionKey decrypts the specified encrypted value of a column encryption key.
 	// The encrypted value is expected to be encrypted using the column master key with the specified key path and using the specified algorithm.
-	DecryptColumnEncryptionKey(ctx context.Context, masterKeyPath string, encryptionAlgorithm string, encryptedCek []byte) ([]byte, error)
+	DecryptColumnEncryptionKey(masterKeyPath string, encryptionAlgorithm string, encryptedCek []byte) []byte
 	// EncryptColumnEncryptionKey encrypts a column encryption key using the column master key with the specified key path and using the specified algorithm.
-	EncryptColumnEncryptionKey(ctx context.Context, masterKeyPath string, encryptionAlgorithm string, cek []byte) ([]byte, error)
+	EncryptColumnEncryptionKey(masterKeyPath string, encryptionAlgorithm string, cek []byte) []byte
 	// SignColumnMasterKeyMetadata digitally signs the column master key metadata with the column master key
 	// referenced by the masterKeyPath parameter. The input values used to generate the signature should be the
 	// specified values of the masterKeyPath and allowEnclaveComputations parameters. May return an empty slice if not supported.
-	SignColumnMasterKeyMetadata(ctx context.Context, masterKeyPath string, allowEnclaveComputations bool) ([]byte, error)
+	SignColumnMasterKeyMetadata(masterKeyPath string, allowEnclaveComputations bool) []byte
 	// VerifyColumnMasterKeyMetadata verifies the specified signature is valid for the column master key
 	// with the specified key path and the specified enclave behavior. Return nil if not supported.
-	VerifyColumnMasterKeyMetadata(ctx context.Context, masterKeyPath string, allowEnclaveComputations bool) (*bool, error)
+	VerifyColumnMasterKeyMetadata(masterKeyPath string, allowEnclaveComputations bool) *bool
 	// KeyLifetime is an optional Duration. Keys fetched by this provider will be discarded after their lifetime expires.
 	// If it returns nil, the keys will expire based on the value of ColumnEncryptionKeyLifetime.
 	// If it returns zero, the keys will not be cached.
 	KeyLifetime() *time.Duration
 }
 
-// RegisterCekProvider adds the named provider to the global provider list
 func RegisterCekProvider(name string, provider ColumnEncryptionKeyProvider) error {
 	_, ok := globalCekProviderFactoryMap[name]
 	if ok {
@@ -105,7 +103,6 @@ func RegisterCekProvider(name string, provider ColumnEncryptionKeyProvider) erro
 	return nil
 }
 
-// GetGlobalCekProviders enumerates all globally registered providers
 func GetGlobalCekProviders() (providers ColumnEncryptionKeyProviderMap) {
 	providers = make(ColumnEncryptionKeyProviderMap)
 	for i, p := range globalCekProviderFactoryMap {

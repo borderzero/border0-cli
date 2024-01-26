@@ -20,6 +20,8 @@ func (u *UpstreamDataBuilder) buildUpstreamDataForDatabaseService(socket *models
 		return u.buildUpstreamDataForDatabaseServiceAwsRds(socket, config.AwsRds)
 	case service.DatabaseServiceTypeGcpCloudSql:
 		return u.buildUpstreamDataForDatabaseServiceGcpCloudSql(socket, config.GcpCloudSql)
+	case service.DatabaseServiceTypeAzureSql:
+		return u.buildUpstreamDataForDatabaseServiceAzureSql(socket, config.AzureSql)
 	}
 
 	return fmt.Errorf("unsupported database service type: %s", config.DatabaseServiceType)
@@ -58,6 +60,20 @@ func (u *UpstreamDataBuilder) buildUpstreamDataForDatabaseServiceStandard(socket
 			socket.ConnectorLocalData.UpstreamCACertBlock = []byte(u.fetchVariableFromSource(config.TlsAuth.CaCertificate))
 		}
 		socket.ConnectorLocalData.UpstreamTLS = pointer.To(true)
+	case service.DatabaseAuthenticationTypeKerberos:
+		if config.Kerberos == nil {
+			return fmt.Errorf("got database service with no Kerberos authentication configuration")
+		}
+
+		socket.ConnectorLocalData.UpstreamUsername = u.fetchVariableFromSource(config.Kerberos.Username)
+		socket.ConnectorLocalData.UpstreamPassword = u.fetchVariableFromSource(config.Kerberos.Password)
+	case service.DatabaseAuthenticationTypeSqlAuthentication:
+		if config.SqlAuthentication == nil {
+			return fmt.Errorf("got database service with no SqlAuthentication authentication configuration")
+		}
+
+		socket.ConnectorLocalData.UpstreamUsername = u.fetchVariableFromSource(config.SqlAuthentication.Username)
+		socket.ConnectorLocalData.UpstreamPassword = u.fetchVariableFromSource(config.SqlAuthentication.Password)
 	}
 
 	return nil
@@ -177,6 +193,36 @@ func (u *UpstreamDataBuilder) buildUpstreamDataForDatabaseServiceGcpCloudSqlStan
 		if config.TlsAuth.CaCertificate != "" {
 			socket.ConnectorLocalData.UpstreamCACertBlock = []byte(u.fetchVariableFromSource(config.TlsAuth.CaCertificate))
 		}
+	}
+
+	return nil
+}
+
+func (u *UpstreamDataBuilder) buildUpstreamDataForDatabaseServiceAzureSql(socket *models.Socket, config *service.AzureSqlDatabaseServiceConfiguration) error {
+	if config == nil {
+		return fmt.Errorf("got database service with no Microsoft Azure SQL database service configuration")
+	}
+
+	hostname, port := u.fetchVariableFromSource(config.Hostname), int(config.Port)
+
+	socket.ConnectorData.TargetHostname = hostname
+	socket.ConnectorData.Port = port
+	socket.TargetHostname = hostname
+	socket.TargetPort = port
+
+	switch {
+	case config.AzureActiveDirectoryIntegrated != nil:
+		socket.ConnectorLocalData.AzureAD = true
+	case config.AzureActiveDirectoryPassword != nil:
+		socket.ConnectorLocalData.UpstreamUsername = u.fetchVariableFromSource(config.AzureActiveDirectoryPassword.Username)
+		socket.ConnectorLocalData.UpstreamPassword = u.fetchVariableFromSource(config.AzureActiveDirectoryPassword.Password)
+		socket.ConnectorLocalData.AzureAD = true
+	case config.Kerberos != nil:
+		socket.ConnectorLocalData.UpstreamUsername = u.fetchVariableFromSource(config.Kerberos.Username)
+		socket.ConnectorLocalData.UpstreamPassword = u.fetchVariableFromSource(config.Kerberos.Password)
+	case config.SqlAuthentication != nil:
+		socket.ConnectorLocalData.UpstreamUsername = u.fetchVariableFromSource(config.SqlAuthentication.Username)
+		socket.ConnectorLocalData.UpstreamPassword = u.fetchVariableFromSource(config.SqlAuthentication.Password)
 	}
 
 	return nil

@@ -104,6 +104,7 @@ func BuildHandlerConfig(logger *zap.Logger, socket models.Socket, border0API bor
 		E2eEncryptionEnabled: socket.EndToEndEncryptionEnabled,
 		Socket:               socket,
 		Border0API:           border0API,
+		AzureAD:              socket.ConnectorLocalData.AzureAD,
 	}
 
 	if socket.ConnectorLocalData.CloudSQLConnector {

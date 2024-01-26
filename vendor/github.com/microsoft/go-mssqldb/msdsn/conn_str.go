@@ -3,13 +3,12 @@ package msdsn
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/pem"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -78,7 +77,6 @@ const (
 	Protocol               = "protocol"
 	DialTimeout            = "dial timeout"
 	Pipe                   = "pipe"
-	MultiSubnetFailover    = "multisubnetfailover"
 )
 
 type Config struct {
@@ -129,39 +127,6 @@ type Config struct {
 	ChangePassword string
 	//ColumnEncryption is true if the application needs to decrypt or encrypt Always Encrypted values
 	ColumnEncryption bool
-	// Attempt to connect to all IPs in parallel when MultiSubnetFailover is true
-	MultiSubnetFailover bool
-}
-
-func readDERFile(filename string) ([]byte, error) {
-	derBytes, err := os.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
-
-	cert, err := x509.ParseCertificate(derBytes)
-	if err != nil {
-		return nil, err
-	}
-
-	pemBytes := pem.EncodeToMemory(&pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: cert.Raw,
-	})
-	return pemBytes, nil
-}
-
-func readCertificate(certificate string) ([]byte, error) {
-	certType := strings.ToLower(filepath.Ext(certificate))
-
-	switch certType {
-	case ".pem":
-		return os.ReadFile(certificate)
-	case ".der":
-		return readDERFile(certificate)
-	default:
-		return nil, fmt.Errorf("certificate type %s is not supported", certType)
-	}
 }
 
 // Build a tls.Config object from the supplied certificate.
@@ -181,7 +146,7 @@ func SetupTLS(certificate string, insecureSkipVerify bool, hostInCertificate str
 	if len(certificate) == 0 {
 		return &config, nil
 	}
-	pem, err := readCertificate(certificate)
+	pem, err := ioutil.ReadFile(certificate)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read certificate %q: %w", certificate, err)
 	}
@@ -485,24 +450,6 @@ func Parse(dsn string) (Config, error) {
 			}
 		}
 		p.ColumnEncryption = columnEncryption
-	}
-
-	msf, ok := params[MultiSubnetFailover]
-	if ok {
-		multiSubnetFailover, err := strconv.ParseBool(msf)
-		if err != nil {
-			if strings.EqualFold(msf, "Enabled") {
-				multiSubnetFailover = true
-			} else if strings.EqualFold(msf, "Disabled") {
-				multiSubnetFailover = false
-			} else {
-				return p, fmt.Errorf("invalid multiSubnetFailover value '%v': %v", multiSubnetFailover, err.Error())
-			}
-		}
-		p.MultiSubnetFailover = multiSubnetFailover
-	} else {
-		// Defaulting to true to prevent breaking change although other client libraries default to false
-		p.MultiSubnetFailover = true
 	}
 	return p, nil
 }

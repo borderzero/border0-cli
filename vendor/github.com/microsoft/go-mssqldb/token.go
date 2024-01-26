@@ -11,7 +11,6 @@ import (
 	"strconv"
 
 	"github.com/golang-sql/sqlexp"
-	"github.com/microsoft/go-mssqldb/aecmk"
 	"github.com/microsoft/go-mssqldb/internal/github.com/swisscom/mssql-always-encrypted/pkg/algorithms"
 	"github.com/microsoft/go-mssqldb/internal/github.com/swisscom/mssql-always-encrypted/pkg/encryption"
 	"github.com/microsoft/go-mssqldb/internal/github.com/swisscom/mssql-always-encrypted/pkg/keys"
@@ -144,24 +143,15 @@ type doneInProcStruct doneStruct
 
 // ENVCHANGE stream
 // http://msdn.microsoft.com/en-us/library/dd303449.aspx
-func processEnvChg(ctx context.Context, sess *tdsSession) []byte {
+func processEnvChg(ctx context.Context, sess *tdsSession) {
 	size := sess.buf.uint16()
-	rb := &io.LimitedReader{R: sess.buf, N: int64(size)}
-
-	buf := new(bytes.Buffer)
-	_, err := io.Copy(buf, rb)
-	if err != nil {
-		badStreamPanic(err)
-	}
-
-	r := bytes.NewReader(buf.Bytes())
-
+	r := &io.LimitedReader{R: sess.buf, N: int64(size)}
 	for {
 		var err error
 		var envtype uint8
 		err = binary.Read(r, binary.LittleEndian, &envtype)
 		if err == io.EOF {
-			return buf.Bytes()
+			return
 		}
 		if err != nil {
 			badStreamPanic(err)
@@ -408,8 +398,7 @@ func processEnvChg(ctx context.Context, sess *tdsSession) []byte {
 			if sess.logFlags&logDebug != 0 {
 				sess.logger.Log(ctx, msdsn.LogDebug, fmt.Sprintf("WARN: Unknown ENVCHANGE record detected with type id = %d", envtype))
 			}
-
-			return buf.Bytes()
+			return
 		}
 	}
 }
@@ -705,7 +694,7 @@ func parseCryptoMetadata(r *tdsBuffer, cekTable *cekTable) cryptoMetadata {
 
 	if cekTable != nil {
 		if int(ordinal) > len(cekTable.entries)-1 {
-			badStreamPanicf("invalid ordinal, cekTable only has %d entries", len(cekTable.entries))
+			panic(fmt.Errorf("invalid ordinal, cekTable only has %d entries", len(cekTable.entries)))
 		}
 		entry = &cekTable.entries[ordinal]
 	}
@@ -743,7 +732,7 @@ func readCekTableEntry(r *tdsBuffer) cekTableEntry {
 	var cekMdVersion = make([]byte, 8)
 	_, err := r.Read(cekMdVersion)
 	if err != nil {
-		badStreamPanicf("unable to read cekMdVersion")
+		panic("unable to read cekMdVersion")
 	}
 
 	cekValueCount := uint(r.byte())
@@ -795,7 +784,7 @@ func readCekTableEntry(r *tdsBuffer) cekTableEntry {
 }
 
 // http://msdn.microsoft.com/en-us/library/dd357254.aspx
-func parseRow(ctx context.Context, r *tdsBuffer, s *tdsSession, columns []columnStruct, row []interface{}) error {
+func parseRow(r *tdsBuffer, s *tdsSession, columns []columnStruct, row []interface{}) {
 	for i, column := range columns {
 		columnContent := column.ti.Reader(&column.ti, r, nil)
 		if columnContent == nil {
@@ -804,17 +793,13 @@ func parseRow(ctx context.Context, r *tdsBuffer, s *tdsSession, columns []column
 		}
 
 		if column.isEncrypted() {
-			buffer, err := decryptColumn(ctx, column, s, columnContent)
-			if err != nil {
-				return err
-			}
+			buffer := decryptColumn(column, s, columnContent)
 			// Decrypt
-			row[i] = column.cryptoMeta.typeInfo.Reader(&column.cryptoMeta.typeInfo, buffer, column.cryptoMeta)
+			row[i] = column.cryptoMeta.typeInfo.Reader(&column.cryptoMeta.typeInfo, &buffer, column.cryptoMeta)
 		} else {
 			row[i] = columnContent
 		}
 	}
-	return nil
 }
 
 type RWCBuffer struct {
@@ -833,7 +818,7 @@ func (R RWCBuffer) Close() error {
 	return nil
 }
 
-func decryptColumn(ctx context.Context, column columnStruct, s *tdsSession, columnContent interface{}) (*tdsBuffer, error) {
+func decryptColumn(column columnStruct, s *tdsSession, columnContent interface{}) tdsBuffer {
 	encType := encryption.From(column.cryptoMeta.encType)
 	cekValue := column.cryptoMeta.entry.cekValues[column.cryptoMeta.ordinal]
 	if (s.logFlags & uint64(msdsn.LogDebug)) == uint64(msdsn.LogDebug) {
@@ -842,18 +827,17 @@ func decryptColumn(ctx context.Context, column columnStruct, s *tdsSession, colu
 
 	cekProvider, ok := s.aeSettings.keyProviders[cekValue.keyStoreName]
 	if !ok {
-		// The app hasn't installed the key provider it needs
-		panic(aecmk.NewError(aecmk.Decryption, fmt.Sprintf("Unable to find provider %s to decrypt CEK", cekValue.keyStoreName), nil))
+		panic(fmt.Errorf("Unable to find provider %s to decrypt CEK", cekValue.keyStoreName))
 	}
-	cek, err := cekProvider.GetDecryptedKey(ctx, cekValue.keyPath, column.cryptoMeta.entry.cekValues[0].encryptedKey)
+	cek, err := cekProvider.GetDecryptedKey(cekValue.keyPath, column.cryptoMeta.entry.cekValues[0].encryptedKey)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 	k := keys.NewAeadAes256CbcHmac256(cek)
 	alg := algorithms.NewAeadAes256CbcHmac256Algorithm(k, encType, byte(cekValue.cekVersion))
 	d, err := alg.Decrypt(columnContent.([]byte))
 	if err != nil {
-		return nil, aecmk.NewError(aecmk.Decryption, "Unable to decrypt key using AES256", err)
+		panic(err)
 	}
 
 	// Decrypt returns a minimum of 8 bytes so truncate to the actual data size
@@ -869,11 +853,11 @@ func decryptColumn(ctx context.Context, column columnStruct, s *tdsSession, colu
 
 	column.cryptoMeta.typeInfo.Buffer = d
 	buffer := tdsBuffer{rpos: 0, rsize: len(newBuff), rbuf: newBuff, transport: rwc}
-	return &buffer, nil
+	return buffer
 }
 
 // http://msdn.microsoft.com/en-us/library/dd304783.aspx
-func parseNbcRow(ctx context.Context, r *tdsBuffer, s *tdsSession, columns []columnStruct, row []interface{}) error {
+func parseNbcRow(r *tdsBuffer, s *tdsSession, columns []columnStruct, row []interface{}) {
 	bitlen := (len(columns) + 7) / 8
 	pres := make([]byte, bitlen)
 	r.ReadFull(pres)
@@ -884,17 +868,14 @@ func parseNbcRow(ctx context.Context, r *tdsBuffer, s *tdsSession, columns []col
 		}
 		columnContent := col.ti.Reader(&col.ti, r, nil)
 		if col.isEncrypted() {
-			buffer, err := decryptColumn(ctx, col, s, columnContent)
-			if err != nil {
-				return err
-			}
+			buffer := decryptColumn(col, s, columnContent)
 			// Decrypt
-			row[i] = col.cryptoMeta.typeInfo.Reader(&col.cryptoMeta.typeInfo, buffer, col.cryptoMeta)
+			row[i] = col.cryptoMeta.typeInfo.Reader(&col.cryptoMeta.typeInfo, &buffer, col.cryptoMeta)
 		} else {
 			row[i] = columnContent
 		}
+
 	}
-	return nil
 }
 
 // http://msdn.microsoft.com/en-us/library/dd304156.aspx
@@ -1098,24 +1079,14 @@ func processSingleResponse(ctx context.Context, sess *tdsSession, ch chan tokenS
 
 		case tokenRow:
 			row := make([]interface{}, len(columns))
-			err = parseRow(ctx, sess.buf, sess, columns, row)
-			if err != nil {
-				ch <- err
-				return
-			}
+			parseRow(sess.buf, sess, columns, row)
 			ch <- row
 		case tokenNbcRow:
 			row := make([]interface{}, len(columns))
-			err = parseNbcRow(ctx, sess.buf, sess, columns, row)
-			if err != nil {
-				ch <- err
-				return
-			}
+			parseNbcRow(sess.buf, sess, columns, row)
 			ch <- row
 		case tokenEnvChange:
-			tokenBytes := processEnvChg(ctx, sess)
-			sess.loginEnvBytes = append(sess.loginEnvBytes, []byte{byte(tokenEnvChange), byte(len(tokenBytes) & 0xFF), byte(len(tokenBytes) >> 8)}...)
-			sess.loginEnvBytes = append(sess.loginEnvBytes, tokenBytes...)
+			processEnvChg(ctx, sess)
 		case tokenError:
 			err := parseError72(sess.buf)
 			if sess.logFlags&logDebug != 0 {
@@ -1129,15 +1100,16 @@ func processSingleResponse(ctx context.Context, sess *tdsSession, ch chan tokenS
 				_ = sqlexp.ReturnMessageEnqueue(ctx, outs.msgq, sqlexp.MsgError{Error: err})
 			}
 		case tokenInfo:
-			length := sess.buf.uint16()
-			infoBytes := make([]byte, length)
-			_, err := sess.buf.Read(infoBytes)
-			if err != nil {
-				badStreamPanic(err)
+			info := parseInfo(sess.buf)
+			if sess.logFlags&logDebug != 0 {
+				sess.logger.Log(ctx, msdsn.LogDebug, fmt.Sprintf("got INFO %d %s", info.Number, info.Message))
 			}
-
-			sess.loginEnvBytes = append(sess.loginEnvBytes, []byte{byte(tokenInfo), byte(length & 0xFF), byte(length >> 8)}...)
-			sess.loginEnvBytes = append(sess.loginEnvBytes, infoBytes...)
+			if sess.logFlags&logMessages != 0 {
+				sess.logger.Log(ctx, msdsn.LogMessages, info.Message)
+			}
+			if outs.msgq != nil {
+				_ = sqlexp.ReturnMessageEnqueue(ctx, outs.msgq, sqlexp.MsgNotice{Message: info})
+			}
 		case tokenReturnValue:
 			nv := parseReturnValue(sess.buf, sess)
 			if len(nv.Name) > 0 {

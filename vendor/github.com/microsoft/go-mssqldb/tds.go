@@ -172,7 +172,6 @@ type tdsSession struct {
 	routedPort      uint16
 	alwaysEncrypted bool
 	aeSettings      *alwaysEncryptedSettings
-	loginEnvBytes   []byte
 }
 
 type alwaysEncryptedSettings struct {
@@ -1010,7 +1009,6 @@ func preparePreloginFields(p msdsn.Config, fe *featureExtFedAuth) map[uint8][]by
 	case msdsn.EncryptionStrict:
 		encrypt = encryptStrict
 	}
-
 	v := getDriverVersion(driverVersion)
 	fields := map[uint8][]byte{
 		// 4 bytes for version and 2 bytes for minor version
@@ -1073,7 +1071,6 @@ func prepareLogin(ctx context.Context, c *Connector, p msdsn.Config, logger Cont
 	} else {
 		serverName = p.Host
 	}
-
 	l = &login{
 		TDSVersion:     TDSVersion,
 		PacketSize:     packetSize,
@@ -1302,6 +1299,7 @@ initiate_connection:
 	if err != nil {
 		return nil, err
 	}
+
 	err = sendLogin(outbuf, login)
 	if err != nil {
 		return nil, err

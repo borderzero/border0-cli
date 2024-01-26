@@ -37,34 +37,33 @@ type ConnectorData struct {
 }
 
 type ConnectorLocalData struct {
-	UpstreamUsername             string
-	UpstreamPassword             string
-	UpstreamCertFile             string
-	UpstreamKeyFile              string
-	UpstreamCACertFile           string
-	UpstreamCertBlock            []byte
-	UpstreamKeyBlock             []byte
-	UpstreamCACertBlock          []byte
-	UpstreamTLS                  *bool
-	UpstreamIdentifyFile         string
-	UpstreamIdentityPrivateKey   []byte
-	SqlAuthProxy                 bool
-	RdsIAMAuth                   bool
-	AWSRegion                    string
-	CloudSQLConnector            bool
-	CloudSQLIAMAuth              bool
-	CloudSQLInstance             string
-	GoogleCredentialsFile        string
-	GoogleCredentialsJSON        []byte
-	SSHServer                    bool
-	AWSECSCluster                string
-	AWSECSServices               []string
-	AWSECSTasks                  []string
-	AWSECSContainers             []string
-	AwsEC2InstanceId             string
-	AWSEC2InstanceConnectEnabled bool
-	AwsCredentials               *common.AwsCredentials
-
+	UpstreamUsername               string
+	UpstreamPassword               string
+	UpstreamCertFile               string
+	UpstreamKeyFile                string
+	UpstreamCACertFile             string
+	UpstreamCertBlock              []byte
+	UpstreamKeyBlock               []byte
+	UpstreamCACertBlock            []byte
+	UpstreamTLS                    *bool
+	UpstreamIdentifyFile           string
+	UpstreamIdentityPrivateKey     []byte
+	SqlAuthProxy                   bool
+	RdsIAMAuth                     bool
+	AWSRegion                      string
+	CloudSQLConnector              bool
+	CloudSQLIAMAuth                bool
+	CloudSQLInstance               string
+	GoogleCredentialsFile          string
+	GoogleCredentialsJSON          []byte
+	SSHServer                      bool
+	AWSECSCluster                  string
+	AWSECSServices                 []string
+	AWSECSTasks                    []string
+	AWSECSContainers               []string
+	AwsEC2InstanceId               string
+	AWSEC2InstanceConnectEnabled   bool
+	AwsCredentials                 *common.AwsCredentials
 	IsKubectlExec                  bool
 	K8sNamespaceAllowlist          []string
 	K8sNamespaceSelectorsAllowlist map[string]map[string][]string
@@ -72,6 +71,7 @@ type ConnectorLocalData struct {
 	K8sKubeconfigPath              string
 	IsAwsEks                       bool
 	AwsEksCluster                  string
+	AzureAD                        bool
 }
 
 func (c *ConnectorData) Tags() map[string]string {
