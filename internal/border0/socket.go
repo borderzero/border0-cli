@@ -257,7 +257,7 @@ func (s *Socket) Listen() (net.Listener, error) {
 				default:
 				}
 				if err == io.EOF {
-					s.logger.Error("listener closed, reconnecting...")
+					s.logger.Info("listener closed, reconnecting...")
 					<-s.readyChan
 					continue
 				} else {
