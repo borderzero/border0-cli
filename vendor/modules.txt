@@ -311,7 +311,7 @@ github.com/beorn7/perks/quantile
 # github.com/bluele/factory-go v0.0.1
 ## explicit; go 1.15
 github.com/bluele/factory-go/factory
-# github.com/borderzero/border0-go v1.4.11
+# github.com/borderzero/border0-go v1.4.13
 ## explicit; go 1.20
 github.com/borderzero/border0-go/lib/types/maps
 github.com/borderzero/border0-go/lib/types/netaddr
