@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	mssql "github.com/Microsoft/go-mssqldb"
 	"github.com/borderzero/border0-cli/internal/api/models"
 	"github.com/borderzero/border0-cli/internal/border0"
 	"github.com/borderzero/border0-go/lib/types/pointer"
+	mssql "github.com/microsoft/go-mssqldb"
 	"github.com/pkg/errors"
 	"github.com/xwb1989/sqlparser"
 	"go.uber.org/zap"

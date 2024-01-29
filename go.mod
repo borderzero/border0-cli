@@ -215,4 +215,4 @@ require (
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 
-replace github.com/Microsoft/go-mssqldb v1.6.0 => github.com/borderzero/go-mssqldb v1.6.2
+replace github.com/microsoft/go-mssqldb v1.6.0 => github.com/borderzero/go-mssqldb v1.6.3

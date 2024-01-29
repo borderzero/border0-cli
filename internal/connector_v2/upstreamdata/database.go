@@ -204,7 +204,7 @@ func (u *UpstreamDataBuilder) buildUpstreamDataForDatabaseServiceAzureSql(socket
 	}
 
 	hostname, port := u.fetchVariableFromSource(config.Hostname), int(config.Port)
-
+	socket.UpstreamType = "mssql"
 	socket.ConnectorData.TargetHostname = hostname
 	socket.ConnectorData.Port = port
 	socket.TargetHostname = hostname

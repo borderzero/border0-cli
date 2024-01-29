@@ -627,7 +627,7 @@ github.com/mdp/qrterminal
 # github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
 ## explicit
 github.com/mgutz/ansi
-# github.com/microsoft/go-mssqldb v1.6.0
+# github.com/microsoft/go-mssqldb v1.6.0 => github.com/borderzero/go-mssqldb v1.6.3
 ## explicit; go 1.17
 github.com/microsoft/go-mssqldb
 github.com/microsoft/go-mssqldb/aecmk
@@ -1411,4 +1411,3 @@ sigs.k8s.io/structured-merge-diff/v4/value
 ## explicit; go 1.12
 sigs.k8s.io/yaml
 sigs.k8s.io/yaml/goyaml.v2
-# github.com/Microsoft/go-mssqldb v1.6.0 => github.com/borderzero/go-mssqldb v1.6.2

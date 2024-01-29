@@ -465,6 +465,8 @@ func readShortLenType(ti *typeInfo, r *tdsBuffer, c *cryptoMetadata) interface{}
 	if size == 0xffff {
 		return nil
 	}
+	ti.Size = int(size)
+	ti.Buffer = make([]byte, ti.Size)
 	r.ReadFull(ti.Buffer[:size])
 	buf := ti.Buffer[:size]
 	switch ti.TypeId {
