@@ -129,10 +129,6 @@ func BuildHandlerConfig(logger *zap.Logger, socket models.Socket, border0API bor
 		handlerConfig.DialerFunc = func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return dialer.Dial(ctx, socket.ConnectorLocalData.CloudSQLInstance)
 		}
-
-		handlerConfig.DialerFunc = func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return dialer.Dial(ctx, socket.ConnectorLocalData.CloudSQLInstance)
-		}
 	}
 
 	return handlerConfig, nil

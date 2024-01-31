@@ -755,7 +755,7 @@ func (c *ConnectorService) SignSSHKey(ctx context.Context, socketID string, publ
 	c.requests.Store(requestId, recChan)
 
 	select {
-	case <-time.After(5 * time.Second):
+	case <-time.After(10 * time.Second):
 		return "", "", fmt.Errorf("timeout waiting for tunnel certificate sign response")
 	case r := <-recChan:
 		response := r.GetTunnelCertificateSignResponse()

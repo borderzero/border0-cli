@@ -25,7 +25,7 @@ require (
 	github.com/aws/session-manager-plugin v0.0.0-20230808183647-dbfa0bfdb04b
 	github.com/aws/smithy-go v1.19.0
 	github.com/bluele/factory-go v0.0.1
-	github.com/borderzero/border0-go v1.4.13
+	github.com/borderzero/border0-go v1.4.16
 	github.com/borderzero/border0-proto v1.0.19
 	github.com/borderzero/discovery v0.1.30
 	github.com/brianvoe/gofakeit v3.18.0+incompatible
