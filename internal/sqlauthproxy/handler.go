@@ -27,6 +27,7 @@ type Config struct {
 	Port                 int
 	RdsIam               bool
 	AzureAD              bool
+	Kerberos             bool
 	Username             string
 	Password             string
 	UpstreamType         string
@@ -105,6 +106,7 @@ func BuildHandlerConfig(logger *zap.Logger, socket models.Socket, border0API bor
 		Socket:               socket,
 		Border0API:           border0API,
 		AzureAD:              socket.ConnectorLocalData.AzureAD,
+		Kerberos:             socket.ConnectorLocalData.Kerberos,
 	}
 
 	if socket.ConnectorLocalData.CloudSQLConnector {

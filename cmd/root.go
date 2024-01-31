@@ -96,6 +96,7 @@ var (
 	routes                  []string // used in the socket connect vpn command
 	allowedProxyHosts       []string // used in the socket connect proxy command
 	azureAD                 bool
+	kerberos                bool
 )
 
 // rootCmd represents the base command when called without any subcommands

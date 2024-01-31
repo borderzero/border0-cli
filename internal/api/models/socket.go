@@ -72,6 +72,7 @@ type ConnectorLocalData struct {
 	IsAwsEks                       bool
 	AwsEksCluster                  string
 	AzureAD                        bool
+	Kerberos                       bool
 }
 
 func (c *ConnectorData) Tags() map[string]string {

@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"runtime"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -14,6 +15,7 @@ import (
 	"github.com/borderzero/border0-go/lib/types/pointer"
 	mssql "github.com/microsoft/go-mssqldb"
 	"github.com/microsoft/go-mssqldb/azuread"
+	_ "github.com/microsoft/go-mssqldb/integratedauth/krb5"
 	"github.com/microsoft/go-mssqldb/msdsn"
 	"go.uber.org/zap"
 	"k8s.io/client-go/util/cert"
@@ -30,16 +32,28 @@ type mssqlHandler struct {
 }
 
 func newMssqlHandler(c Config) (*mssqlHandler, error) {
-	var azureCfg string
+	var optionalConfig string
 	if c.AzureAD {
 		if c.Username == "" {
-			azureCfg = "?fedauth=ActiveDirectoryIntegrated"
+			optionalConfig = "?fedauth=ActiveDirectoryIntegrated"
 		} else {
-			azureCfg = fmt.Sprintf("?fedauth=ActiveDirectoryPassword&applicationclientid=%s", applicationclientid)
+			optionalConfig = fmt.Sprintf("?fedauth=ActiveDirectoryPassword&applicationclientid=%s", applicationclientid)
 		}
 	}
 
-	dsn := fmt.Sprintf("sqlserver://%s:%s@%s:%d%s", c.Username, c.Password, c.Hostname, c.Port, azureCfg)
+	var dsn string
+	if c.Kerberos {
+		switch runtime.GOOS {
+		case "windows":
+			dsn = fmt.Sprintf("authenticator=winsspi;server=%s;user id=%s;password=%s;port=%d", c.Hostname, c.Username, c.Password, c.Port)
+		case "darwin", "linux":
+			dsn = fmt.Sprintf("authenticator=krb5;server=%s;user id=%s;password=%s;port=%d", c.Hostname, c.Username, c.Password, c.Port)
+		default:
+			return nil, fmt.Errorf("kerberos authentication is only supported on Windows, macOS, and Linux")
+		}
+	} else {
+		dsn = fmt.Sprintf("sqlserver://%s:%s@%s:%d%s", c.Username, c.Password, c.Hostname, c.Port, optionalConfig)
+	}
 
 	config, err := msdsn.Parse(dsn)
 	if err != nil {

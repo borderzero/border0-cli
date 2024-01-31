@@ -65,6 +65,7 @@ func (u *UpstreamDataBuilder) buildUpstreamDataForDatabaseServiceStandard(socket
 			return fmt.Errorf("got database service with no Kerberos authentication configuration")
 		}
 
+		socket.ConnectorLocalData.Kerberos = true
 		socket.ConnectorLocalData.UpstreamUsername = u.fetchVariableFromSource(config.Kerberos.Username)
 		socket.ConnectorLocalData.UpstreamPassword = u.fetchVariableFromSource(config.Kerberos.Password)
 	case service.DatabaseAuthenticationTypeSqlAuthentication:
@@ -218,6 +219,7 @@ func (u *UpstreamDataBuilder) buildUpstreamDataForDatabaseServiceAzureSql(socket
 		socket.ConnectorLocalData.UpstreamPassword = u.fetchVariableFromSource(config.AzureActiveDirectoryPassword.Password)
 		socket.ConnectorLocalData.AzureAD = true
 	case config.Kerberos != nil:
+		socket.ConnectorLocalData.Kerberos = true
 		socket.ConnectorLocalData.UpstreamUsername = u.fetchVariableFromSource(config.Kerberos.Username)
 		socket.ConnectorLocalData.UpstreamPassword = u.fetchVariableFromSource(config.Kerberos.Password)
 	case config.SqlAuthentication != nil:
