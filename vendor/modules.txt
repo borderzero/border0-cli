@@ -647,6 +647,9 @@ github.com/kr/fs
 ## explicit; go 1.11
 github.com/kylelemons/godebug/diff
 github.com/kylelemons/godebug/pretty
+# github.com/labulakalia/water v0.0.4
+## explicit; go 1.19
+github.com/labulakalia/water
 # github.com/lufia/plan9stats v0.0.0-20230326075908-cb1d2100619a
 ## explicit; go 1.16
 github.com/lufia/plan9stats
@@ -1038,6 +1041,9 @@ golang.org/x/tools/internal/tokeninternal
 golang.org/x/tools/internal/typeparams
 golang.org/x/tools/internal/typesinternal
 golang.org/x/tools/internal/versions
+# golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2
+## explicit; go 1.17
+golang.zx2c4.com/wintun
 # google.golang.org/api v0.126.0
 ## explicit; go 1.19
 google.golang.org/api/googleapi

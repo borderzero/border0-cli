@@ -16,7 +16,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/songgao/water"
+	"github.com/labulakalia/water"
 )
 
 const (

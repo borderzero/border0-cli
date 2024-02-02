@@ -44,6 +44,7 @@ require (
 	github.com/jbenet/go-os-rename v0.0.0-20150428075126-3ac97f61ef67
 	github.com/jedib0t/go-pretty v4.3.0+incompatible
 	github.com/kardianos/service v1.2.2
+	github.com/labulakalia/water v0.0.4
 	github.com/manifoldco/promptui v0.9.0
 	github.com/mdp/qrterminal v1.0.1
 	github.com/microsoft/go-mssqldb v1.6.0
@@ -54,7 +55,6 @@ require (
 	github.com/pingcap/errors v0.11.5-0.20210425183316-da1aaba5fb63
 	github.com/satori/go.uuid v1.2.0
 	github.com/shirou/gopsutil/v3 v3.23.4
-	github.com/siddontang/go-log v0.0.0-20190221022429-1e957dd83bed
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.7.0
@@ -135,6 +135,7 @@ require (
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/shopspring/decimal v1.3.1 // indirect
 	github.com/siddontang/go v0.0.0-20180604090527-bdc77568d726 // indirect
+	github.com/siddontang/go-log v0.0.0-20190221022429-1e957dd83bed // indirect
 	github.com/sirupsen/logrus v1.9.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.11 // indirect
 	github.com/tklauser/numcpus v0.6.0 // indirect
@@ -144,6 +145,7 @@ require (
 	golang.org/x/exp v0.0.0-20231214170342-aacd6d4b4611 // indirect
 	golang.org/x/mod v0.14.0 // indirect
 	golang.org/x/tools v0.16.1 // indirect
+	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	google.golang.org/api v0.126.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20231030173426-d783a09b4405 // indirect
 	rsc.io/qr v0.2.0 // indirect

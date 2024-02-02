@@ -15,7 +15,7 @@ import (
 	"github.com/borderzero/border0-cli/internal/client"
 	"github.com/borderzero/border0-cli/internal/enum"
 	"github.com/borderzero/border0-cli/internal/vpnlib"
-	"github.com/songgao/water"
+	"github.com/labulakalia/water"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"golang.org/x/net/icmp"
