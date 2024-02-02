@@ -49,10 +49,11 @@ func validateIPv4(packet []byte) error {
 	}
 	ipVersion := (packet[0] & 0xF0) >> 4
 	if ipVersion != 4 {
-		return fmt.Errorf("packet header advertises non IPv4")
+		return fmt.Errorf("packet header advertises non IPv4, version: %d", ipVersion)
 	}
 	return nil
 }
+
 
 // Returns a list of interfaces on which this IP network was found
 func GetLocalInterfacesForIp(ipAddress string) ([]string, error) {

@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/labulakalia/water"
@@ -147,12 +148,13 @@ func getDefaultGatewayWindows() (net.IP, string, error) {
 
 	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
-		if strings.HasPrefix(line, "0.0.0.0") {
-			fields := strings.Fields(line)
+		trimmedLine := strings.TrimSpace(line) // Remove leading and trailing whitespace
+		if strings.HasPrefix(trimmedLine, "0.0.0.0") {
+			fields := strings.Fields(trimmedLine) // Splits the trimmed line
 			if len(fields) >= 5 {
-				ip := net.ParseIP(fields[3])
+				ip := net.ParseIP(fields[2])
 				if ip != nil {
-					return ip, fields[4], nil
+					return ip, fields[3], nil
 				}
 			}
 		}
@@ -161,14 +163,14 @@ func getDefaultGatewayWindows() (net.IP, string, error) {
 }
 
 // AddRoutesViaGateway adds routes through a specified gateway IP.
-func AddRoutesViaGateway(gateway string, routes []string) error {
+func AddRoutesViaGateway(gateway string, routes []string, ifname string) error {
 	switch runtime.GOOS {
 	case "darwin":
 		return addRoutesViaGatewayDarwin(gateway, routes)
 	case "linux":
 		return addRoutesViaGatewayLinux(gateway, routes)
 	case "windows":
-		return addRoutesViaGatewayWindows(gateway, routes)
+		return addRoutesViaGatewayWindows(gateway, routes, ifname)
 	default:
 		return fmt.Errorf("runtime %s not supported", runtime.GOOS)
 	}
@@ -192,17 +194,77 @@ func addRoutesViaGatewayLinux(gateway string, routes []string) error {
 	return nil
 }
 
-func addRoutesViaGatewayWindows(gateway string, routes []string) error {
-	for _, route := range routes {
-		// Convert route in CIDR notation to network and mask.
-		_, ipNet, err := net.ParseCIDR(route)
-		if err != nil {
-			return fmt.Errorf("invalid CIDR notation %s: %v", route, err)
-		}
-		network := ipNet.IP.String()
-		mask := net.IP(ipNet.Mask).String()
+/*
+	func addRoutesViaGatewayWindows(gateway string, routes []string) error {
+		for _, route := range routes {
+			var network, mask string
 
-		if err := exec.Command("route", "add", network, "mask", mask, gateway).Run(); err != nil {
+			// Check if route is in CIDR notation
+			if _, ipNet, err := net.ParseCIDR(route); err == nil {
+				// CIDR notation
+				network = ipNet.IP.String()
+				mask = net.IP(ipNet.Mask).String()
+			} else if ip := net.ParseIP(route); ip != nil {
+				// Single IP Address
+				network = ip.String()
+				mask = "255.255.255.255" // Subnet mask for a single IP
+			} else {
+				// Invalid input
+				return fmt.Errorf("invalid route (not CIDR or IP) %s: %v", route, err)
+			}
+
+			// Execute the route add command
+			if err := exec.Command("route", "add", network, "mask", mask, gateway).Run(); err != nil {
+				return fmt.Errorf("error adding route %s via gateway %s: %v", route, gateway, err)
+			}
+		}
+		return nil
+	}
+*/
+
+func getInterfaceIndex(ifaceName string) (int, error) {
+	output, err := exec.Command("netsh", "interface", "ipv4", "show", "interfaces").Output()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get interfaces: %v", err)
+	}
+
+	lines := strings.Split(string(output), "\n")
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) >= 4 {
+			if strings.ToLower(fields[3]) == strings.ToLower(ifaceName) {
+				ifIndex, err := strconv.Atoi(fields[0])
+				if err != nil {
+					return 0, fmt.Errorf("invalid interface index for %s: %v", ifaceName, err)
+				}
+				fmt.Println("Interface index: ", ifIndex, " for ", ifaceName)
+				return ifIndex, nil
+			}
+		}
+	}
+	return 0, fmt.Errorf("interface %s not found", ifaceName)
+}
+
+func addRoutesViaGatewayWindows(gateway string, routes []string, iface string) error {
+	ifIndex, err := getInterfaceIndex(iface)
+	if err != nil {
+		return fmt.Errorf("error getting interface index for %s: %v", iface, err)
+	}
+
+	for _, route := range routes {
+		var network, mask string
+
+		if _, ipNet, err := net.ParseCIDR(route); err == nil {
+			network = ipNet.IP.String()
+			mask = net.IP(ipNet.Mask).String()
+		} else if ip := net.ParseIP(route); ip != nil {
+			network = ip.String()
+			mask = "255.255.255.255"
+		} else {
+			return fmt.Errorf("invalid route (not CIDR or IP) %s: %v", route, err)
+		}
+		fmt.Println("route add ", network, " mask ", mask, " ", gateway, " metric 1 if ", ifIndex)
+		if err := exec.Command("route", "add", network, "mask", mask, gateway, "metric", "1", "if", fmt.Sprint(ifIndex)).Run(); err != nil {
 			return fmt.Errorf("error adding route %s via gateway %s: %v", route, gateway, err)
 		}
 	}
@@ -357,7 +419,7 @@ func AddIpToIface(iface, localIp, remoteIp string, subnetSize uint8) error {
 	case "linux":
 		return addIpToIfaceLinux(iface, localIp, subnetSize)
 	case "windows":
-		return addIpToIfaceWindows(iface, localIp)
+		return addIpToIfaceWindows(iface, localIp, subnetSize)
 	default:
 		return fmt.Errorf("runtime %s not supported", runtime.GOOS)
 	}
@@ -384,9 +446,15 @@ func addIpToIfaceLinux(iface, localIp string, subnetSize uint8) error {
 	return nil
 }
 
-func addIpToIfaceWindows(iface, localIp string) error {
-	if err := exec.Command("netsh", "interface", "ip", "set", "address", iface, "static", localIp).Run(); err != nil {
-		return fmt.Errorf("error adding ip %s to interface %s: %v", localIp, iface, err)
+func addIpToIfaceWindows(iface, localIp string, subnetSize uint8) error {
+	// Convert subnet size to subnet mask
+	var subnetMask net.IP = make(net.IP, net.IPv4len)
+	for i := uint8(0); i < subnetSize; i++ {
+		subnetMask[i/8] |= 1 << (7 - i%8)
+	}
+
+	if err := exec.Command("netsh", "interface", "ip", "set", "address", iface, "static", localIp, subnetMask.String()).Run(); err != nil {
+		return fmt.Errorf("error adding IP %s with subnet mask %s to interface %s: %v", localIp, subnetMask.String(), iface, err)
 	}
 	return nil
 }
@@ -447,22 +515,42 @@ func getDnsLinux() ([]string, error) {
 }
 
 func getDnsWindows() ([]string, error) {
-	out, err := exec.Command("powershell", "Get-DnsClientServerAddress", "-AddressFamily", "IPv4").Output()
+	out, err := exec.Command("cmd", "/C", "ipconfig", "/all").Output()
 	if err != nil {
 		return nil, fmt.Errorf("error getting DNS servers: %v", err)
 	}
 
+	output := string(out)
 	var servers []string
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.Contains(line, "ServerAddresses") {
-			for _, addr := range strings.Split(strings.TrimSpace(strings.Split(line, ":")[1]), ",") {
-				ip := strings.TrimSpace(addr)
-				if net.ParseIP(ip) != nil {
-					servers = append(servers, ip)
+	lines := strings.Split(output, "\n")
+	dnsServersFound := false
+
+	for _, line := range lines {
+		// Check if the line contains DNS Servers information
+		if strings.Contains(line, "DNS Servers") || dnsServersFound {
+			if strings.Contains(line, ":") {
+				addr := strings.TrimSpace(strings.Split(line, ":")[1])
+				if net.ParseIP(addr) != nil {
+					servers = append(servers, addr)
 				}
+			} else if dnsServersFound && strings.TrimSpace(line) != "" {
+				// Handles cases where DNS servers are listed in subsequent lines
+				addr := strings.TrimSpace(line)
+				if net.ParseIP(addr) != nil {
+					servers = append(servers, addr)
+				}
+			} else if dnsServersFound {
+				break // Stop if we have found DNS servers and reach an empty line
 			}
+
+			dnsServersFound = true // Flag to keep track if we're processing DNS server lines
 		}
 	}
+
+	if len(servers) == 0 {
+		return nil, fmt.Errorf("no DNS servers found")
+	}
+
 	return servers, nil
 }
 
@@ -499,6 +587,12 @@ func TunToConnCopy(iface *water.Interface, cm *ConnectionMap, returnOnErr bool, 
 		// with that IP, find the net conn in the connection map
 
 		packet := packetbuffer[:n] // assuming packetbuffer contains an IP packet
+
+		// for now ignore ipv6 packets
+		ipVersion := (packet[0] & 0xF0) >> 4
+		if ipVersion != 4 {
+			continue
+		}
 		if err := validateIPv4(packet); err != nil {
 			fmt.Printf("Error: %v\n", err)
 			continue
