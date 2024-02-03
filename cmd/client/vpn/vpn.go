@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -79,7 +80,7 @@ var clientVpnCmd = &cobra.Command{
 
 		var iface *water.Interface
 		// Check if OS is windows, using GOOS env variable
-		if os.Getenv("GOOS") == "windows" {
+		if runtime.GOOS == "windows" {
 			config := water.Config{
 				DeviceType: water.TUN,
 				PlatformSpecificParams: water.PlatformSpecificParams{
