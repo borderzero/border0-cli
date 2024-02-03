@@ -220,6 +220,9 @@ func addRoutesViaGatewayWindows(gateway string, routes []string) error {
 		if err := exec.Command("route", "add", network, "mask", mask, gateway).Run(); err != nil {
 			return fmt.Errorf("error adding route %s via gateway %s: %v", route, gateway, err)
 		}
+		if runtime.GOOS == "windows" {
+			fmt.Println("Added routes!")
+		}
 	}
 	return nil
 }

@@ -82,10 +82,14 @@ var clientVpnCmd = &cobra.Command{
 		if os.Getenv("GOOS") == "windows" {
 			config := water.Config{
 				DeviceType: water.TUN,
+				PlatformSpecificParams: water.PlatformSpecificParams{
+					Name: "border0VPN",
+				},
 			}
-			config.Name = "border0VPN"
 			iface, err = water.New(config)
 			if err != nil {
+				fmt.Println("failed to create TUN iface: will  try again", err)
+				time.Sleep(1 * time.Second)
 				// Windows 10 has an issue with unclean shutdowns not fully cleaning up the wintun device.
 				// Trying a second time resolves the issue.
 				iface, err = water.New(config)
@@ -226,6 +230,8 @@ var clientVpnCmd = &cobra.Command{
 		cm := vpnlib.NewConnectionMap()
 		cm.Set(ctrl.ServerIp, conn)
 		defer cm.Delete(ctrl.ServerIp)
+
+		fmt.Println("Connected to", conn.RemoteAddr())
 
 		// Start a goroutine to handle OS signals and make sure we clean up when we exit
 		go func() {
