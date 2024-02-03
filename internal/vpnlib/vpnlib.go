@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/labulakalia/water"
 )
@@ -192,6 +193,12 @@ func addRoutesViaGatewayLinux(gateway string, routes []string) error {
 }
 
 func addRoutesViaGatewayWindows(gateway string, routes []string) error {
+	// check if we're running on Windows , if so we need to sleep for a few seconds
+	if runtime.GOOS == "windows" {
+		fmt.Println("Adding VPN routes")
+		// Sleep for 5 seconds to allow the VPN to connect
+		time.Sleep(3 * time.Second)
+	}
 	for _, route := range routes {
 		var network, mask string
 
