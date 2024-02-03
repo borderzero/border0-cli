@@ -81,10 +81,13 @@ var clientVpnCmd = &cobra.Command{
 		var iface *water.Interface
 		// Check if OS is windows, using GOOS env variable
 		if runtime.GOOS == "windows" {
+			// get current epoch time, to string
+			// this is used to create a unique name for the TUN interface
+			ifName := fmt.Sprintf("border0VPN-%d", time.Now().Unix())
 			config := water.Config{
 				DeviceType: water.TUN,
 				PlatformSpecificParams: water.PlatformSpecificParams{
-					Name: "border0VPN",
+					Name: ifName,
 				},
 			}
 			iface, err = water.New(config)
