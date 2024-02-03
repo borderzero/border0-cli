@@ -196,8 +196,11 @@ func addRoutesViaGatewayWindows(gateway string, routes []string) error {
 	// check if we're running on Windows , if so we need to sleep for a few seconds
 	if runtime.GOOS == "windows" {
 		fmt.Println("Adding VPN routes")
-		// Sleep for 5 seconds to allow the VPN to connect
-		time.Sleep(3 * time.Second)
+		// for loop with one second sleep each
+		for i := 0; i < 5; i++ {
+			time.Sleep(1 * time.Second)
+			fmt.Print(".")
+		}
 	}
 	for _, route := range routes {
 		var network, mask string
