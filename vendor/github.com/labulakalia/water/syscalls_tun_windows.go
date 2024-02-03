@@ -1,24 +1,27 @@
 package water
 
 import (
+	"crypto/rand"
 	_ "embed"
+	"encoding/binary"
 	"errors"
 	"fmt"
-	"golang.org/x/sys/windows"
-	"golang.zx2c4.com/wintun"
-	"time"
-	_ "unsafe"
 	"os"
 	"sync"
 	"sync/atomic"
-)
+	"time"
+	_ "unsafe"
 
+	"golang.org/x/sys/windows"
+	"golang.zx2c4.com/wintun"
+)
 
 const (
 	rateMeasurementGranularity = uint64((time.Second / 2) / time.Nanosecond)
 	spinloopRateThreshold      = 800000000 / 8                                   // 800mbps
 	spinloopDuration           = uint64(time.Millisecond / 80 / time.Nanosecond) // ~1gbit/s
 )
+
 type Event int
 
 const (
@@ -75,15 +78,37 @@ func procyield(cycles uint32)
 //go:linkname nanotime runtime.nanotime
 func nanotime() int64
 
+func generateRandomGUID() (*windows.GUID, error) {
+	var guid windows.GUID
 
-
-func openTunDev(config Config) (ifce *Interface, err error) {
-	gUID := &windows.GUID{
-		0x0000000,
-		0xFFFF,
-		0xFFFF,
-		[8]byte{0xFF, 0xe9, 0x76, 0xe5, 0x8c, 0x74, 0x06, 0x3e},
+	// Generate random values for the Data1, Data2, and Data3 fields
+	if err := binary.Read(rand.Reader, binary.LittleEndian, &guid.Data1); err != nil {
+		return nil, err
 	}
+	if err := binary.Read(rand.Reader, binary.LittleEndian, &guid.Data2); err != nil {
+		return nil, err
+	}
+	if err := binary.Read(rand.Reader, binary.LittleEndian, &guid.Data3); err != nil {
+		return nil, err
+	}
+
+	// Generate random bytes for the Data4 field
+	if _, err := rand.Read(guid.Data4[:]); err != nil {
+		return nil, err
+	}
+
+	return &guid, nil
+}
+func openTunDev(config Config) (ifce *Interface, err error) {
+
+	// gUID := &windows.GUID{
+	// 	0x0000000,
+	// 	randomBytes,
+	// 	0xFFFF,
+	// 	[8]byte{0xFF, 0xe9, 0x76, 0xe5, 0x8c, 0x74, 0x06, 0x3e},
+	// }
+	gUID, _ := generateRandomGUID()
+
 	if config.PlatformSpecificParams.Name == "" {
 		config.PlatformSpecificParams.Name = "WaterIface"
 	}
@@ -92,25 +117,21 @@ func openTunDev(config Config) (ifce *Interface, err error) {
 		return nil, err
 	}
 	ifce = &Interface{
-		isTAP: config.DeviceType == TAP,
+		isTAP:           config.DeviceType == TAP,
 		ReadWriteCloser: &WTun{dev: nativeTunDevice},
-		name: config.PlatformSpecificParams.Name,
+		name:            config.PlatformSpecificParams.Name,
 	}
 	return ifce, nil
 }
 
-//
 // CreateTUN creates a Wintun interface with the given name. Should a Wintun
 // interface with the same name exist, it is reused.
-//
 func CreateTUN(ifname string, mtu int) (*NativeTun, error) {
 	return CreateTUNWithRequestedGUID(ifname, WintunStaticRequestedGUID, mtu)
 }
 
-//
 // CreateTUNWithRequestedGUID creates a Wintun interface with the given name and
 // a requested GUID. Should a Wintun interface with the same name exist, it is reused.
-//
 func CreateTUNWithRequestedGUID(ifname string, requestedGUID *windows.GUID, mtu int) (*NativeTun, error) {
 	wt, err := wintun.CreateAdapter(ifname, WintunTunnelType, requestedGUID)
 	if err != nil {
