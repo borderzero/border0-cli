@@ -126,6 +126,8 @@ var clientVpnCmd = &cobra.Command{
 
 		// keep track of the routes we need to delete when we exit
 		routesToDel := []networkRoute{}
+		// we should also add a defer, so we clean this up when we exit
+		defer cleanUpAfterSessionDown(routesToDel)
 
 		// rewrite default route to 0.0.0.0/1 and 128.0.0.1
 		for i, route := range ctrl.Routes {
@@ -209,9 +211,6 @@ var clientVpnCmd = &cobra.Command{
 						routesToDel = append(routesToDel, networkRoute{network: dnsServer, nextHopIp: LocalGatewayIp.String()})
 					}
 				}
-
-				// we should also add a defer, so we clean this up when we exit
-				defer cleanUpAfterSessionDown(routesToDel)
 				break
 
 			}

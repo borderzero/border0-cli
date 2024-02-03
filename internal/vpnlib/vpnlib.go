@@ -264,13 +264,22 @@ func deleteRoutesViaGatewayLinux(gateway string, routes []string) error {
 
 func deleteRoutesViaGatewayWindows(gateway string, routes []string) error {
 	for _, route := range routes {
-		// Convert route in CIDR notation to network and mask.
-		_, ipNet, err := net.ParseCIDR(route)
-		if err != nil {
-			return fmt.Errorf("invalid CIDR notation %s: %v", route, err)
+
+		var network, mask string
+
+		// Check if route is in CIDR notation
+		if _, ipNet, err := net.ParseCIDR(route); err == nil {
+			// CIDR notation
+			network = ipNet.IP.String()
+			mask = net.IP(ipNet.Mask).String()
+		} else if ip := net.ParseIP(route); ip != nil {
+			// Single IP Address
+			network = ip.String()
+			mask = "255.255.255.255" // Subnet mask for a single IP
+		} else {
+			// Invalid input
+			return fmt.Errorf("invalid route (not CIDR or IP) %s: %v", route, err)
 		}
-		network := ipNet.IP.String()
-		mask := net.IP(ipNet.Mask).String()
 
 		if err := exec.Command("route", "delete", network, "mask", mask, gateway).Run(); err != nil {
 			return fmt.Errorf("error deleting route %s via gateway %s: %v", route, gateway, err)
