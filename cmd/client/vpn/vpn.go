@@ -77,9 +77,27 @@ var clientVpnCmd = &cobra.Command{
 
 		defer conn.Close()
 
-		iface, err := water.New(water.Config{DeviceType: water.TUN})
-		if err != nil {
-			return fmt.Errorf("failed to create TUN iface: %v", err)
+		var iface *water.Interface
+		// Check if OS is windows, using GOOS env variable
+		if os.Getenv("GOOS") == "windows" {
+			config := water.Config{
+				DeviceType: water.TUN,
+			}
+			config.Name = "border0VPN"
+			iface, err = water.New(config)
+			if err != nil {
+				// Windows 10 has an issue with unclean shutdowns not fully cleaning up the wintun device.
+				// Trying a second time resolves the issue.
+				iface, err = water.New(config)
+				if err != nil {
+					return fmt.Errorf("failed to create TUN iface: %v", err)
+				}
+			}
+		} else {
+			iface, err = water.New(water.Config{DeviceType: water.TUN})
+			if err != nil {
+				return fmt.Errorf("failed to create TUN iface: %v", err)
+			}
 		}
 		logger.Logger.Info("Created TUN interface", zap.String("interface_name", iface.Name()))
 

@@ -56,7 +56,6 @@ require (
 	github.com/satori/go.uuid v1.2.0
 	github.com/shirou/gopsutil/v3 v3.23.4
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
-	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/viper v1.15.0
 	github.com/stretchr/testify v1.8.4
@@ -66,6 +65,7 @@ require (
 	golang.org/x/sync v0.5.0
 	golang.org/x/sys v0.16.0
 	golang.org/x/term v0.16.0
+	golang.zx2c4.com/wireguard/windows v0.5.3
 	google.golang.org/grpc v1.59.0
 	k8s.io/api v0.29.0
 	k8s.io/apimachinery v0.29.0
