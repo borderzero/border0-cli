@@ -80,6 +80,7 @@ var clientVpnCmd = &cobra.Command{
 		defer conn.Close()
 
 		var iface *water.Interface
+		waterConfig := water.Config{DeviceType: water.TUN}
 		// Check if OS is windows, using GOOS env variable
 		if runtime.GOOS == "windows" {
 
@@ -91,25 +92,20 @@ var clientVpnCmd = &cobra.Command{
 				wintundll.WithDllPathToEnsure(`C:\Windows\System32\wintun.dll`),
 			)
 			if err != nil {
-				return fmt.Errorf("Error ensuring Wintun driver is installed: %w", err)
+				return fmt.Errorf("error ensuring Wintun driver is installed: %w", err)
 			}
 
-			ifName := "border0VPN"
-			config := water.Config{
+			waterConfig = water.Config{
 				DeviceType: water.TUN,
 				PlatformSpecificParams: water.PlatformSpecificParams{
-					Name: ifName,
+					Name: "border0VPN",
 				},
 			}
-			iface, err = water.New(config)
-			if err != nil {
-				return fmt.Errorf("failed to create TUN iface: %v", err)
-			}
-		} else {
-			iface, err = water.New(water.Config{DeviceType: water.TUN})
-			if err != nil {
-				return fmt.Errorf("failed to create TUN iface: %v", err)
-			}
+		}
+		// Create a TUN interface with the given configuration.
+		iface, err = water.New(waterConfig)
+		if err != nil {
+			return fmt.Errorf("failed to create TUN iface: %v", err)
 		}
 		logger.Logger.Info("Created TUN interface", zap.String("interface_name", iface.Name()))
 
@@ -233,7 +229,7 @@ var clientVpnCmd = &cobra.Command{
 		// It seems to then choose the old default gateway, which is not what we want
 		// So we wait a few seconds, and then add the routes, it then picks the VPN interfaces as the correct interface
 		if runtime.GOOS == "windows" {
-			fmt.Printf("Adding VPN routes")
+			fmt.Printf("Adding VPN routes, waiting for interface to be ready...")
 			// for loop with one 500ms sleep each
 			for i := 0; i < 10; i++ {
 				time.Sleep(500 * time.Millisecond)
