@@ -233,7 +233,7 @@ var clientVpnCmd = &cobra.Command{
 		// It seems to then choose the old default gateway, which is not what we want
 		// So we wait a few seconds, and then add the routes, it then picks the VPN interfaces as the correct interface
 		if runtime.GOOS == "windows" {
-			fmt.Println("Adding VPN routes")
+			fmt.Printf("Adding VPN routes")
 			// for loop with one 500ms sleep each
 			for i := 0; i < 10; i++ {
 				time.Sleep(500 * time.Millisecond)
