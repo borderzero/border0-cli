@@ -50,7 +50,7 @@ import (
 	"github.com/borderzero/border0-cli/internal/util"
 	"github.com/borderzero/border0-cli/internal/vpnlib"
 	"github.com/jedib0t/go-pretty/table"
-	"github.com/labulakalia/water"
+	"github.com/borderzero/water"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 

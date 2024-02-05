@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/labulakalia/water"
+	"github.com/borderzero/water"
 )
 
 const (

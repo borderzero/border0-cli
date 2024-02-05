@@ -20,12 +20,12 @@ See https://github.com/songgao/packets for functions for parsing various packets
 
 ## Installation
 ```
-go get -u github.com/labulakalia/water
-go get -u github.com/labulakalia/water/waterutil
+go get -u github.com/borderzero/water
+go get -u github.com/borderzero/water/waterutil
 ```
 
 ## Documentation
-[http://godoc.org/github.com/labulakalia/water](http://godoc.org/github.com/labulakalia/water)
+[http://godoc.org/github.com/borderzero/water](http://godoc.org/github.com/borderzero/water)
 
 ## Example
 
@@ -38,7 +38,7 @@ import (
 	"log"
 
 	"github.com/songgao/packets/ethernet"
-	"github.com/labulakalia/water"
+	"github.com/borderzero/water"
 )
 
 func main() {
@@ -102,7 +102,7 @@ package main
 import (
 	"log"
 
-	"github.com/labulakalia/water"
+	"github.com/borderzero/water"
 )
 
 func main() {
@@ -165,7 +165,7 @@ package main
 import (
 	"log"
 
-	"github.com/labulakalia/water"
+	"github.com/borderzero/water"
 )
 
 func main() {

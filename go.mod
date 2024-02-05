@@ -1,8 +1,6 @@
 module github.com/borderzero/border0-cli
 
-go 1.21
-
-toolchain go1.21.0
+go 1.21.6
 
 require (
 	cloud.google.com/go/cloudsqlconn v1.2.4
@@ -28,6 +26,7 @@ require (
 	github.com/borderzero/border0-go v1.4.16
 	github.com/borderzero/border0-proto v1.0.19
 	github.com/borderzero/discovery v0.1.30
+	github.com/borderzero/water v0.0.0-20240204235856-5ca9432d705a
 	github.com/brianvoe/gofakeit v3.18.0+incompatible
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/creack/pty v1.1.18
@@ -44,7 +43,6 @@ require (
 	github.com/jbenet/go-os-rename v0.0.0-20150428075126-3ac97f61ef67
 	github.com/jedib0t/go-pretty v4.3.0+incompatible
 	github.com/kardianos/service v1.2.2
-	github.com/labulakalia/water v0.0.4
 	github.com/manifoldco/promptui v0.9.0
 	github.com/mdp/qrterminal v1.0.1
 	github.com/microsoft/go-mssqldb v1.6.0
@@ -93,6 +91,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.19.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.26.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/borderzero/wintundll-downloader-go v0.0.2 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/chzyer/readline v1.5.1 // indirect
 	github.com/cihub/seelog v0.0.0-20170130134532-f561c5e57575 // indirect

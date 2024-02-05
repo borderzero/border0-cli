@@ -16,7 +16,7 @@ import (
 	"github.com/borderzero/border0-cli/internal/client"
 	"github.com/borderzero/border0-cli/internal/enum"
 	"github.com/borderzero/border0-cli/internal/vpnlib"
-	"github.com/labulakalia/water"
+	"github.com/borderzero/water"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"golang.org/x/net/icmp"
@@ -83,7 +83,7 @@ var clientVpnCmd = &cobra.Command{
 		if runtime.GOOS == "windows" {
 			// get current epoch time, to string
 			// this is used to create a unique name for the TUN interface
-			ifName := fmt.Sprintf("border0VPN-%d", time.Now().Unix())
+			ifName := "border0VPN"
 			config := water.Config{
 				DeviceType: water.TUN,
 				PlatformSpecificParams: water.PlatformSpecificParams{
@@ -92,14 +92,7 @@ var clientVpnCmd = &cobra.Command{
 			}
 			iface, err = water.New(config)
 			if err != nil {
-				fmt.Println("failed to create TUN iface: will  try again", err)
-				time.Sleep(1 * time.Second)
-				// Windows 10 has an issue with unclean shutdowns not fully cleaning up the wintun device.
-				// Trying a second time resolves the issue.
-				iface, err = water.New(config)
-				if err != nil {
-					return fmt.Errorf("failed to create TUN iface: %v", err)
-				}
+				return fmt.Errorf("failed to create TUN iface: %v", err)
 			}
 		} else {
 			iface, err = water.New(water.Config{DeviceType: water.TUN})

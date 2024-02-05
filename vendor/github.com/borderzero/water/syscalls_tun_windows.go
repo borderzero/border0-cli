@@ -6,12 +6,14 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"sync"
 	"sync/atomic"
 	"time"
 	_ "unsafe"
 
+	"github.com/borderzero/wintundll-downloader-go/wintundll"
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wintun"
 )
@@ -101,20 +103,40 @@ func generateRandomGUID() (*windows.GUID, error) {
 }
 func openTunDev(config Config) (ifce *Interface, err error) {
 
-	// gUID := &windows.GUID{
-	// 	0x0000000,
-	// 	randomBytes,
-	// 	0xFFFF,
-	// 	[8]byte{0xFF, 0xe9, 0x76, 0xe5, 0x8c, 0x74, 0x06, 0x3e},
-	// }
+	/*
+		gUID := &windows.GUID{
+		 	0x0000000,
+		 	randomBytes,
+		 	0xFFFF,
+		 	[8]byte{0xFF, 0xe9, 0x76, 0xe5, 0x8c, 0x74, 0x06, 0x3e},
+		 }
+	*/
+
+	// We'll geneerate a random GUID for the Wintun interface
+	// This is to work around some issue in the Wintun driver that causes
+	// it to fail to create an interface as claims it already exists
 	gUID, _ := generateRandomGUID()
+
+	// Next, make sure the Wintun driver is installed
+	err := wintundll.Ensure(
+		wintundll.WithDownloadURL("https://www.wintun.net/builds/wintun-0.14.1.zip"),
+		wintundll.WithDownloadTimeout(time.Second*10),
+	)
+	if err != nil {
+		log.Fatal("failed to ensure the presence of the wintun.ddl file")
+	}
 
 	if config.PlatformSpecificParams.Name == "" {
 		config.PlatformSpecificParams.Name = "WaterIface"
 	}
 	nativeTunDevice, err := CreateTUNWithRequestedGUID(config.PlatformSpecificParams.Name, gUID, 0)
 	if err != nil {
-		return nil, err
+		// Windows 10 has an issue with unclean shutdowns not fully cleaning up the wintun device.
+		// Trying a second time resolves the issue.
+		nativeTunDevice, err = CreateTUNWithRequestedGUID(config.PlatformSpecificParams.Name, gUID, 0)
+		if err != nil {
+			return nil, err
+		}
 	}
 	ifce = &Interface{
 		isTAP:           config.DeviceType == TAP,
