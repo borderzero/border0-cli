@@ -13,7 +13,6 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
-	"time"
 
 	"github.com/borderzero/water"
 )
@@ -161,7 +160,7 @@ func getDefaultGatewayWindows() (net.IP, string, error) {
 }
 
 // AddRoutesViaGateway adds routes through a specified gateway IP.
-func AddRoutesViaGateway(gateway string, routes []string, ifname string) error {
+func AddRoutesViaGateway(gateway string, routes []string) error {
 	switch runtime.GOOS {
 	case "darwin":
 		return addRoutesViaGatewayDarwin(gateway, routes)
@@ -193,15 +192,6 @@ func addRoutesViaGatewayLinux(gateway string, routes []string) error {
 }
 
 func addRoutesViaGatewayWindows(gateway string, routes []string) error {
-	// check if we're running on Windows , if so we need to sleep for a few seconds
-	if runtime.GOOS == "windows" {
-		fmt.Println("Adding VPN routes")
-		// for loop with one second sleep each
-		for i := 0; i < 5; i++ {
-			time.Sleep(1 * time.Second)
-			fmt.Print(".")
-		}
-	}
 	for _, route := range routes {
 		var network, mask string
 
@@ -222,9 +212,6 @@ func addRoutesViaGatewayWindows(gateway string, routes []string) error {
 		// Execute the route add command
 		if err := exec.Command("route", "add", network, "mask", mask, gateway).Run(); err != nil {
 			return fmt.Errorf("error adding route %s via gateway %s: %v", route, gateway, err)
-		}
-		if runtime.GOOS == "windows" {
-			fmt.Println("Added routes!")
 		}
 	}
 	return nil

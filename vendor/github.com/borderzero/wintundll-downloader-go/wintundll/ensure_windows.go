@@ -7,24 +7,15 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
-	"runtime"
-	"strings"
 	"syscall"
 
 	"golang.org/x/sys/windows"
 )
 
-// Ensure ensures the presense of the wintun dll.
+// Ensure ensures the presence of the wintun dll in the system.
+// It returns an incompatibility error on non-windows.
 func Ensure(opts ...EnsureOption) error {
-	config := &configuration{
-		downloadURL:     defaultDownloadURL,
-		downloadTimeout: defaultDownloadTimeout,
-	}
-	for _, opt := range opts {
-		opt(config)
-	}
+	config := getConfiguration(opts...)
 
 	admin, err := isRunningAsAdministator()
 	if err != nil {
@@ -34,50 +25,21 @@ func Ensure(opts ...EnsureOption) error {
 		return errors.New("executable is not running as administrator")
 	}
 
-	executablePath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("failed to determine executable path: %v", err)
-	}
-	systemTempDir := os.TempDir()
-
-	// If the executable is in a temporary directory
-	// then the program is likely being ran with "go run".
-	// In that case, we use the current working directory instead.
-	//
-	// This will unfortunately fail for instances where the program
-	// is being ran in a temporary path from outside of that directory.
-	//
-	// FIXME: improve this
-	if strings.HasPrefix(executablePath, systemTempDir) {
-		wd, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("failed to get current working directory: %v", err)
-		}
-		executablePath = filepath.Join(wd, "main.go")
-	}
-
-	arch := runtime.GOARCH
-	if arch == "386" {
-		arch = "x86" // wintun bundles 386 as x86
-	}
-
-	_, err = syscall.LoadDLL(filepath.Join(filepath.Dir(executablePath), "wintun.dll"))
-	if err == nil {
+	if _, err = syscall.LoadDLL(config.dllPathInToEnsure); err == nil {
 		return nil
 	}
 
 	err = downloadAndMoveFromZip(
 		http.Client{Timeout: config.downloadTimeout},
 		config.downloadURL,
-		fmt.Sprintf("wintun/bin/%s/wintun.dll", arch),
-		filepath.Join(filepath.Dir(executablePath), "wintun.dll"),
+		config.dllPathInUnzippedDir,
+		config.dllPathInToEnsure,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to get wintun.dll from remote: %v", err)
 	}
 
-	_, err = syscall.LoadDLL(filepath.Join(filepath.Dir(executablePath), "wintun.dll"))
-	if err != nil {
+	if _, err = syscall.LoadDLL(config.dllPathInToEnsure); err != nil {
 		return fmt.Errorf("still failed to load wintun.dll after fresh download: %v", err)
 	}
 

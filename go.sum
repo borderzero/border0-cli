@@ -149,8 +149,12 @@ github.com/borderzero/go-mssqldb v1.6.3 h1:U4AdHZJgjPSrhZqV5Jnn4rdDcNUdx+/iWHWDz
 github.com/borderzero/go-mssqldb v1.6.3/go.mod h1:00mDtPbeQCRGC1HwOOR5K/gr30P1NcEG0vx6Kbv2aJU=
 github.com/borderzero/water v0.0.0-20240204235856-5ca9432d705a h1:q1068dAsjhXGczIyuaAL5mQdFaZ/su9Y3cBcMvizMTc=
 github.com/borderzero/water v0.0.0-20240204235856-5ca9432d705a/go.mod h1:Hgv+HXmpbla65fKBYRwyR/aEFY/De9qD5zf9FSH8U6M=
+github.com/borderzero/water v0.0.0-20240205004738-edb1d3cd8361 h1:OZS/zYXUfLb7kZnan5VXhltTG739eNFm/CXdSV1W/1M=
+github.com/borderzero/water v0.0.0-20240205004738-edb1d3cd8361/go.mod h1:nRWL/kjHFu3dDnXMbO3mqDrmxDyurXoOAWxld0A00k8=
 github.com/borderzero/wintundll-downloader-go v0.0.2 h1:uNJNGDhWSl2VomWB8CfXgbh5zz3kzEJfTUoXe+DLC1s=
 github.com/borderzero/wintundll-downloader-go v0.0.2/go.mod h1:x0skBADojlRJn+rxzcVET3TehtCVSD6PW7nB877yN6w=
+github.com/borderzero/wintundll-downloader-go v0.0.4 h1:6FBs9wKShnnnn5z7DHXmOIbJwpOpkcoPyfTHYPHGhlU=
+github.com/borderzero/wintundll-downloader-go v0.0.4/go.mod h1:x0skBADojlRJn+rxzcVET3TehtCVSD6PW7nB877yN6w=
 github.com/brianvoe/gofakeit v3.18.0+incompatible h1:wDOmHc9DLG4nRjUVVaxA+CEglKOW72Y5+4WNxUIkjM8=
 github.com/brianvoe/gofakeit v3.18.0+incompatible/go.mod h1:kfwdRA90vvNhPutZWfH7WPaDzUjz+CZFqG+rPkOjGOc=
 github.com/cenkalti/backoff/v4 v4.2.1 h1:y4OZtCnogmCPw98Zjyt5a6+QwPLGkiQsYW5oUqylYbM=

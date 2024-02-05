@@ -332,10 +332,10 @@ github.com/borderzero/discovery
 github.com/borderzero/discovery/discoverers
 github.com/borderzero/discovery/engines
 github.com/borderzero/discovery/utils
-# github.com/borderzero/water v0.0.0-20240204235856-5ca9432d705a
+# github.com/borderzero/water v0.0.0-20240205004738-edb1d3cd8361
 ## explicit; go 1.21.6
 github.com/borderzero/water
-# github.com/borderzero/wintundll-downloader-go v0.0.2
+# github.com/borderzero/wintundll-downloader-go v0.0.4
 ## explicit; go 1.21.6
 github.com/borderzero/wintundll-downloader-go/wintundll
 # github.com/brianvoe/gofakeit v3.18.0+incompatible

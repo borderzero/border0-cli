@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -70,7 +69,7 @@ func (w *WTun) Read(b []byte) (int, error) {
 }
 
 var (
-	WintunTunnelType          = "WireGuard"
+	WintunTunnelType          = "Wintun"
 	WintunStaticRequestedGUID *windows.GUID
 )
 
@@ -101,15 +100,15 @@ func generateRandomGUID() (*windows.GUID, error) {
 
 	return &guid, nil
 }
-func openTunDev(config Config) (ifce *Interface, err error) {
 
+func openTunDev(config Config) (ifce *Interface, err error) {
 	/*
 		gUID := &windows.GUID{
-		 	0x0000000,
-		 	randomBytes,
-		 	0xFFFF,
-		 	[8]byte{0xFF, 0xe9, 0x76, 0xe5, 0x8c, 0x74, 0x06, 0x3e},
-		 }
+			0x0000000,
+			0xFFFF,
+			0xFFFF,
+			[8]byte{0xFF, 0xe9, 0x76, 0xe5, 0x8c, 0x74, 0x06, 0x3e},
+		}
 	*/
 
 	// We'll geneerate a random GUID for the Wintun interface
@@ -118,14 +117,13 @@ func openTunDev(config Config) (ifce *Interface, err error) {
 	gUID, _ := generateRandomGUID()
 
 	// Next, make sure the Wintun driver is installed
-	err := wintundll.Ensure(
+	err = wintundll.Ensure(
 		wintundll.WithDownloadURL("https://www.wintun.net/builds/wintun-0.14.1.zip"),
 		wintundll.WithDownloadTimeout(time.Second*10),
 	)
 	if err != nil {
-		log.Fatal("failed to ensure the presence of the wintun.ddl file")
+		return nil, fmt.Errorf("Error ensuring Wintun driver is installed: %w", err)
 	}
-
 	if config.PlatformSpecificParams.Name == "" {
 		config.PlatformSpecificParams.Name = "WaterIface"
 	}
@@ -133,6 +131,7 @@ func openTunDev(config Config) (ifce *Interface, err error) {
 	if err != nil {
 		// Windows 10 has an issue with unclean shutdowns not fully cleaning up the wintun device.
 		// Trying a second time resolves the issue.
+		time.Sleep(1 * time.Second)
 		nativeTunDevice, err = CreateTUNWithRequestedGUID(config.PlatformSpecificParams.Name, gUID, 0)
 		if err != nil {
 			return nil, err
