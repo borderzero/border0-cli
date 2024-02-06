@@ -9,7 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -82,20 +84,20 @@ func GetControlMessage(conn net.Conn) (*ControlMessage, error) {
 	return ctrlMessage, nil
 }
 
-func GetDefaultGateway() (net.IP, string, error) {
+func GetDefaultGateway(addressFamily int) (net.IP, string, error) {
 	switch runtime.GOOS {
 	case "darwin":
-		return getDefaultGatewayDarwin()
+		return getDefaultGatewayDarwin(addressFamily)
 	case "linux":
-		return getDefaultGatewayLinux()
+		return getDefaultGatewayLinux(addressFamily)
 	case "windows":
-		return getDefaultGatewayWindows()
+		return getDefaultGatewayWindows(addressFamily)
 	default:
 		return nil, "", fmt.Errorf("runtime %s not supported", runtime.GOOS)
 	}
 }
 
-func getDefaultGatewayDarwin() (net.IP, string, error) {
+func getDefaultGatewayDarwin(addressFamily int) (net.IP, string, error) {
 	output, err := exec.Command("netstat", "-nr").Output()
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to get default route: %v", err)
@@ -107,7 +109,7 @@ func getDefaultGatewayDarwin() (net.IP, string, error) {
 			fields := strings.Fields(line)
 			if len(fields) >= 4 {
 				ip := net.ParseIP(fields[1])
-				if ip != nil {
+				if ip != nil && ((addressFamily == 4 && ip.To4() != nil) || (addressFamily == 6 && ip.To4() == nil)) {
 					return ip, fields[3], nil
 				}
 			}
@@ -116,7 +118,7 @@ func getDefaultGatewayDarwin() (net.IP, string, error) {
 	return nil, "", fmt.Errorf("default gateway not found")
 }
 
-func getDefaultGatewayLinux() (net.IP, string, error) {
+func getDefaultGatewayLinux(addressFamily int) (net.IP, string, error) {
 	output, err := exec.Command("ip", "route").Output()
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to get default route: %v", err)
@@ -137,7 +139,7 @@ func getDefaultGatewayLinux() (net.IP, string, error) {
 	return nil, "", fmt.Errorf("default gateway not found")
 }
 
-func getDefaultGatewayWindows() (net.IP, string, error) {
+func getDefaultGatewayWindows(addressFamily int) (net.IP, string, error) {
 	output, err := exec.Command("cmd", "/C", "route print 0.0.0.0").Output()
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to get default route: %v", err)
@@ -552,4 +554,21 @@ func ConnToTunCopy(conn net.Conn, iface *water.Interface) error {
 			continue
 		}
 	}
+}
+
+func CheckIPForwardingEnabled() bool {
+	// Path to the ip_forward configuration
+	const path = "/proc/sys/net/ipv4/ip_forward"
+
+	// Read the contents of the file using os.ReadFile
+	content, err := os.ReadFile(path)
+	if err != nil {
+		log.Fatalf("Failed to read %s: %v", path, err)
+	}
+
+	// The file should contain a single character: '1' or '0'
+	// TrimSpace is not shown here, but you could use strings.TrimSpace if needed
+	isEnabled := string(content[0]) == "1"
+
+	return isEnabled
 }

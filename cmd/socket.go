@@ -50,7 +50,6 @@ import (
 	"github.com/borderzero/border0-cli/internal/util"
 	"github.com/borderzero/border0-cli/internal/vpnlib"
 	"github.com/jedib0t/go-pretty/table"
-	"github.com/borderzero/water"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
@@ -563,11 +562,12 @@ var socketConnectVpnCmd = &cobra.Command{
 		// create the connection map
 		cm := vpnlib.NewConnectionMap()
 
-		iface, err := water.New(water.Config{DeviceType: water.TUN})
+		iface, err := vpnlib.CreateTun()
 		if err != nil {
-			return fmt.Errorf("failed to create TUN iface: %v", err)
+			return fmt.Errorf("failed to create TUN interface: %v", err)
 		}
 		defer iface.Close()
+
 		logger.Logger.Info("Started VPN server", zap.String("interface", iface.Name()), zap.String("server_ip", serverIp), zap.String(" vpn_subnet ", vpnSubnet))
 
 		if err = vpnlib.AddServerIp(iface.Name(), serverIp, subnetSize); err != nil {
@@ -578,6 +578,14 @@ var socketConnectVpnCmd = &cobra.Command{
 			// On linux the routes are added to the interface when creating the interface and adding the IP
 			if err = vpnlib.AddRoutesToIface(iface.Name(), []string{vpnSubnet}); err != nil {
 				logger.Logger.Warn("failed to add routes to interface", zap.Error(err))
+			}
+		}
+
+		if runtime.GOOS == "linux" {
+			if !vpnlib.CheckIPForwardingEnabled() {
+				logger.Logger.Warn("Ip forwarding is not enabled, Your VPN will not be able to forward packets")
+				logger.Logger.Warn("To enable ip forwarding run: sysctl -w net.ipv4.ip_forward=1")
+				logger.Logger.Warn("Also make sure to enable NAT: iptables -t nat -A POSTROUTING -o <interface> -j MASQUERADE")
 			}
 		}
 
