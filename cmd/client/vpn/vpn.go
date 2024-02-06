@@ -108,8 +108,26 @@ var clientVpnCmd = &cobra.Command{
 		// we should also add a defer, so we clean this up when we exit
 		defer cleanUpAfterSessionDown(routesToDel)
 
+		// Get the remote address of the tunnel connection
+		// we'll use that to determine the address family
+		remoteAddr := conn.RemoteAddr().(*net.TCPAddr)
+
+		var addressFamily int // Tunnel over IPv4 or IPv6
+		var vpnGatewayIp string
+
+		if remoteAddr.IP.To4() != nil {
+			addressFamily = 4
+			vpnGatewayIp = remoteAddr.IP.String() + "/32"
+		} else if remoteAddr.IP.To16() != nil {
+			addressFamily = 6
+			vpnGatewayIp = remoteAddr.IP.String() + "/128"
+		} else {
+			return fmt.Errorf("failed to determine address family for remote address: %v", remoteAddr.IP)
+		}
+
 		// rewrite default route to 0.0.0.0/1 and 128.0.0.1
 		for i, route := range ctrl.Routes {
+
 			if route == "0.0.0.0/0" {
 
 				// Before we add new routes, we need to add a more specific route to the gateway gatewayIp
@@ -119,21 +137,6 @@ var clientVpnCmd = &cobra.Command{
 				// The IP of the VPN gateway the the remote end of conn.
 				// So let's get the IP of the remote end of conn and then turn that into a /32 route
 				// and route it via the old gateway
-
-				remoteAddr := conn.RemoteAddr().(*net.TCPAddr)
-
-				var addressFamily int // Tunnel over IPv4 or IPv6
-				var vpnGatewayIp string
-
-				if remoteAddr.IP.To4() != nil {
-					addressFamily = 4
-					vpnGatewayIp = remoteAddr.IP.String() + "/32"
-				} else if remoteAddr.IP.To16() != nil {
-					addressFamily = 6
-					vpnGatewayIp = remoteAddr.IP.String() + "/128"
-				} else {
-					return fmt.Errorf("failed to determine address family for remote address: %v", remoteAddr.IP)
-				}
 
 				// then delete this route (0.0.0.0/0) from the list of routes
 				ctrl.Routes = append(ctrl.Routes[:i], ctrl.Routes[i+1:]...)
@@ -167,7 +170,35 @@ var clientVpnCmd = &cobra.Command{
 					// for now we just skip this
 				}
 			}
+		}
 
+		// Check if we need to add bypass routes for the DNS servers
+		// Needed when the DNS server is RFC1918 and is on a different subnet than the default gateway
+		// This is the case in many coffee shops, where the DNS server is on a different subnet than the default gateway
+		// In this case, we need to add a bypass route for the DNS server, so that it's not routed through the VPN
+		if addressFamily == 4 {
+			// dnsServersBypassRoutes is a list of DNS servers that we need to add bypass routes for
+			dnsServersBypassRoutes, err := vpnlib.GetDnsByPassRoutes(iface.Name(), ctrl.Routes, addressFamily)
+			if err != nil {
+				log.Println("failed to get DNS servers bypass routes", err)
+			}
+			if len(dnsServersBypassRoutes) > 0 {
+				// Now we can add the bypass routes for the DNS servers
+				LocalGatewayIp, _, err := vpnlib.GetDefaultGateway(4)
+				if err != nil {
+					return fmt.Errorf("failed to get default route: %v", err)
+				}
+
+				for dnsServer := range dnsServersBypassRoutes {
+					fmt.Println("Adding bypass route for DNS server", dnsServer, "via", LocalGatewayIp.String())
+					err = vpnlib.AddRoutesViaGateway(LocalGatewayIp.String(), []string{dnsServer})
+					if err != nil {
+						log.Println("failed to add bypass route for DNS server", dnsServer, "via", LocalGatewayIp.String(), err)
+					}
+					// add the newly create static route for DNS server to the list of routes to delete
+					routesToDel = append(routesToDel, networkRoute{network: dnsServer, nextHopIp: LocalGatewayIp.String()})
+				}
+			}
 		}
 
 		// Now we can add the routes that the server sent to us a the client

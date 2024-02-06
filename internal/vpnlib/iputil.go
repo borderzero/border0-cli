@@ -54,7 +54,6 @@ func validateIPv4(packet []byte) error {
 	return nil
 }
 
-
 // Returns a list of interfaces on which this IP network was found
 func GetLocalInterfacesForIp(ipAddress string) ([]string, error) {
 	//create a list of network interfaces, so we can return those if a match is found
@@ -94,4 +93,22 @@ func GetLocalInterfacesForIp(ipAddress string) ([]string, error) {
 	}
 	return networkInterfaces, nil
 
+}
+
+// IsIPInCIDR checks if an IP address is in a CIDR range.
+func IsIPInCIDR(ipStr, cidrStr string) (bool, error) {
+	// Parse the IP address.
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return false, fmt.Errorf("invalid IP address: %s", ipStr)
+	}
+
+	// Parse the CIDR prefix.
+	_, cidr, err := net.ParseCIDR(cidrStr)
+	if err != nil {
+		return false, fmt.Errorf("invalid CIDR notation: %s", cidrStr)
+	}
+
+	// Use the Contains method to check if the CIDR contains the IP.
+	return cidr.Contains(ip), nil
 }

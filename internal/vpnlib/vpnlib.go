@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -570,4 +571,73 @@ func CheckIPForwardingEnabled() (bool, error) {
 	isEnabled := string(content[0]) == "1"
 
 	return isEnabled, nil
+}
+
+func GetDnsByPassRoutes(vpnIfaceName string, routes []string, addressFamily int) (map[string]bool, error) {
+
+	// make a map we'll use for DNS bypass routes
+	// This will contain a list of unique DNS servers for which we'll do bypass routes
+	dnsServersBypassRoutes := make(map[string]bool)
+
+	// Also get the DNS servers from the server.
+	// We may need to create bypass routes for these
+	currentDnsServers, err := GetDnsServers()
+	if err != nil {
+		return dnsServersBypassRoutes, fmt.Errorf("failed to get current DNS servers %v", err)
+	}
+	for _, route := range routes {
+
+		for _, dnsServer := range currentDnsServers {
+
+			// turn dnsserver into a net.IP
+			dnsIp := net.ParseIP(dnsServer)
+			// for now we only support ipv4
+			if addressFamily == 4 && dnsIp.To4() != nil {
+				match, _ := IsIPInCIDR(dnsServer, route)
+				if match {
+					if dnsIp.IsLoopback() {
+						// If it's loopback, dont; do anything
+						continue
+					} else if dnsIp.IsPrivate() {
+						networkInterfaces, err := GetLocalInterfacesForIp(dnsServer)
+						if err != nil {
+							log.Println("failed to check if IP is local", err)
+							continue
+						}
+						// if the map is not empty, then the IP is local
+						if len(networkInterfaces) > 0 {
+							// This is the case if the IP is on the same subnet as the local gateway, for example on the router
+							// However we should make sure it's not on the newly added tun VPN interface
+
+							// we should make sure the list of interfaces is not empty, and doesn't contain iface.Name()
+							// if it does, we should continue
+							// check the list to and if the interface found is not the same as  iface.Name()
+							// Which is the VPN tunnel, then it's a local network, and we should continue
+							// ie. no by pass route is needed, since the IP address is locally connected.
+
+							found := false
+							for _, name := range networkInterfaces {
+								if name != vpnIfaceName {
+									// network found, not adding bypass route
+									found = true
+								}
+							}
+							if !found {
+								// if we get here, then the IP is:
+								// 1) not loopback (systemd uses 127.0.0.53)
+								// 2) not on a local network (ie. not on the same subnet as any of the interfaces)
+								// 3) is RFC1918 (private) address
+								// So we should add a bypass route for it
+								// we use a map to make sure we only add each DNS server once
+								// Example case, in coffeee shop, my ip is 10.10.10.10,
+								// and the DNS server is 10.11.11.11 , ie different subnet, but wont work on vpn
+								dnsServersBypassRoutes[fmt.Sprintf("%s/%d", dnsIp.String(), 32)] = true
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return dnsServersBypassRoutes, nil
 }
