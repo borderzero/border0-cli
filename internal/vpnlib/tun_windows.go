@@ -11,6 +11,10 @@ import (
 	"github.com/borderzero/wintundll-downloader-go/wintundll"
 )
 
+// CreateTun creates a TUN interface for Windows
+// we're using the the winTun driver, which is a TUN driver for Windows
+// https://www.wintun.net/
+// we'll use the wintundll-downloader-go library to ensure the driver is installed
 func CreateTun() (ifce *water.Interface, err error) {
 
 	err = wintundll.Ensure(

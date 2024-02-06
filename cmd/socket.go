@@ -582,7 +582,12 @@ var socketConnectVpnCmd = &cobra.Command{
 		}
 
 		if runtime.GOOS == "linux" {
-			if !vpnlib.CheckIPForwardingEnabled() {
+			// Check if ip forwarding is enabled
+			forwardingEnabled, err := vpnlib.CheckIPForwardingEnabled()
+			if err != nil {
+				logger.Logger.Warn("Failed to check if ip forwarding is enabled", zap.Error(err))
+			}
+			if !forwardingEnabled {
 				logger.Logger.Warn("Ip forwarding is not enabled, Your VPN will not be able to forward packets")
 				logger.Logger.Warn("To enable ip forwarding run: sysctl -w net.ipv4.ip_forward=1")
 				logger.Logger.Warn("Also make sure to enable NAT: iptables -t nat -A POSTROUTING -o <interface> -j MASQUERADE")

@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -556,19 +555,19 @@ func ConnToTunCopy(conn net.Conn, iface *water.Interface) error {
 	}
 }
 
-func CheckIPForwardingEnabled() bool {
+func CheckIPForwardingEnabled() (bool, error) {
 	// Path to the ip_forward configuration
 	const path = "/proc/sys/net/ipv4/ip_forward"
 
 	// Read the contents of the file using os.ReadFile
 	content, err := os.ReadFile(path)
 	if err != nil {
-		log.Fatalf("Failed to read %s: %v", path, err)
+		return false, fmt.Errorf("failed to read %s: %v", path, err)
 	}
 
 	// The file should contain a single character: '1' or '0'
 	// TrimSpace is not shown here, but you could use strings.TrimSpace if needed
 	isEnabled := string(content[0]) == "1"
 
-	return isEnabled
+	return isEnabled, nil
 }

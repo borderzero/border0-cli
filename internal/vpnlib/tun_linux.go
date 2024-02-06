@@ -9,13 +9,11 @@ import (
 	"github.com/borderzero/water"
 )
 
+// CreateTun creates a TUN interface for Linux
 func CreateTun() (ifce *water.Interface, err error) {
 
 	waterConfig := water.Config{
 		DeviceType: water.TUN,
-		PlatformSpecificParams: water.PlatformSpecificParams{
-			Name: "border0VPN",
-		},
 	}
 	iface, err := water.New(waterConfig)
 	if err != nil {

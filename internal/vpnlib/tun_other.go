@@ -9,6 +9,8 @@ import (
 	"github.com/borderzero/water"
 )
 
+// CreateTun creates a TUN interface for platforms other than Linux and Windows
+
 func CreateTun() (ifce *water.Interface, err error) {
 	waterConfig := water.Config{DeviceType: water.TUN}
 	iface, err := water.New(waterConfig)
