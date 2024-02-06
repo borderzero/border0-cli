@@ -46,7 +46,6 @@ func getDnsDarwin() ([]string, error) {
 }
 
 func getDnsLinux() ([]string, error) {
-	return []string{}, nil
 	file, err := os.Open("/etc/resolv.conf")
 	if err != nil {
 		return nil, fmt.Errorf("error getting DNS servers: %v", err)

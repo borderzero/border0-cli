@@ -110,7 +110,7 @@ var clientVpnCmd = &cobra.Command{
 
 		// rewrite default route to 0.0.0.0/1 and 128.0.0.1
 		for i, route := range ctrl.Routes {
-			if route == "0.0.0.0/0" || route == "::/0" {
+			if route == "0.0.0.0/0" {
 
 				// Before we add new routes, we need to add a more specific route to the gateway gatewayIp
 				// This is because we want the VPN gateway IP to be routed through the existing gateway
@@ -121,8 +121,10 @@ var clientVpnCmd = &cobra.Command{
 				// and route it via the old gateway
 
 				remoteAddr := conn.RemoteAddr().(*net.TCPAddr)
-				var addressFamily int
+
+				var addressFamily int // Tunnel over IPv4 or IPv6
 				var vpnGatewayIp string
+
 				if remoteAddr.IP.To4() != nil {
 					addressFamily = 4
 					vpnGatewayIp = remoteAddr.IP.String() + "/32"
@@ -158,70 +160,12 @@ var clientVpnCmd = &cobra.Command{
 					// add the newly create static route for VPN gateway to the list of routes to delete
 					routesToDel = append(routesToDel, networkRoute{network: vpnGatewayIp, nextHopIp: LocalGatewayIp.String()})
 
+				} else if addressFamily == 6 {
+					// TODO placeholder for ipv6
 					// for now we don't support bypass routes for ipv6
 					// once we start announcing ipv6 routes, we can should add support for bypass routes
 					// for now we just skip this
-
-					// Also get the DNS servers from the server and add them to the map
-					// so we can use them later
-					currentDnsServers, err := vpnlib.GetDnsServers()
-					if err != nil {
-						log.Println("failed to get current DNS servers", err)
-					}
-
-					for _, dnsServer := range currentDnsServers {
-						// Check if this is a local IP, or routed via default gateway
-						// If so, we don't want to add it to the static routes
-
-						networkInterfaces, err := vpnlib.GetLocalInterfacesForIp(dnsServer)
-						if err != nil {
-							log.Println("failed to check if IP is local", err)
-							continue
-						}
-
-						// if the map is not empty, then the IP is local
-						if len(networkInterfaces) > 0 {
-							// This is the case if the IP is on the same subnet as the local gateway, for example on the router
-							// However we should make sure it's not on the newly added tun VPN interface
-
-							// we should make sure the list of interfaces is not empty, and doesn't contain iface.Name()
-							// if it does, we should continue
-							// check the list to and if the interface found is not the same as  iface.Name()
-							// Which is the VPN tunnel, then it's a local network, and we should continue
-							// ie. no by pass route is needed, since the IP address is locally connected.
-							vpnIfaceName := iface.Name()
-							for _, name := range networkInterfaces {
-								if name != vpnIfaceName {
-									// network found, not adding bypass route
-									continue
-								}
-
-							}
-						}
-
-						// Check is v4 or v6 so we create correct bypass route
-						if net.ParseIP(dnsServer).To4() != nil && addressFamily == 4 {
-							// Make sure we add a bypass route for the DNS servers
-							// so we don't route them through the VPN
-							err = vpnlib.AddRoutesViaGateway(LocalGatewayIp.String(), []string{dnsServer})
-							if err != nil {
-								log.Println("failed to add static route for DNS server", err)
-							}
-							// Also make sure we clean this up later, by adding it to the list of routes to delete
-							routesToDel = append(routesToDel, networkRoute{network: dnsServer, nextHopIp: LocalGatewayIp.String()})
-						} else if net.ParseIP(dnsServer).To16() != nil && addressFamily == 6 {
-							// Make sure we add a bypass route for the DNS servers
-							// so we don't route them through the VPN
-							err = vpnlib.AddRoutesViaGateway(LocalGatewayIp.String(), []string{dnsServer})
-							if err != nil {
-								log.Println("failed to add static route for DNS server", err)
-							}
-							// Also make sure we clean this up later, by adding it to the list of routes to delete
-							routesToDel = append(routesToDel, networkRoute{network: dnsServer, nextHopIp: LocalGatewayIp.String()})
-						}
-					}
 				}
-
 			}
 
 		}
