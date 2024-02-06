@@ -16,8 +16,6 @@ import (
 	"github.com/borderzero/border0-cli/internal/client"
 	"github.com/borderzero/border0-cli/internal/enum"
 	"github.com/borderzero/border0-cli/internal/vpnlib"
-	"github.com/borderzero/water"
-	"github.com/borderzero/wintundll-downloader-go/wintundll"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"golang.org/x/net/icmp"
@@ -79,34 +77,11 @@ var clientVpnCmd = &cobra.Command{
 
 		defer conn.Close()
 
-		var iface *water.Interface
-		waterConfig := water.Config{DeviceType: water.TUN}
-		// Check if OS is windows, using GOOS env variable
-		if runtime.GOOS == "windows" {
-
-			// First make sure the wintun driver is installed
-
-			err := wintundll.Ensure(
-				wintundll.WithDownloadURL("https://www.wintun.net/builds/wintun-0.14.1.zip"),
-				wintundll.WithDownloadTimeout(time.Second*10),
-				wintundll.WithDllPathToEnsure(`C:\Windows\System32\wintun.dll`),
-			)
-			if err != nil {
-				return fmt.Errorf("error ensuring Wintun driver is installed: %w", err)
-			}
-
-			waterConfig = water.Config{
-				DeviceType: water.TUN,
-				PlatformSpecificParams: water.PlatformSpecificParams{
-					Name: "border0VPN",
-				},
-			}
-		}
-		// Create a TUN interface with the given configuration.
-		iface, err = water.New(waterConfig)
+		iface, err := vpnlib.CreateTun()
 		if err != nil {
-			return fmt.Errorf("failed to create TUN iface: %v", err)
+			return fmt.Errorf("failed to create TUN interface: %v", err)
 		}
+
 		logger.Logger.Info("Created TUN interface", zap.String("interface_name", iface.Name()))
 
 		defer iface.Close()
@@ -115,7 +90,7 @@ var clientVpnCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to get control message from connection: %v\nIt's likely the Remote VPN server hasnt been started", err)
 		}
-		logger.Logger.Info("Received control message", zap.Any("control_message", ctrl))
+		logger.Logger.Info("Connected, Session info:", zap.Any("control_message", ctrl))
 
 		if err = vpnlib.AddIpToIface(iface.Name(), ctrl.ClientIp, ctrl.ServerIp, ctrl.SubnetSize); err != nil {
 			log.Println("failed to add IPs to interface", err)
@@ -137,13 +112,6 @@ var clientVpnCmd = &cobra.Command{
 		for i, route := range ctrl.Routes {
 			if route == "0.0.0.0/0" {
 
-				// get the existing default route, so we can override it
-				// This will return both the gateway IP and the interface name
-
-				LocalGatewayIp, _, err := vpnlib.GetDefaultGateway()
-				if err != nil {
-					return fmt.Errorf("failed to get default route: %v", err)
-				}
 				// Before we add new routes, we need to add a more specific route to the gateway gatewayIp
 				// This is because we want the VPN gateway IP to be routed through the existing gateway
 				// If we don't do this, the VPN gateway IP will be routed through the VPN, which will cause a loop
@@ -151,73 +119,55 @@ var clientVpnCmd = &cobra.Command{
 				// The IP of the VPN gateway the the remote end of conn.
 				// So let's get the IP of the remote end of conn and then turn that into a /32 route
 				// and route it via the old gateway
-				vpnGatewayIp := conn.RemoteAddr().(*net.TCPAddr).IP.String() + "/32"
 
-				if err = vpnlib.AddRoutesViaGateway(LocalGatewayIp.String(), []string{vpnGatewayIp}); err != nil {
-					log.Fatalf("failed to add static route for VPN Gateway %s, towards %s: %v\n", vpnGatewayIp, LocalGatewayIp.String(), err)
+				remoteAddr := conn.RemoteAddr().(*net.TCPAddr)
+
+				var addressFamily int // Tunnel over IPv4 or IPv6
+				var vpnGatewayIp string
+
+				if remoteAddr.IP.To4() != nil {
+					addressFamily = 4
+					vpnGatewayIp = remoteAddr.IP.String() + "/32"
+				} else if remoteAddr.IP.To16() != nil {
+					addressFamily = 6
+					vpnGatewayIp = remoteAddr.IP.String() + "/128"
+				} else {
+					return fmt.Errorf("failed to determine address family for remote address: %v", remoteAddr.IP)
 				}
-
-				// add the newly create static route for VPN gateway to the list of routes to delete
-				routesToDel = append(routesToDel, networkRoute{network: vpnGatewayIp, nextHopIp: LocalGatewayIp.String()})
 
 				// then delete this route (0.0.0.0/0) from the list of routes
 				ctrl.Routes = append(ctrl.Routes[:i], ctrl.Routes[i+1:]...)
+
 				// and add two new more specific routes
-				ctrl.Routes = append(ctrl.Routes, "0.0.0.0/1", "128.0.0.0/1")
-
-				// Also get the DNS servers from the server and add them to the map
-				// so we can use them later
-				currentDnsServers, err := vpnlib.GetDnsServers()
-				if err != nil {
-					log.Println("failed to get current DNS servers", err)
+				if route == "0.0.0.0/0" {
+					ctrl.Routes = append(ctrl.Routes, "0.0.0.0/1", "128.0.0.0/1")
+				} else if route == "::/0" {
+					ctrl.Routes = append(ctrl.Routes, "200::/3")
 				}
 
-				for _, dnsServer := range currentDnsServers {
-					// Check if this is a local IP, or routed via default gateway
-					// If so, we don't want to add it to the static routes
-
-					networkInterfaces, err := vpnlib.GetLocalInterfacesForIp(dnsServer)
+				if addressFamily == 4 {
+					// get the existing default route, so we can override it
+					// This will return both the gateway IP and the interface name
+					LocalGatewayIp, _, err := vpnlib.GetDefaultGateway(4)
 					if err != nil {
-						log.Println("failed to check if IP is local", err)
-						continue
+						return fmt.Errorf("failed to get default route: %v", err)
 					}
 
-					// if the map is not empty, then the IP is local
-					if len(networkInterfaces) > 0 {
-						// This is the case if the IP is on the same subnet as the local gateway, for example on the router
-						// However we should make sure it's not on the newly added tun VPN interface
-
-						// we should make sure the list of interfaces is not empty, and doesn't contain iface.Name()
-						// if it does, we should continue
-						// check the list to and if the interface found is not the same as  iface.Name()
-						// Which is the VPN tunnel, then it's a local network, and we should continue
-						// ie. no by pass route is needed, since the IP address is locally connected.
-						vpnIfaceName := iface.Name()
-						for _, name := range networkInterfaces {
-							if name != vpnIfaceName {
-								// network found, not adding bypass route
-								continue
-							}
-
-						}
+					if err = vpnlib.AddRoutesViaGateway(LocalGatewayIp.String(), []string{vpnGatewayIp}); err != nil {
+						log.Fatalf("failed to add static route for VPN Gateway %s, towards %s: %v\n", vpnGatewayIp, LocalGatewayIp.String(), err)
 					}
 
-					// For now we old support IPv4
-					// Make sure that DNS servers only has IPv4 addresses.
-					if net.ParseIP(dnsServer).To4() != nil {
-						// Make sure we add a bypass route for the DNS servers
-						// so we don't route them through the VPN
-						err = vpnlib.AddRoutesViaGateway(LocalGatewayIp.String(), []string{dnsServer})
-						if err != nil {
-							log.Println("failed to add static route for DNS server", err)
-						}
-						// Also make sure we clean this up later, by adding it to the list of routes to delete
-						routesToDel = append(routesToDel, networkRoute{network: dnsServer, nextHopIp: LocalGatewayIp.String()})
-					}
+					// add the newly create static route for VPN gateway to the list of routes to delete
+					routesToDel = append(routesToDel, networkRoute{network: vpnGatewayIp, nextHopIp: LocalGatewayIp.String()})
+
+				} else if addressFamily == 6 {
+					// TODO placeholder for ipv6
+					// for now we don't support bypass routes for ipv6
+					// once we start announcing ipv6 routes, we can should add support for bypass routes
+					// for now we just skip this
 				}
-				break
-
 			}
+
 		}
 
 		// Now we can add the routes that the server sent to us a the client
