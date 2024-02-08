@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -171,8 +172,15 @@ var sshCmd = &cobra.Command{
 
 			wsURL := parsedURL.String()
 
+			httpHeader := http.Header{}
+			if wsURL == "wss://ws.border0.com/ws" {
+				httpHeader.Set("Origin", "https://client.border0.com")
+			}
+			if wsURL == "wss://ws.staging.border0.com/ws" {
+				httpHeader.Set("Origin", "https://client.staging.border0.com")
+			}
 			ctx := context.Background()
-			wsConn, _, err := websocket.Dial(ctx, wsURL, nil)
+			wsConn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{HTTPHeader: httpHeader})
 			if err != nil {
 				return fmt.Errorf("failed to perform WebSocket handshake on %s: %w", wsURL, err)
 			}
