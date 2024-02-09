@@ -87,7 +87,7 @@ var upgradeVersionCmd = &cobra.Command{
 
 		tmpfile, err := os.CreateTemp("", "border0-"+latest_version)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal("cant create temp file", err)
 		}
 		if err := tmpfile.Close(); err != nil {
 			log.Fatal("cant close file", err)
@@ -107,7 +107,7 @@ var upgradeVersionCmd = &cobra.Command{
 		// Get the current permissions of the binary
 		info, err := os.Stat(binary_path)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal("cant get permissions", err)
 		}
 		originalPermissions := info.Mode()
 
@@ -116,8 +116,8 @@ var upgradeVersionCmd = &cobra.Command{
 
 		// 1. Move the running binary to the backup file
 		err = os.Rename(binary_path, backupPath)
-		if err == nil {
-			log.Fatal(err)
+		if err != nil {
+			log.Fatal("cant rename binary to backup", err)
 		}
 
 		// Copy the content from the temporary file to the binary path
