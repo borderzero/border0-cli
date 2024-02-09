@@ -115,22 +115,9 @@ var upgradeVersionCmd = &cobra.Command{
 		backupPath := binary_path + "-bak"
 
 		// 1. Move the running binary to the backup file
-		// sometimes windows will lock the file and we can't move it.
-		// Possibly due to virus scanner or something else
-		// So we'll try 3 times, before giving up
-
-		deleteOk := false
-		for i := 0; i < 3; i++ {
-			err = os.Rename(binary_path, backupPath)
-			if err == nil {
-				deleteOk = true
-				break
-			} else {
-				time.Sleep(1 * time.Second)
-			}
-		}
-		if !deleteOk {
-			log.Fatalf("Error moving the old binary to the backup file: %v\n", err)
+		err = os.Rename(binary_path, backupPath)
+		if err == nil {
+			log.Fatal(err)
 		}
 
 		// Copy the content from the temporary file to the binary path
@@ -171,9 +158,20 @@ var upgradeVersionCmd = &cobra.Command{
 			log.Fatal("Reverted to the old version of the border0 cli due to an error while executing the new binary")
 		}
 
-		// remove backup file
-		err = os.Remove(backupPath)
-		if err != nil {
+		// sometimes windows will lock the file and we can't move it.
+		// Possibly due to virus scanner or something else
+		// So we'll try 3 times, before giving up
+		deleteOk := false
+		for i := 0; i < 3; i++ {
+			err = os.Remove(backupPath)
+			if err == nil {
+				deleteOk = true
+				break
+			} else {
+				time.Sleep(1 * time.Second)
+			}
+		}
+		if !deleteOk {
 			log.Printf("Warning: Error removing backup file: %v\n", err)
 		}
 
