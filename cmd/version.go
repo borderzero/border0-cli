@@ -115,7 +115,7 @@ var upgradeVersionCmd = &cobra.Command{
 		backupPath := binary_path + ".bak"
 
 		// 1. Move the running binary to the backup file
-		err = os.Rename(binary_path, backupPath)
+		err = copyFile(binary_path, backupPath)
 		if err != nil {
 			log.Fatal("cant rename binary to backup", err)
 		}
