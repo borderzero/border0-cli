@@ -90,7 +90,7 @@ var upgradeVersionCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 		if err := tmpfile.Close(); err != nil {
-			log.Fatal(err)
+			log.Fatal("cant close file", err)
 		}
 
 		defer os.Remove(tmpfile.Name())
@@ -101,7 +101,7 @@ var upgradeVersionCmd = &cobra.Command{
 		}
 		tmpfile.Close()
 		if err := os.Chmod(tmpfile.Name(), 0755); err != nil {
-			log.Fatalln(err)
+			log.Fatal("cant close tmp file", err)
 		}
 
 		// Get the current permissions of the binary
@@ -130,7 +130,7 @@ var upgradeVersionCmd = &cobra.Command{
 		// Remove the temporary file
 		err = os.Remove(tmpfile.Name())
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal("can't remove temp file", err)
 		}
 
 		// After copying the new binary, set its permissions to the original permissions
@@ -168,6 +168,7 @@ var upgradeVersionCmd = &cobra.Command{
 				deleteOk = true
 				break
 			} else {
+				fmt.Printf("Warning: Error removing backup file: %v\n", err)
 				time.Sleep(1 * time.Second)
 			}
 		}
