@@ -23,7 +23,6 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"time"
 
 	"github.com/borderzero/border0-cli/internal"
 	"github.com/borderzero/border0-cli/internal/http"
@@ -107,7 +106,7 @@ var upgradeVersionCmd = &cobra.Command{
 		// Get the current permissions of the binary
 		info, err := os.Stat(binary_path)
 		if err != nil {
-			log.Fatal("cant get permissions", err)
+			log.Fatal(err)
 		}
 		originalPermissions := info.Mode()
 
@@ -115,26 +114,22 @@ var upgradeVersionCmd = &cobra.Command{
 		backupPath := binary_path + ".bak"
 
 		// 1. Move the running binary to the backup file
-		origFile, err := os.ReadFile(binary_path)
+		err = os.Rename(binary_path, backupPath)
 		if err != nil {
-			log.Fatal("cant read binary", err)
-		}
-		err = os.WriteFile(backupPath, origFile, 0644)
-		if err != nil {
-			log.Fatal("cant write binary to backup", err)
+			log.Fatal(err)
 		}
 
 		// Copy the content from the temporary file to the binary path
 		// Can't just do a straight up rename because it could be on a different filesystem partition
 		err = copyFile(tmpfile.Name(), binary_path)
 		if err != nil {
-			log.Fatal("copy error", err)
+			log.Fatal(err)
 		}
 
 		// Remove the temporary file
 		err = os.Remove(tmpfile.Name())
 		if err != nil {
-			log.Fatal("can't remove temp file", err)
+			log.Fatal(err)
 		}
 
 		// After copying the new binary, set its permissions to the original permissions
@@ -162,30 +157,9 @@ var upgradeVersionCmd = &cobra.Command{
 			log.Fatal("Reverted to the old version of the border0 cli due to an error while executing the new binary")
 		}
 
-		// sometimes windows will lock the file and we can't move it.
-		// Possibly due to virus scanner or something else
-		// So we'll try 3 times, before giving up
-		deleteOk := false
-		for i := 0; i < 3; i++ {
-			err = os.Remove(backupPath)
-			if err == nil {
-				deleteOk = true
-				break
-			} else {
-				fmt.Printf("Warning: Error removing backup file: %v\n", err)
-				time.Sleep(4 * time.Second)
-			}
-		}
-		if !deleteOk {
-			if runtime.GOOS == "windows" {
-				// lets use os.exe to delete the file
-				cmd := exec.Command("cmd", "/C", "del", backupPath)
-				err := cmd.Run()
-				if err != nil {
-					log.Printf("Error removing backup file: %v\n", err)
-				}
-			}
-
+		// remove backup file
+		err = os.Remove(backupPath)
+		if err != nil {
 			log.Printf("Warning: Error removing backup file: %v\n", err)
 		}
 
