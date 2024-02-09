@@ -112,11 +112,13 @@ var upgradeVersionCmd = &cobra.Command{
 		originalPermissions := info.Mode()
 
 		// Define a backup file path
-		backupPath := binary_path + ".bak"
+		backupPath := binary_path + "-bak"
 
 		// 1. Move the running binary to the backup file
-		// sometimes windows will lock the file and we can't move it
+		// sometimes windows will lock the file and we can't move it.
+		// Possibly due to virus scanner or something else
 		// So we'll try 3 times, before giving up
+
 		deleteOk := false
 		for i := 0; i < 3; i++ {
 			err = os.Rename(binary_path, backupPath)
