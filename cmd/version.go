@@ -112,7 +112,7 @@ var upgradeVersionCmd = &cobra.Command{
 		originalPermissions := info.Mode()
 
 		// Define a backup file path
-		backupPath := binary_path + "-bak"
+		backupPath := binary_path + ".bak"
 
 		// 1. Move the running binary to the backup file
 		err = os.Rename(binary_path, backupPath)
@@ -173,6 +173,15 @@ var upgradeVersionCmd = &cobra.Command{
 			}
 		}
 		if !deleteOk {
+			if runtime.GOOS == "windows" {
+				// lets use os.exe to delete the file
+				cmd := exec.Command("cmd", "/C", "del", backupPath)
+				err := cmd.Run()
+				if err != nil {
+					log.Printf("Error removing backup file: %v\n", err)
+				}
+			}
+
 			log.Printf("Warning: Error removing backup file: %v\n", err)
 		}
 
