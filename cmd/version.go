@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"time"
 
 	"github.com/borderzero/border0-cli/internal"
 	"github.com/borderzero/border0-cli/internal/http"
@@ -114,9 +115,20 @@ var upgradeVersionCmd = &cobra.Command{
 		backupPath := binary_path + ".bak"
 
 		// 1. Move the running binary to the backup file
-		err = os.Rename(binary_path, backupPath)
-		if err != nil {
-			log.Fatal(err)
+		// sometimes windows will lock the file and we can't move it
+		// So we'll try 3 times, before giving up
+		deleteOk := false
+		for i := 0; i < 3; i++ {
+			err = os.Rename(binary_path, backupPath)
+			if err == nil {
+				deleteOk = true
+				break
+			} else {
+				time.Sleep(1 * time.Second)
+			}
+		}
+		if !deleteOk {
+			log.Fatalf("Error moving the old binary to the backup file: %v\n", err)
 		}
 
 		// Copy the content from the temporary file to the binary path
