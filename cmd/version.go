@@ -169,7 +169,7 @@ var upgradeVersionCmd = &cobra.Command{
 				break
 			} else {
 				fmt.Printf("Warning: Error removing backup file: %v\n", err)
-				time.Sleep(1 * time.Second)
+				time.Sleep(4 * time.Second)
 			}
 		}
 		if !deleteOk {
