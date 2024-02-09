@@ -117,9 +117,12 @@ var upgradeVersionCmd = &cobra.Command{
 		// 1. Move the running binary to the backup file
 		origFile, err := os.ReadFile(binary_path)
 		if err != nil {
-			log.Fatal("cant rename binary to backup", err)
+			log.Fatal("cant read binary", err)
 		}
 		err = os.WriteFile(backupPath, origFile, 0644)
+		if err != nil {
+			log.Fatal("cant write binary to backup", err)
+		}
 
 		// Copy the content from the temporary file to the binary path
 		// Can't just do a straight up rename because it could be on a different filesystem partition
@@ -207,9 +210,7 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	dstFile.Sync()
-	dstFile.Close()
-
+	return dstFile.Sync()
 }
 
 func init() {
