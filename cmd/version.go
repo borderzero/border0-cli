@@ -115,10 +115,11 @@ var upgradeVersionCmd = &cobra.Command{
 		backupPath := binary_path + ".bak"
 
 		// 1. Move the running binary to the backup file
-		err = copyFile(binary_path, backupPath)
+		origFile, err := os.ReadFile(binary_path)
 		if err != nil {
 			log.Fatal("cant rename binary to backup", err)
 		}
+		err = os.WriteFile(backupPath, origFile, 0644)
 
 		// Copy the content from the temporary file to the binary path
 		// Can't just do a straight up rename because it could be on a different filesystem partition
@@ -208,7 +209,6 @@ func copyFile(src, dst string) error {
 	}
 	dstFile.Sync()
 	dstFile.Close()
-	return nil
 
 }
 
