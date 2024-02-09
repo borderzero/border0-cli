@@ -124,7 +124,7 @@ var upgradeVersionCmd = &cobra.Command{
 		// Can't just do a straight up rename because it could be on a different filesystem partition
 		err = copyFile(tmpfile.Name(), binary_path)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal("copy error", err)
 		}
 
 		// Remove the temporary file
@@ -206,7 +206,10 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	return dstFile.Sync()
+	dstFile.Sync()
+	dstFile.Close()
+	return nil
+
 }
 
 func init() {
