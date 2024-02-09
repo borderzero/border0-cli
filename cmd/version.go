@@ -26,7 +26,6 @@ import (
 
 	"github.com/borderzero/border0-cli/internal"
 	"github.com/borderzero/border0-cli/internal/http"
-	osrename "github.com/jbenet/go-os-rename"
 	"github.com/spf13/cobra"
 )
 
@@ -104,84 +103,66 @@ var upgradeVersionCmd = &cobra.Command{
 			log.Fatalln(err)
 		}
 
-		if runtime.GOOS == "windows" {
-			// 1) first remove potential old files
-			bakfile := binary_path + ".bak"
-			_ = os.Remove(bakfile)
-
-			// 2) then move the current file to .bak
-			e := osrename.Rename(binary_path, bakfile)
-			if e != nil {
-				log.Fatal(e)
-			}
-			// 3) move tmp file naar current binary
-			e = osrename.Rename(tmpfile.Name(), binary_path)
-			if e != nil {
-				log.Fatal(e)
-			}
-
-		} else {
-
-			// Get the current permissions of the binary
-			info, err := os.Stat(binary_path)
-			if err != nil {
-				log.Fatal(err)
-			}
-			originalPermissions := info.Mode()
-
-			// Define a backup file path
-			backupPath := binary_path + ".bak"
-
-			// 1. Move the running binary to the backup file
-			err = os.Rename(binary_path, backupPath)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			// Copy the content from the temporary file to the binary path
-			// Can't just do a straight up rename because it could be on a different filesystem partition
-			err = copyFile(tmpfile.Name(), binary_path)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			// Remove the temporary file
-			err = os.Remove(tmpfile.Name())
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			// After copying the new binary, set its permissions to the original permissions
-			err = os.Chmod(binary_path, originalPermissions)
-			if err != nil {
-				log.Printf("error restoring permissions on the new binary: %v\n", err)
-				// Optionally, revert to the backup file
-				revertErr := os.Rename(backupPath, binary_path)
-				if revertErr != nil {
-					log.Printf("Error reverting to the backup binary: %v\n", revertErr)
-				}
-				log.Fatal("Reverted to the old version of the border0 cli due to an error while restoring permissions on the new binary")
-			}
-
-			// Execute the new binary just to make sure it's working
-			cmd := exec.Command(binary_path)
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				log.Printf("Error executing the new version border0: %v\nOutput: %s\n", err, output)
-				// Optionally, revert to the backup file
-				revertErr := os.Rename(backupPath, binary_path)
-				if revertErr != nil {
-					log.Printf("Error reverting to the backup binary: %v\n", revertErr)
-				}
-				log.Fatal("Reverted to the old version of the border0 cli due to an error while executing the new binary")
-			}
-
-			// remove backup file
-			err = os.Remove(backupPath)
-			if err != nil {
-				log.Printf("Warning: Error removing backup file: %v\n", err)
-			}
+		// Get the current permissions of the binary
+		info, err := os.Stat(binary_path)
+		if err != nil {
+			log.Fatal(err)
 		}
+		originalPermissions := info.Mode()
+
+		// Define a backup file path
+		backupPath := binary_path + ".bak"
+
+		// 1. Move the running binary to the backup file
+		err = os.Rename(binary_path, backupPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// Copy the content from the temporary file to the binary path
+		// Can't just do a straight up rename because it could be on a different filesystem partition
+		err = copyFile(tmpfile.Name(), binary_path)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// Remove the temporary file
+		err = os.Remove(tmpfile.Name())
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// After copying the new binary, set its permissions to the original permissions
+		err = os.Chmod(binary_path, originalPermissions)
+		if err != nil {
+			log.Printf("error restoring permissions on the new binary: %v\n", err)
+			// Optionally, revert to the backup file
+			revertErr := os.Rename(backupPath, binary_path)
+			if revertErr != nil {
+				log.Printf("Error reverting to the backup binary: %v\n", revertErr)
+			}
+			log.Fatal("Reverted to the old version of the border0 cli due to an error while restoring permissions on the new binary")
+		}
+
+		// Execute the new binary just to make sure it's working
+		command := exec.Command(binary_path)
+		output, err := command.CombinedOutput()
+		if err != nil {
+			log.Printf("Error executing the new version border0: %v\nOutput: %s\n", err, output)
+			// Optionally, revert to the backup file
+			revertErr := os.Rename(backupPath, binary_path)
+			if revertErr != nil {
+				log.Printf("Error reverting to the backup binary: %v\n", revertErr)
+			}
+			log.Fatal("Reverted to the old version of the border0 cli due to an error while executing the new binary")
+		}
+
+		// remove backup file
+		err = os.Remove(backupPath)
+		if err != nil {
+			log.Printf("Warning: Error removing backup file: %v\n", err)
+		}
+
 		fmt.Printf("Upgrade completed\n")
 	},
 }
