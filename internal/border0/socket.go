@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/borderzero/border0-cli/internal"
 	"github.com/borderzero/border0-cli/internal/api"
 	"github.com/borderzero/border0-cli/internal/api/models"
 	"github.com/cenkalti/backoff/v4"
@@ -179,6 +180,7 @@ func NewSocketFromConnectorAPI(ctx context.Context, border0API Border0API, socke
 		Socket:                         &socket,
 		logger:                         logger,
 		certificate:                    certificate,
+		version:                        internal.Version,
 
 		context: newCtx,
 		cancel:  cancel,
