@@ -77,7 +77,15 @@ func StartLocalProxyAndOpenClient(
 	if err != nil {
 		log.Fatalln("Error: Unable to start local TLS listener.")
 	}
-	log.Print("Waiting for connections...")
+
+	// if the user didn't specify a local listener port, we used 0 to let the OS pick a port
+	// we need to update the localListenerAddress to reflect the actual port chosen by the OS
+	if localListenerPort == 0 {
+		allocatedPort := l.Addr().(*net.TCPAddr).Port
+		localListenerAddress = fmt.Sprintf("localhost:%d", allocatedPort)
+	}
+
+	log.Print("Waiting for connections on ", localListenerAddress, "...")
 
 	go func() {
 		var err error
@@ -87,7 +95,7 @@ func StartLocalProxyAndOpenClient(
 			err = open.Run(fmt.Sprintf("%s://%s", protocol, localListenerAddress))
 		}
 		if err != nil {
-			log.Print(fmt.Sprintf("Failed to open system's %s client: %v", protocol, err))
+			log.Printf("Failed to open system's %s client: %v", protocol, err)
 		}
 	}()
 

@@ -41,5 +41,5 @@ func AddCommandsTo(client *cobra.Command) {
 	client.AddCommand(clientRdpCmd)
 
 	clientRdpCmd.Flags().StringVarP(&hostname, "service", "", "", "The Border0 service identifier")
-	clientRdpCmd.Flags().IntVarP(&localListenerPort, "local-listener-port", "l", 3389, "Local listener port number")
+	clientRdpCmd.Flags().IntVarP(&localListenerPort, "local-listener-port", "l", 0, "Local listener port number")
 }
