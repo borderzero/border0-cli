@@ -341,7 +341,7 @@ func AddServerIp(iface, localIp string, subnetSize uint8) error {
 }
 
 func AddServerIpDarwin(iface, localIp string, subnetSize uint8) error {
-	if err := exec.Command("ifconfig", iface, "mtu", "1200").Run(); err != nil {
+	if err := exec.Command("ifconfig", iface, "mtu", "1280").Run(); err != nil {
 		return fmt.Errorf("error setting MTU for interface %s: %v", iface, err)
 	}
 	// calculate p2p ip address from localIP take one digit lower
@@ -362,7 +362,7 @@ func AddServerIpLinux(iface, localIp string, subnetSize uint8) error {
 	if err := exec.Command("ip", "addr", "add", serverIp, "dev", iface).Run(); err != nil {
 		return fmt.Errorf("error adding ip %s to interface %s: %v", localIp, iface, err)
 	}
-	if err := exec.Command("ip", "link", "set", "dev", iface, "up", "mtu", "1200").Run(); err != nil {
+	if err := exec.Command("ip", "link", "set", "dev", iface, "up", "mtu", "1280").Run(); err != nil {
 		return fmt.Errorf("error setting link for interface %s: %v", iface, err)
 	}
 	return nil
@@ -383,7 +383,7 @@ func AddIpToIface(iface, localIp, remoteIp string, subnetSize uint8) error {
 }
 
 func addIpToIfaceDarwin(iface, localIp, remoteIp string) error {
-	if err := exec.Command("ifconfig", iface, "mtu", "1200").Run(); err != nil {
+	if err := exec.Command("ifconfig", iface, "mtu", "1280").Run(); err != nil {
 		return fmt.Errorf("error setting MTU for interface %s: %v", iface, err)
 	}
 
@@ -397,7 +397,7 @@ func addIpToIfaceLinux(iface, localIp string, subnetSize uint8) error {
 	if err := exec.Command("ip", "addr", "add", fmt.Sprintf("%s/%d", localIp, subnetSize), "dev", iface).Run(); err != nil {
 		return fmt.Errorf("error adding ip %s to interface %s: %v", localIp, iface, err)
 	}
-	if err := exec.Command("ip", "link", "set", "dev", iface, "up", "mtu", "1200").Run(); err != nil {
+	if err := exec.Command("ip", "link", "set", "dev", iface, "up", "mtu", "1280").Run(); err != nil {
 		return fmt.Errorf("error setting link for interface %s: %v", iface, err)
 	}
 	return nil
@@ -423,6 +423,7 @@ func TunToConnCopy(iface *water.Interface, cm *ConnectionMap, returnOnErr bool, 
 	packetbuffer := make([]byte, packetBufferSize)
 	sizeBuf := make([]byte, headerByteSize)
 	var recipientConn net.Conn
+	var dstIp net.IP
 
 	for {
 		// read one packet from the TUN iface
@@ -452,14 +453,22 @@ func TunToConnCopy(iface *water.Interface, cm *ConnectionMap, returnOnErr bool, 
 
 		// for now ignore ipv6 packets
 		ipVersion := (packet[0] & 0xF0) >> 4
-		if ipVersion != 4 {
+		if ipVersion == 4 {
+			_, dstIp = parseIpFromPacketHeader(packet)
+			if err := validateIPv4(packet); err != nil {
+				fmt.Printf("Error: %v\n", err)
+				continue
+			}
+		} else if ipVersion == 6 {
+			_, dstIp = parseIpFromIPv6PacketHeader(packet)
+			if err := validateIPv6(packet); err != nil {
+				fmt.Printf("Error: %v\n", err)
+				continue
+			}
+		} else {
+			fmt.Printf("Error: Unknown IP version: %d\n", ipVersion)
 			continue
 		}
-		if err := validateIPv4(packet); err != nil {
-			fmt.Printf("Error: %v\n", err)
-			continue
-		}
-		_, dstIp := parseIpFromPacketHeader(packet)
 
 		// Check if conn is not nil
 		if conn == nil {
@@ -509,12 +518,15 @@ func TunToConnCopy(iface *water.Interface, cm *ConnectionMap, returnOnErr bool, 
 
 func ConnToTunCopy(conn net.Conn, iface *water.Interface) error {
 	headerBuffer := make([]byte, headerByteSize)
+	fmt.Println("ConnToTunCopy, interface name: ", iface.Name())
 
 	for {
+		fmt.Println("ConnToTunCopy loop, headerByteSize: ", headerByteSize)
 		// read first ${headerByteSize} bytes from the connection
 		// to know how big the next incoming packet is.
 		// Make sure we read all the way to the end of the header using io.ReadFull()
 		headerN, err := io.ReadFull(conn, headerBuffer)
+		fmt.Println("headerN", headerN)
 		if err != nil {
 			if errors.Is(err, io.EOF) ||
 				errors.Is(err, io.ErrUnexpectedEOF) {
@@ -533,12 +545,15 @@ func ConnToTunCopy(conn net.Conn, iface *water.Interface) error {
 
 		// convert binary header to the size uint16
 		inboundPacketSize := binary.BigEndian.Uint16(headerBuffer)
+		fmt.Println("inboundPacketSize", inboundPacketSize)
 
 		// new empty buffer of the size of the packet we're about to read
 		packetBuffer := make([]byte, inboundPacketSize)
+		fmt.Println("packetBuffer", packetBuffer)
 
 		// read the one individual packet
 		packetN, err := io.ReadFull(conn, packetBuffer)
+		fmt.Println("packetN", packetN)
 		if err != nil {
 			fmt.Printf("Failed to read packet from net conn: %v\n", err)
 			continue
@@ -559,6 +574,24 @@ func ConnToTunCopy(conn net.Conn, iface *water.Interface) error {
 func CheckIPForwardingEnabled() (bool, error) {
 	// Path to the ip_forward configuration
 	const path = "/proc/sys/net/ipv4/ip_forward"
+
+	// Read the contents of the file using os.ReadFile
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return false, fmt.Errorf("failed to read %s: %v", path, err)
+	}
+
+	// The file should contain a single character: '1' or '0'
+	// TrimSpace is not shown here, but you could use strings.TrimSpace if needed
+	isEnabled := string(content[0]) == "1"
+
+	return isEnabled, nil
+}
+
+// ipv6 forwarding path /proc/sys/net/ipv6/conf/all/forwarding
+func CheckIPv6ForwardingEnabled() (bool, error) {
+	// Path to the ip_forward configuration
+	const path = "/proc/sys/net/ipv6/conf/all/forwarding"
 
 	// Read the contents of the file using os.ReadFile
 	content, err := os.ReadFile(path)

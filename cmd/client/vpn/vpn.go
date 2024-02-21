@@ -281,7 +281,7 @@ var clientVpnCmd = &cobra.Command{
 		// Now start the Conn to Tun goroutine
 		// This will listen for packets on the connection and forward them to the TUN interface
 		// note: this blocks
-
+		fmt.Println("Forwarding packets, from conn:", conn, "to TUN iface:", iface)
 		if err = vpnlib.ConnToTunCopy(conn, iface); err != nil {
 			fmt.Println("Error forwarding packets:", err)
 			return fmt.Errorf("failed to forward between tls conn and TUN iface: %v", err)

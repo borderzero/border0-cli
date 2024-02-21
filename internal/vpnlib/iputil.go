@@ -42,14 +42,30 @@ func incIp(ip net.IP) {
 func parseIpFromPacketHeader(packet []byte) (net.IP, net.IP) {
 	return net.IP(packet[12:16]), net.IP(packet[16:20])
 }
+func parseIpFromIPv6PacketHeader(packet []byte) (net.IP, net.IP) {
+	return net.IP(packet[8:24]), net.IP(packet[24:40])
+}
 
 func validateIPv4(packet []byte) error {
 	if len(packet) < ipv4HeaderLengthBytes {
-		return fmt.Errorf("packet too short")
+		return fmt.Errorf("packet too short for IPv4")
 	}
 	ipVersion := (packet[0] & 0xF0) >> 4
 	if ipVersion != 4 {
 		return fmt.Errorf("packet header advertises non IPv4, version: %d", ipVersion)
+	}
+	return nil
+}
+
+const ipv6HeaderLengthBytes = 40 // Fixed header length for IPv6
+
+func validateIPv6(packet []byte) error {
+	if len(packet) < ipv6HeaderLengthBytes {
+		return fmt.Errorf("packet too short for IPv6")
+	}
+	ipVersion := (packet[0] & 0xF0) >> 4
+	if ipVersion != 6 {
+		return fmt.Errorf("packet header advertises non IPv6, version: %d", ipVersion)
 	}
 	return nil
 }
