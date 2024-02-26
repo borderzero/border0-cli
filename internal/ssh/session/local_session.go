@@ -131,8 +131,8 @@ func (s *localSession) handleChannels() error {
 
 	for {
 		select {
-		case newChannel := <-s.downstreamSshChans:
-			if newChannel == nil {
+		case newChannel, ok := <-s.downstreamSshChans:
+			if !ok {
 				return nil
 			}
 
@@ -231,12 +231,12 @@ func (s *localSession) handleSessionChannel(ctx context.Context, newChannel ssh.
 				return
 			}
 
-			channel.handleRequest(req)
+			channel.handleRequest(ctx, req)
 		}
 	}
 }
 
-func (s *localChannel) handleRequest(req *ssh.Request) {
+func (s *localChannel) handleRequest(ctx context.Context, req *ssh.Request) {
 	switch req.Type {
 	case "env":
 		var env struct{ Key, Value string }
@@ -289,7 +289,7 @@ func (s *localChannel) handleRequest(req *ssh.Request) {
 			req.Reply(false, nil)
 		}
 	case "exec", "shell":
-		go s.handleExec(req)
+		go s.handleExec(ctx, req)
 	default:
 		s.logger.Error("unknown request type", zap.String("request_type", req.Type))
 		req.Reply(false, nil)
@@ -328,7 +328,7 @@ func (c *localChannel) handleSftp(req *ssh.Request) {
 	closeChannel(c.downstreamChannel, err)
 }
 
-func (c *localChannel) handleExec(req *ssh.Request) {
+func (c *localChannel) handleExec(ctx context.Context, req *ssh.Request) {
 	defer c.downstreamChannel.Close()
 
 	if req.WantReply {
@@ -396,7 +396,7 @@ func (c *localChannel) handleExec(req *ssh.Request) {
 		}
 	}()
 
-	exitStatus := server.ExecCmd(c.downstreamChannel, command, c.ptyTerm, c.pty, c.winch, cmd, uid, gid, c.username)
+	exitStatus := server.ExecCmd(ctx, c.downstreamChannel, command, c.ptyTerm, c.pty, c.winch, cmd, uid, gid, c.username)
 	status := struct{ Status uint32 }{Status: uint32(exitStatus)}
 	c.downstreamChannel.SendRequest("exit-status", false, ssh.Marshal(&status))
 }
