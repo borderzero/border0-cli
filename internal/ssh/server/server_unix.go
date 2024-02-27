@@ -90,20 +90,8 @@ func ExecCmd(ctx context.Context, channel gossh.Channel, command string, ptyTerm
 			}
 		}()
 
-		go func() {
-			_, err := io.Copy(f, channel)
-			if err != nil {
-				log.Println("stdin copy failed: ", err)
-			}
-		}()
-
-		go func() {
-			_, err := io.Copy(channel, f)
-			if err != nil && err != io.EOF {
-				log.Println("stdout copy failed: ", err)
-			}
-		}()
-
+		go io.Copy(f, channel)
+		go io.Copy(channel, f)
 		done := make(chan error, 1)
 
 		go func() {
