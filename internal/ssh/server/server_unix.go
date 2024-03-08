@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/creack/pty"
@@ -91,7 +92,16 @@ func ExecCmd(ctx context.Context, channel gossh.Channel, command string, ptyTerm
 		}()
 
 		go io.Copy(f, channel)
-		go io.Copy(channel, f)
+		go func() {
+			_, err := io.Copy(channel, f)
+			if err != nil && err != io.EOF {
+				// on amazon linux, the first read will fail with an error
+				// therefore we try again
+				time.Sleep(100 * time.Millisecond)
+				io.Copy(channel, f)
+			}
+		}()
+
 		done := make(chan error, 1)
 
 		go func() {
@@ -112,7 +122,6 @@ func ExecCmd(ctx context.Context, channel gossh.Channel, command string, ptyTerm
 			if cmd.ProcessState == nil {
 				cmd.Process.Kill()
 			}
-
 			return cmd.ProcessState.ExitCode()
 		}
 	} else {
