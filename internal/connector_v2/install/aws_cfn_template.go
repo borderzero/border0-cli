@@ -180,7 +180,7 @@ Resources:
               #!/bin/bash -xe
               sudo curl https://download.border0.com/linux_arm64/border0 -o /usr/local/bin/border0
               sudo chmod +x /usr/local/bin/border0
-              sudo border0 connector install --daemon-only --token from:aws:ssm:${Border0TokenSsmParameter}
+              sudo BORDER0_API=https://api.staging.border0.com/api/v1 BORDER0_API_URL=https://api.staging.border0.com/api/v1/ BORDER0_TUNNEL=tunnel.staging.border0.com BORDER0_CONNECTOR_SERVER=capi.staging.border0.com:443 BORDER0_TOKEN=from:aws:ssm:${Border0TokenSsmParameter} border0 connector start
 
   ConnectorInstanceAutoScalingGroup:
     Type: 'AWS::AutoScaling::AutoScalingGroup'
