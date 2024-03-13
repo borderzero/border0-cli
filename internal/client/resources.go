@@ -28,6 +28,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	// ErrResourceNotFound is returned when a fetched resource is not found
+	ErrResourceNotFound = errors.New("resource not found")
+)
+
 // Login performs an OAuth2.0 client device authorization flow against the API
 func Login(org string) (token string, claims jwt.MapClaims, err error) {
 	if org == "" {
@@ -425,6 +430,10 @@ func FetchResource(token string, name string) (resource models.ClientResource, e
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		err = errors.New("no valid token, please login")
+		return
+	}
+	if resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusNotFound {
+		err = fmt.Errorf("%w: %s", ErrResourceNotFound, name)
 		return
 	}
 	if resp.StatusCode != http.StatusOK {

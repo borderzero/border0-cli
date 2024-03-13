@@ -95,6 +95,9 @@ func MTLSLogin(logger *zap.Logger, hostname string) (string, jwt.MapClaims, erro
 
 	_, err := FetchResource(token, hostname)
 	if err != nil {
+		if errors.Is(err, ErrResourceNotFound) {
+			return "", nil, err
+		}
 		token = ""
 	}
 
