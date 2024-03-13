@@ -44,7 +44,6 @@ func AddCommandsTo(client *cobra.Command) {
 	sshCmd.Flags().StringVarP(&sshLoginName, "username", "u", "", "Specifies the user to log in as on the remote machine(deprecated)")
 	sshCmd.Flags().StringVarP(&sshLoginName, "login", "l", "", "Same as username, specifies the user login to use on remote machine")
 	sshCmd.Flags().StringVarP(&wsProxy, "wsproxy", "w", "", "websocket proxy")
-	sshCmd.Flag("wsproxy").Hidden = true
 
 	client.AddCommand(keySignCmd)
 	keySignCmd.Flags().StringVarP(&hostname, "host", "", "", "The border0 target host")
