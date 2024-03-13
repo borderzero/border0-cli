@@ -26,6 +26,7 @@ import (
 
 var (
 	hostname string
+	wsProxy  string
 )
 
 type networkRoute struct {
@@ -75,7 +76,7 @@ var clientVpnCmd = &cobra.Command{
 			ServerName:   hostname,
 		}
 
-		conn, err := establishConnection(info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled, fmt.Sprintf("%s:%d", hostname, info.Port), &tlsConfig, info.CaCertificate)
+		conn, err := establishConnection(info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled, fmt.Sprintf("%s:%d", hostname, info.Port), &tlsConfig, info.CaCertificate, wsProxy)
 		if err != nil {
 			return fmt.Errorf("failed to connect: %v", err)
 		}
@@ -315,12 +316,8 @@ func cleanUpAfterSessionDown(routesToDelete []networkRoute) {
 	fmt.Println("Done cleaning up routes!")
 }
 
-func establishConnection(connectorAuthenticationEnabled, end2EndEncryptionEnabled bool, addr string, tlsConfig *tls.Config, caCertificate *x509.Certificate) (conn net.Conn, err error) {
-	if connectorAuthenticationEnabled || end2EndEncryptionEnabled {
-		conn, err = client.Connect(addr, tlsConfig, tlsConfig.Certificates[0], caCertificate, connectorAuthenticationEnabled, end2EndEncryptionEnabled)
-	} else {
-		conn, err = tls.Dial("tcp", addr, tlsConfig)
-	}
+func establishConnection(connectorAuthenticationEnabled, end2EndEncryptionEnabled bool, addr string, tlsConfig *tls.Config, caCertificate *x509.Certificate, wsProxy string) (conn net.Conn, err error) {
+	conn, err = client.Connect(addr, true, tlsConfig, tlsConfig.Certificates[0], caCertificate, connectorAuthenticationEnabled, end2EndEncryptionEnabled, wsProxy)
 	return
 }
 
@@ -328,4 +325,5 @@ func AddCommandsTo(client *cobra.Command) {
 	client.AddCommand(clientVpnCmd)
 
 	clientVpnCmd.Flags().StringVarP(&hostname, "service", "", "", "The Border0 service identifier")
+	clientVpnCmd.Flags().StringVarP(&wsProxy, "ws-proxy", "", "", "The WebSocket proxy to use")
 }

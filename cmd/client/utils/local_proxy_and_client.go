@@ -23,12 +23,13 @@ func openRDP(address string) error {
 
 	// Create temporary .rdp file
 	tmpDir := os.TempDir()
-	defer os.RemoveAll(tmpDir)
 
 	rdpFilePath := filepath.Join(tmpDir, "temp.rdp")
 	if err := os.WriteFile(rdpFilePath, rdpFileContents, 0644); err != nil {
 		return fmt.Errorf("failed to create RDP file: %w", err)
 	}
+
+	defer os.Remove(rdpFilePath)
 
 	// On MacOS we open the client twice... because
 	// Microsoft's Remote Desktop client refuses
@@ -50,6 +51,7 @@ func StartLocalProxyAndOpenClient(
 	protocol string,
 	hostname string,
 	localListenerPort int,
+	wsProxy string,
 ) error {
 	info, err := client.GetResourceInfo(logger.Logger, hostname)
 	if err != nil {
@@ -107,21 +109,9 @@ func StartLocalProxyAndOpenClient(
 		}
 
 		go func() {
-			conn, err := tls.Dial("tcp", fmt.Sprintf("%s:%d", hostname, info.Port), &tlsConfig)
+			conn, err := client.Connect(fmt.Sprintf("%s:%d", hostname, info.Port), true, &tlsConfig, certificate, info.CaCertificate, info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled, wsProxy)
 			if err != nil {
-				fmt.Printf("failed to connect to %s:%d: %s\n", hostname, info.Port, err)
-			}
-
-			if info.ConnectorAuthenticationEnabled || info.EndToEndEncryptionEnabled {
-				conn, err = client.ConnectWithConn(conn, certificate, info.CaCertificate, info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled)
-				if err != nil {
-					if errors.Is(err, client.ErrHandshakeFailed) {
-						fmt.Printf("Error: %s. You may not be authorized for this socket. Speak to your Border0 administrator\n", err)
-						return
-					}
-					fmt.Printf("Failed to connect: %s\n", err)
-					return
-				}
+				fmt.Printf("failed to connect: %s\n", err)
 			}
 
 			log.Print("Connection established from ", lcon.RemoteAddr())

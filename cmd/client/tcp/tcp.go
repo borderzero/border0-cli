@@ -19,6 +19,7 @@ import (
 var (
 	hostname string
 	listener int
+	wsProxy  string
 )
 
 func getRunE(socketTypesToList ...string) func(cmd *cobra.Command, args []string) error {
@@ -81,16 +82,9 @@ func getRunE(socketTypesToList ...string) func(cmd *cobra.Command, args []string
 				}
 
 				go func() {
-					conn, err := tls.Dial("tcp", fmt.Sprintf("%s:%d", hostname, info.Port), &tlsConfig)
+					conn, err := client.Connect(fmt.Sprintf("%s:%d", hostname, info.Port), true, &tlsConfig, certificate, info.CaCertificate, info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled, wsProxy)
 					if err != nil {
 						fmt.Printf("failed to connect to %s:%d: %s\n", hostname, info.Port, err)
-					}
-
-					if info.ConnectorAuthenticationEnabled || info.EndToEndEncryptionEnabled {
-						conn, err = client.ConnectWithConn(conn, certificate, info.CaCertificate, info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled)
-						if err != nil {
-							fmt.Printf("failed to connect: %s\n", err)
-						}
 					}
 
 					log.Print("Connection established from ", lcon.RemoteAddr())
@@ -98,16 +92,9 @@ func getRunE(socketTypesToList ...string) func(cmd *cobra.Command, args []string
 				}()
 			}
 		} else {
-			conn, err := tls.Dial("tcp", fmt.Sprintf("%s:%d", hostname, info.Port), &tlsConfig)
+			conn, err := client.Connect(fmt.Sprintf("%s:%d", hostname, info.Port), true, &tlsConfig, certificate, info.CaCertificate, info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled, wsProxy)
 			if err != nil {
-				return fmt.Errorf("failed to connect to %s:%d: %w", hostname, info.Port, err)
-			}
-
-			if info.ConnectorAuthenticationEnabled || info.EndToEndEncryptionEnabled {
-				conn, err = client.ConnectWithConn(conn, certificate, info.CaCertificate, info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled)
-				if err != nil {
-					return fmt.Errorf("failed to connect: %w", err)
-				}
+				return fmt.Errorf("failed to connect: %w", err)
 			}
 
 			utils.Copy(conn, os.Stdin, os.Stdout)
@@ -136,9 +123,11 @@ var clientTlsCmd = &cobra.Command{
 func AddCommandsTo(client *cobra.Command) {
 	clientTcpCmd.Flags().StringVarP(&hostname, "host", "", "", "The border0 target host")
 	clientTcpCmd.Flags().IntVarP(&listener, "listener", "l", 0, "Listener port number")
+	clientTcpCmd.Flags().StringVarP(&wsProxy, "wsproxy", "w", "", "websocket proxy")
 	client.AddCommand(clientTcpCmd)
 
 	clientTlsCmd.Flags().StringVarP(&hostname, "host", "", "", "The border0 target host")
 	clientTlsCmd.Flags().IntVarP(&listener, "listener", "l", 0, "Listener port number")
+	clientTlsCmd.Flags().StringVarP(&wsProxy, "wsproxy", "w", "", "websocket proxy")
 	client.AddCommand(clientTlsCmd)
 }

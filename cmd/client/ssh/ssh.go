@@ -1,16 +1,11 @@
 package ssh
 
 import (
-	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -24,20 +19,12 @@ import (
 	"github.com/moby/term"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh"
-	"nhooyr.io/websocket"
 )
 
 var (
 	hostname     string
 	sshLoginName string
 	wsProxy      string
-)
-
-var (
-	wsProxyToOriginHeader = map[string]string{
-		"wss://ws.border0.com/ws":         "https://client.border0.com",
-		"wss://ws.staging.border0.com/ws": "https://client.staging.border0.com",
-	}
 )
 
 type HostDB struct {
@@ -154,57 +141,9 @@ var sshCmd = &cobra.Command{
 			RootCAs:      systemCertPool,
 		}
 
-		var conn *tls.Conn
-
-		if wsProxy != "" {
-			destination := struct {
-				DNSName string `json:"dnsname"`
-				Port    int    `json:"port"`
-			}{
-				DNSName: hostname,
-				Port:    info.Port,
-			}
-			destinationJson, err := json.Marshal(&destination)
-			if err != nil {
-				return fmt.Errorf("failed to marshal destination: %w", err)
-			}
-
-			parsedURL, err := url.Parse(wsProxy)
-			if err != nil {
-				return fmt.Errorf("failed to parse wsproxy url: %w", err)
-			}
-			parsedURL.RawQuery = url.Values{
-				"dst": []string{base64.StdEncoding.EncodeToString(destinationJson)},
-			}.Encode()
-
-			wsURL := parsedURL.String()
-
-			httpHeader := http.Header{}
-			if originHeader, ok := wsProxyToOriginHeader[wsProxy]; ok {
-				httpHeader.Set("Origin", originHeader)
-			}
-
-			ctx := context.Background()
-			wsConn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{HTTPHeader: httpHeader})
-			if err != nil {
-				return fmt.Errorf("failed to perform WebSocket handshake on %s: %w", wsURL, err)
-			}
-			defer wsConn.Close(websocket.StatusInternalError, "the sky is falling")
-			wsNetConn := websocket.NetConn(ctx, wsConn, websocket.MessageBinary)
-
-			conn = tls.Client(wsNetConn, &tlsConfig)
-		} else {
-			conn, err = tls.Dial("tcp", fmt.Sprintf("%s:%d", hostname, info.Port), &tlsConfig)
-			if err != nil {
-				return fmt.Errorf("failed to connect to %s:%d: %w", hostname, info.Port, err)
-			}
-		}
-
-		if info.ConnectorAuthenticationEnabled || info.EndToEndEncryptionEnabled {
-			conn, err = client.ConnectWithConn(conn, certificate, info.CaCertificate, info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled)
-			if err != nil {
-				return fmt.Errorf("failed to connect: %w", err)
-			}
+		conn, err := client.Connect(fmt.Sprintf("%s:%d", hostname, info.Port), true, &tlsConfig, certificate, info.CaCertificate, info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled, wsProxy)
+		if err != nil {
+			return fmt.Errorf("failed to connect: %w", err)
 		}
 
 		home, err := util.GetUserHomeDir()

@@ -24,7 +24,7 @@ type postgresClientProxy struct {
 	upstreamConfig *pgconn.Config
 }
 
-func newPostgresClientProxy(logger *zap.Logger, port int, resource models.ClientResource) (*postgresClientProxy, error) {
+func newPostgresClientProxy(logger *zap.Logger, port int, resource models.ClientResource, wsProxy string) (*postgresClientProxy, error) {
 	info, err := client.GetResourceInfo(logger, resource.Hostname())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get resource info")
@@ -61,6 +61,7 @@ func newPostgresClientProxy(logger *zap.Logger, port int, resource models.Client
 			info:      info,
 			resource:  resource,
 			tlsConfig: tlsConfig,
+			wsProxy:   wsProxy,
 		},
 		upstreamConfig: upstreamConfig,
 	}, nil
@@ -183,11 +184,7 @@ func (p *postgresClientProxy) handleClientStartup(c *pgproto3.Backend, conn net.
 }
 
 func (p *postgresClientProxy) Dialer(ctx context.Context, network, addr string) (net.Conn, error) {
-	if p.info.ConnectorAuthenticationEnabled || p.info.EndToEndEncryptionEnabled {
-		return client.Connect(addr, p.tlsConfig, p.tlsConfig.Certificates[0], p.info.CaCertificate, p.info.ConnectorAuthenticationEnabled, p.info.EndToEndEncryptionEnabled)
-	} else {
-		return net.DialTimeout("tcp", addr, 5*time.Second)
-	}
+	return client.Connect(addr, false, p.tlsConfig, p.tlsConfig.Certificates[0], p.info.CaCertificate, p.info.ConnectorAuthenticationEnabled, p.info.EndToEndEncryptionEnabled, p.wsProxy)
 }
 
 func (p *postgresClientProxy) handleClientAuthRequest(serverSession *pgproto3.Backend, serverParams map[string]string) error {

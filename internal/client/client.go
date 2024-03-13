@@ -10,6 +10,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"encoding/pem"
@@ -19,11 +20,13 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,6 +38,7 @@ import (
 	"github.com/pavlo-v-chernykh/keystore-go/v4"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
+	"nhooyr.io/websocket"
 )
 
 var (
@@ -44,6 +48,13 @@ var (
 const (
 	successURL = "https://www.border0.com/logged-in"
 	failURL    = "https://www.border0.com/fail-message"
+)
+
+var (
+	wsProxyToOriginHeader = map[string]string{
+		"wss://ws.border0.com/ws":         "https://client.border0.com",
+		"wss://ws.staging.border0.com/ws": "https://client.staging.border0.com",
+	}
 )
 
 func CheckIfTokenIsExpired(rawToken string) bool {
@@ -841,7 +852,7 @@ func OnInterruptDo(action func()) {
 	}()
 }
 
-func StartConnectorAuthListener(hostname string, port int, certificate tls.Certificate, caCertificate *x509.Certificate, localPort int, connectorAuthenticationEnabled bool, endToEndEncryptionEnabled bool) (int, error) {
+func StartConnectorAuthListener(hostname string, port int, certificate tls.Certificate, caCertificate *x509.Certificate, localPort int, connectorAuthenticationEnabled bool, endToEndEncryptionEnabled bool, wsProxy string) (int, error) {
 	systemCertPool, err := x509.SystemCertPool()
 	if err != nil {
 		return 0, fmt.Errorf("failed to load system cert pool: %w", err)
@@ -869,7 +880,7 @@ func StartConnectorAuthListener(hostname string, port int, certificate tls.Certi
 			}
 
 			go func() {
-				conn, err := Connect(addr, tlsConfig, certificate, caCertificate, connectorAuthenticationEnabled, endToEndEncryptionEnabled)
+				conn, err := Connect(addr, false, tlsConfig, certificate, caCertificate, connectorAuthenticationEnabled, endToEndEncryptionEnabled, wsProxy)
 				if err != nil {
 					log.Fatalf("failed to connect: %s\n", err)
 				}
@@ -882,20 +893,36 @@ func StartConnectorAuthListener(hostname string, port int, certificate tls.Certi
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
-func Connect(addr string, tlsConfig *tls.Config, certificate tls.Certificate, caCert *x509.Certificate, connectorAuthenticationEnabled bool, endToEndEncryptionEnabled bool) (*tls.Conn, error) {
-	conn, err := tls.Dial("tcp", addr, tlsConfig)
-	if err != nil {
-		return nil, err
+func Connect(addr string, tlsNeeded bool, tlsConfig *tls.Config, certificate tls.Certificate, caCert *x509.Certificate, connectorAuthenticationEnabled bool, endToEndEncryptionEnabled bool, wsProxy string) (net.Conn, error) {
+	var conn net.Conn
+	if wsProxy != "" {
+		wsConn, err := ConnectWSProxy(wsProxy, addr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to ws proxy: %w", err)
+		}
+
+		conn = wsConn
+	} else {
+		netConn, err := net.DialTimeout("tcp", addr, 5*time.Second)
+		if err != nil {
+			return nil, err
+		}
+		conn = netConn
 	}
 
-	if err := conn.Handshake(); err != nil {
-		return nil, fmt.Errorf("failed to handshake with proxy: %w", err)
+	if tlsNeeded || connectorAuthenticationEnabled || endToEndEncryptionEnabled {
+		tlsConn := tls.Client(conn, tlsConfig)
+		if err := tlsConn.Handshake(); err != nil {
+			return nil, fmt.Errorf("failed to handshake with proxy: %w", err)
+		}
+
+		conn = tlsConn
 	}
 
-	return ConnectWithConn(conn, certificate, caCert, connectorAuthenticationEnabled, endToEndEncryptionEnabled)
+	return connectWithConn(conn, certificate, caCert, connectorAuthenticationEnabled, endToEndEncryptionEnabled)
 }
 
-func ConnectWithConn(conn *tls.Conn, certificate tls.Certificate, caCert *x509.Certificate, connectorAuthenticationEnabled bool, endToEndEncryptionEnabled bool) (*tls.Conn, error) {
+func connectWithConn(conn net.Conn, certificate tls.Certificate, caCert *x509.Certificate, connectorAuthenticationEnabled bool, endToEndEncryptionEnabled bool) (net.Conn, error) {
 	if !connectorAuthenticationEnabled && !endToEndEncryptionEnabled {
 		return conn, nil
 	}
@@ -970,4 +997,55 @@ func handleConnection(src net.Conn, dst net.Conn) {
 	}()
 
 	<-chDone
+}
+
+func ConnectWSProxy(proxyUrl string, addr string) (net.Conn, error) {
+	hostname, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to split host and port: %w", err)
+	}
+
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert port to int: %w", err)
+	}
+
+	destination := struct {
+		DNSName string `json:"dnsname"`
+		Port    int    `json:"port"`
+	}{
+		DNSName: hostname,
+		Port:    port,
+	}
+
+	destinationJson, err := json.Marshal(&destination)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal destination: %w", err)
+	}
+
+	parsedURL, err := url.Parse(proxyUrl)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse wsproxy url: %w", err)
+	}
+
+	parsedURL.RawQuery = url.Values{
+		"dst": []string{base64.StdEncoding.EncodeToString(destinationJson)},
+	}.Encode()
+
+	wsURL := parsedURL.String()
+
+	httpHeader := http.Header{}
+	if originHeader, ok := wsProxyToOriginHeader[proxyUrl]; ok {
+		httpHeader.Set("Origin", originHeader)
+	}
+
+	ctx := context.TODO()
+	wsConn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{HTTPHeader: httpHeader})
+	if err != nil {
+		return nil, fmt.Errorf("failed to perform WebSocket handshake on %s: %w", wsURL, err)
+	}
+
+	wsNetConn := websocket.NetConn(ctx, wsConn, websocket.MessageBinary)
+
+	return wsNetConn, nil
 }

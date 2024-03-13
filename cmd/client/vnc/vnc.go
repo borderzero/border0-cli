@@ -12,6 +12,7 @@ import (
 var (
 	hostname          string
 	localListenerPort int
+	wsProxy           string
 )
 
 // clientVncCmd represents the client vnc command
@@ -33,7 +34,7 @@ var clientVncCmd = &cobra.Command{
 			hostname = pickedHost.Hostname()
 		}
 
-		return utils.StartLocalProxyAndOpenClient(cmd, args, "vnc", hostname, localListenerPort)
+		return utils.StartLocalProxyAndOpenClient(cmd, args, "vnc", hostname, localListenerPort, wsProxy)
 	},
 }
 
@@ -42,4 +43,5 @@ func AddCommandsTo(client *cobra.Command) {
 
 	clientVncCmd.Flags().StringVarP(&hostname, "service", "", "", "The Border0 service identifier")
 	clientVncCmd.Flags().IntVarP(&localListenerPort, "local-listener-port", "l", 0, "Local listener port number")
+	clientVncCmd.Flags().StringVarP(&wsProxy, "wsproxy", "w", "", "websocket proxy")
 }

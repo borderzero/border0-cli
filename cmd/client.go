@@ -141,7 +141,6 @@ func init() {
 	clientCmd.AddCommand(clientLoginCmd)
 	clientLoginCmd.Flags().StringVarP(&orgID, "org", "", "", "The border0 organization domain name (without .border0.io)")
 	clientLoginCmd.Flags().IntVarP(&port, "port", "p", 0, "Port number")
-
 	clientLoginCmd.AddCommand(clientLoginStatusCmd)
 
 	db.AddCommandsTo(clientCmd)

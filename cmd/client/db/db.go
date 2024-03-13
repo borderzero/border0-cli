@@ -17,6 +17,14 @@ var (
 	hostname string
 	local    bool
 	port     int
+	wsProxy  string
+)
+
+var (
+	wsProxyToOriginHeader = map[string]string{
+		"wss://ws.border0.com/ws":         "https://client.border0.com",
+		"wss://ws.staging.border0.com/ws": "https://client.staging.border0.com",
+	}
 )
 
 func AddCommandsTo(client *cobra.Command) {
@@ -37,6 +45,7 @@ func AddCommandsTo(client *cobra.Command) {
 
 func addOneCommandTo(cmdToAdd, cmdAddedTo *cobra.Command) {
 	cmdToAdd.Flags().StringVarP(&hostname, "host", "", "", "Socket target host")
+	cmdToAdd.Flags().StringVarP(&wsProxy, "wsproxy", "w", "", "websocket proxy")
 	cmdAddedTo.AddCommand(cmdToAdd)
 }
 
@@ -59,7 +68,7 @@ var dbCmd = &cobra.Command{
 		hostname = pickedHost.Hostname()
 
 		if local {
-			proxy, err := sqlclientproxy.NewSqlClientProxy(logger.Logger, port, pickedHost)
+			proxy, err := sqlclientproxy.NewSqlClientProxy(logger.Logger, port, pickedHost, wsProxy)
 			if err != nil {
 				return fmt.Errorf("failed to start local listener: %w", err)
 			}
@@ -123,7 +132,7 @@ var dbCmd = &cobra.Command{
 		}
 
 		if dbClient == "local listener" {
-			proxy, err := sqlclientproxy.NewSqlClientProxy(logger.Logger, port, pickedHost)
+			proxy, err := sqlclientproxy.NewSqlClientProxy(logger.Logger, port, pickedHost, wsProxy)
 			if err != nil {
 				return fmt.Errorf("failed to start local listener: %w", err)
 			}

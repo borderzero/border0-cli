@@ -64,8 +64,8 @@ var sqlcmdCmd = &cobra.Command{
 		defer persistPreference()
 		client.OnInterruptDo(persistPreference)
 
-		if info.ConnectorAuthenticationEnabled || info.EndToEndEncryptionEnabled {
-			info.Port, err = client.StartConnectorAuthListener(hostname, info.Port, info.SetupTLSCertificate(), info.CaCertificate, 0, info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled)
+		if info.ConnectorAuthenticationEnabled || info.EndToEndEncryptionEnabled || wsProxy != "" {
+			info.Port, err = client.StartConnectorAuthListener(hostname, info.Port, info.SetupTLSCertificate(), info.CaCertificate, 0, info.ConnectorAuthenticationEnabled, info.EndToEndEncryptionEnabled, wsProxy)
 			if err != nil {
 				return fmt.Errorf("could not start listener: %w", err)
 			}

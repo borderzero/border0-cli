@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/borderzero/border0-cli/internal/api/models"
 	"github.com/borderzero/border0-cli/internal/border0"
@@ -22,7 +21,7 @@ type tcpClientProxy struct {
 	sqlClientProxy
 }
 
-func newTcpProxy(logger *zap.Logger, port int, resource models.ClientResource) (*tcpClientProxy, error) {
+func newTcpProxy(logger *zap.Logger, port int, resource models.ClientResource, wsProxy string) (*tcpClientProxy, error) {
 	info, err := client.GetResourceInfo(logger, resource.Hostname())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get resource info")
@@ -45,6 +44,7 @@ func newTcpProxy(logger *zap.Logger, port int, resource models.ClientResource) (
 			info:      info,
 			resource:  resource,
 			tlsConfig: tlsConfig,
+			wsProxy:   wsProxy,
 		},
 	}, nil
 }
@@ -137,9 +137,5 @@ func (p *tcpClientProxy) handleConnection(ctx context.Context, clientConn net.Co
 }
 
 func (p *tcpClientProxy) Dialer(ctx context.Context, network, addr string) (net.Conn, error) {
-	if p.info.ConnectorAuthenticationEnabled || p.info.EndToEndEncryptionEnabled {
-		return client.Connect(addr, p.tlsConfig, p.tlsConfig.Certificates[0], p.info.CaCertificate, p.info.ConnectorAuthenticationEnabled, p.info.EndToEndEncryptionEnabled)
-	} else {
-		return net.DialTimeout("tcp", addr, 5*time.Second)
-	}
+	return client.Connect(addr, false, p.tlsConfig, p.tlsConfig.Certificates[0], p.info.CaCertificate, p.info.ConnectorAuthenticationEnabled, p.info.EndToEndEncryptionEnabled, p.wsProxy)
 }
