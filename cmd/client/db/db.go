@@ -20,13 +20,6 @@ var (
 	wsProxy  string
 )
 
-var (
-	wsProxyToOriginHeader = map[string]string{
-		"wss://ws.border0.com/ws":         "https://client.border0.com",
-		"wss://ws.staging.border0.com/ws": "https://client.staging.border0.com",
-	}
-)
-
 func AddCommandsTo(client *cobra.Command) {
 	addOneCommandTo(dbCmd, client)
 	addOneCommandTo(mysqlCmd, client)

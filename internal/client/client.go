@@ -46,15 +46,9 @@ var (
 )
 
 const (
-	successURL = "https://www.border0.com/logged-in"
-	failURL    = "https://www.border0.com/fail-message"
-)
-
-var (
-	wsProxyToOriginHeader = map[string]string{
-		"wss://ws.border0.com/ws":         "https://client.border0.com",
-		"wss://ws.staging.border0.com/ws": "https://client.staging.border0.com",
-	}
+	successURL            = "https://www.border0.com/logged-in"
+	failURL               = "https://www.border0.com/fail-message"
+	wsProxyToOriginHeader = "https://client.border0.com"
 )
 
 func CheckIfTokenIsExpired(rawToken string) bool {
@@ -1035,9 +1029,7 @@ func ConnectWSProxy(proxyUrl string, addr string) (net.Conn, error) {
 	wsURL := parsedURL.String()
 
 	httpHeader := http.Header{}
-	if originHeader, ok := wsProxyToOriginHeader[proxyUrl]; ok {
-		httpHeader.Set("Origin", originHeader)
-	}
+	httpHeader.Set("Origin", wsProxyToOriginHeader)
 
 	ctx := context.TODO()
 	wsConn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{HTTPHeader: httpHeader})
