@@ -3,7 +3,6 @@ package utils
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"log"
 	"net"
