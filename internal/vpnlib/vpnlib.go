@@ -535,7 +535,7 @@ func TunToConnMapCopy(ctx context.Context, source io.Reader, dstMap *ConnectionM
 	}
 }
 
-func ConnToTunCopy(ctx context.Context, conn net.Conn, tun io.Writer) error {
+func ConnToTunCopy(ctx context.Context, conn net.Conn, tun io.Writer, middlewares ...PacketMiddleware) error {
 	b0HeaderBuffer := make([]byte, border0HeaderByteSize)
 
 	for {
@@ -580,11 +580,18 @@ func ConnToTunCopy(ctx context.Context, conn net.Conn, tun io.Writer) error {
 				fmt.Printf("Failed to read packet from net conn: %v\n", err)
 				continue
 			}
-
 			if packetN < int(inboundPacketSize) {
 				fmt.Printf("Read less than the advertised packet size (expected %d, got %d)\n", inboundPacketSize, packetN)
 				continue
 			}
+
+			// run middlewares
+			for _, mw := range middlewares {
+				copiedPck := make([]byte, packetN)
+				copy(copiedPck, packetBuffer)
+				go mw(copiedPck)
+			}
+
 			// write the packet to the TUN iface
 			if _, err = tun.Write(packetBuffer); err != nil {
 				fmt.Printf("Failed to write packet to the TUN iface: %v\n", err)

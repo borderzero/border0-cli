@@ -19,6 +19,7 @@ func RunServer(
 	vpnClientListener net.Listener,
 	dhcpPoolSubnet string,
 	advertisedRoutes []string,
+	middlewares ...PacketMiddleware,
 ) error {
 	// Create an IP pool that will be used to assign IPs to clients
 	dhcpPool, err := NewIPPool(dhcpPoolSubnet)
@@ -89,6 +90,7 @@ func RunServer(
 				dhcpPool,
 				connMap,
 				advertisedRoutes,
+				middlewares...,
 			)
 		}
 	}
@@ -101,6 +103,7 @@ func handleIPPacketConn(
 	dhcpPool *IPPool,
 	connMap *ConnectionMap,
 	advertisedRoutes []string,
+	middlewares ...PacketMiddleware,
 ) {
 	defer client.Close()
 
@@ -143,7 +146,7 @@ func handleIPPacketConn(
 	}
 
 	// kick off routine to read packets from clients and forward them to the interface
-	if err = ConnToTunCopy(ctx, client, tun); err != nil {
+	if err = ConnToTunCopy(ctx, client, tun, middlewares...); err != nil {
 		if !errors.Is(err, io.EOF) {
 			fmt.Printf("failed to forward packets between client conn and interface: %v\n", err)
 		}

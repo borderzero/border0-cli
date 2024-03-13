@@ -38,6 +38,7 @@ require (
 	github.com/gliderlabs/ssh v0.3.6
 	github.com/go-mysql-org/go-mysql v1.7.0
 	github.com/golang-jwt/jwt v3.2.2+incompatible
+	github.com/google/gopacket v1.1.19
 	github.com/google/uuid v1.4.0
 	github.com/hashicorp/yamux v0.1.1
 	github.com/ivanpirog/coloredcobra v1.0.1

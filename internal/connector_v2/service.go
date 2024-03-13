@@ -13,9 +13,14 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
+	"github.com/google/gopacket/pcapgo"
 
 	"github.com/borderzero/border0-cli/internal/api/models"
 	"github.com/borderzero/border0-cli/internal/border0"
@@ -837,11 +842,21 @@ func (c *ConnectorService) Listen(socket *border0.Socket) {
 			logger.Error("sql proxy failed", zap.String("socket", socket.SocketID), zap.Error(err))
 		}
 	case socket.SocketType == service.ServiceTypeVpn:
+		middlewares := []vpnlib.PacketMiddleware{}
+
+		if os.Getenv("VPN_PCAP_WRITING_ENABLED") == "true" {
+			if mw, cleanup := getPcapWritingVpnMiddleware(); mw != nil {
+				defer cleanup()
+				middlewares = append(middlewares, mw)
+			}
+		}
+
 		if err := vpnlib.RunServer(
 			socket.GetContext(),
 			l,
 			socket.Socket.ConnectorLocalData.DHCPPoolSubnet,
 			socket.Socket.ConnectorLocalData.AdvertisedRoutes,
+			middlewares...,
 		); err != nil {
 			logger.Error("vpn service failed", zap.String("socket", socket.SocketID), zap.Error(err))
 		}
@@ -850,6 +865,48 @@ func (c *ConnectorService) Listen(socket *border0.Socket) {
 			logger.Error("proxy failed", zap.String("socket", socket.SocketID), zap.Error(err))
 		}
 	}
+}
+
+func getPcapWritingVpnMiddleware() (vpnlib.PacketMiddleware, func()) {
+	hd, err := b0Util.GetUserHomeDir()
+	if err != nil {
+		fmt.Printf("failed to get user home dir for pcap writing, will use root (/): %v\n", err)
+		hd = "/"
+	}
+	if err := os.MkdirAll(fmt.Sprintf("%s/.border0/vpn_pcaps", hd), 0666); err != nil {
+		fmt.Printf("failed to mkdir all the vpn_pcaps directory, won't write pcaps. err: %v\n", err)
+		return nil, nil
+	}
+	f, err := os.Create(fmt.Sprintf("%s/.border0/vpn_pcaps/vpn-server-%d.pcap", hd, time.Now().Unix()))
+	if err != nil {
+		fmt.Printf("failed to open new pcap file for writing, won't write pcaps. err: %v\n", err)
+		return nil, nil
+	}
+
+	writer, err := pcapgo.NewNgWriter(f, layers.LinkTypeEthernet)
+	if err != nil {
+		fmt.Printf("failed to open new pcap writer, won't write pcaps. err: %v\n", err)
+		return nil, nil
+	}
+
+	mwf := func(pk []byte) {
+		ci := gopacket.CaptureInfo{
+			Timestamp:      time.Now(),
+			CaptureLength:  len(pk),
+			Length:         len(pk),
+			InterfaceIndex: 0,
+		}
+		if err = writer.WritePacket(ci, pk); err != nil {
+			fmt.Printf("failed write packet to pcap: %v\n", err)
+		}
+		writer.Flush()
+	}
+	cleanup := func() {
+		writer.Flush()
+		f.Close()
+	}
+
+	return mwf, cleanup
 }
 
 func (c *ConnectorService) handleDiscoveryResult(ctx context.Context) {
