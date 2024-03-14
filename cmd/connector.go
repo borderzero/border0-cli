@@ -18,6 +18,7 @@ import (
 	"github.com/borderzero/border0-cli/internal/connector/config"
 	"github.com/borderzero/border0-cli/internal/connector_v2/daemon"
 	"github.com/borderzero/border0-cli/internal/connector_v2/install"
+	"github.com/borderzero/border0-cli/internal/connector_v2/invite"
 	"github.com/borderzero/border0-cli/internal/util"
 	"github.com/kardianos/service"
 
@@ -47,9 +48,12 @@ var (
 )
 
 // hidden variables used for connector v2 only
-var token string
-var daemonOnly bool
-var connectorId string
+var (
+	token       string
+	daemonOnly  bool
+	connectorId string
+	inviteCode  string
+)
 
 type Socket struct {
 	Type      string `yaml:"type"`
@@ -232,6 +236,16 @@ var connectorStartCmd = &cobra.Command{
 		if v2 {
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
+
+			// when --invite is provided, exchange the invite code for a connector token,
+			// and then set the token in the environment variable
+			if inviteCode != "" {
+				connectorToken, err := invite.ExchangeForConnectorToken(ctx, inviteCode)
+				if err != nil {
+					log.Fatal("failed to exchange invite code for connector token", zap.Error(err))
+				}
+				_ = connectorv2config.SetBorder0Token(connectorToken)
+			}
 
 			config, err := connectorv2config.GetConfiguration(ctx, connectorConfig)
 			if err != nil {
@@ -428,6 +442,7 @@ func init() {
 	connectorStartCmd.Flags().StringVarP(&serviceFlag, "service", "s", "", "used to provide service actions e.g. start | stop | install | uninstall...")
 	connectorStartCmd.Flags().StringVarP(&connectorConfig, "config", "f", "", "yaml configuration file for connector service, see https://docs.border0.com for more info")
 	connectorStartCmd.Flags().StringVarP(&connectorId, "connector-id", "", "", "connector id to use with connector control stream")
+	connectorStartCmd.Flags().StringVarP(&inviteCode, "invite", "i", "", "invite code for installing the connector")
 
 	// The start command needs to be able to handle OS control
 	// messages through a 'service' flag, really only in Windows.

@@ -200,3 +200,8 @@ func unmarshalConfiguration(path string, config *Configuration) error {
 	// success!
 	return nil
 }
+
+// SetBorder0Token sets the connector token in the environment variable BORDER0_TOKEN
+func SetBorder0Token(token string) error {
+	return os.Setenv(envNameToken, token)
+}

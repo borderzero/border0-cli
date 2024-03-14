@@ -391,6 +391,30 @@ func (a *Border0API) CreateConnector(
 	return &connector, nil
 }
 
+// CreateConnectorWithInstallToken is a connector v2 method, it creates a new border0 connector
+// and connector token from an install token (invite code)
+func (a *Border0API) CreateConnectorWithInstallToken(
+	ctx context.Context,
+	name string,
+	installToken string,
+) (*models.ConnectorWithInstallTokenResponse, error) {
+	payload := &models.ConnectorWithInstallTokenRequest{
+		Connector: models.Connector{
+			Name:                     name,
+			BuiltInSshServiceEnabled: true,
+		},
+		InstallToken: installToken,
+	}
+
+	var reply models.ConnectorWithInstallTokenResponse
+	err := a.Request(http.MethodPost, "connector/create_with_token", &reply, payload, true)
+	if err != nil {
+		return nil, err
+	}
+
+	return &reply, nil
+}
+
 // ListConnectors lists an organization's connectors (v2)
 func (a *Border0API) ListConnectors(ctx context.Context) ([]models.Connector, error) {
 	var connectorList models.ConnectorList

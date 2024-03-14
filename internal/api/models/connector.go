@@ -26,6 +26,20 @@ type Connector struct {
 	LastSeenAt                     *time.Time                              `json:"last_seen_at"`
 }
 
+// ConnectorWithInstallTokenRequest represents a request to create a Border0 connector and
+// connector token with an install token.
+type ConnectorWithInstallTokenRequest struct {
+	Connector
+	InstallToken string `json:"install_token"`
+}
+
+// ConnectorWithInstallTokenResponse represents a response from the request that created
+// a Border0 connector and connector token with an install token.
+type ConnectorWithInstallTokenResponse struct {
+	Connector      Connector      `json:"connector"`
+	ConnectorToken ConnectorToken `json:"connector_token"`
+}
+
 // ConnectorTokenRequest represents a request to create a token for a Border0 Connector.
 type ConnectorTokenRequest struct {
 	ConnectorId string `json:"connector_id,omitempty"`
