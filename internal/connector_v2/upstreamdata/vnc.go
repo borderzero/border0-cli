@@ -18,5 +18,9 @@ func (u *UpstreamDataBuilder) buildUpstreamDataForVncService(s *models.Socket, c
 	s.TargetHostname = hostname
 	s.TargetPort = port
 
+	if config.Password != "" {
+		s.ConnectorLocalData.UpstreamPassword = u.fetchVariableFromSource(config.Password)
+	}
+
 	return nil
 }

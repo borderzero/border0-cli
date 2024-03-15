@@ -37,6 +37,7 @@ import (
 	"github.com/borderzero/border0-go/types/connector"
 	"github.com/borderzero/border0-go/types/service"
 	pb "github.com/borderzero/border0-proto/connector"
+	"github.com/borderzero/vncproxy/proxy"
 	backoff "github.com/cenkalti/backoff/v4"
 	"github.com/golang-jwt/jwt"
 	"github.com/google/uuid"
@@ -837,11 +838,25 @@ func (c *ConnectorService) Listen(socket *border0.Socket) {
 		if err := sqlauthproxy.Serve(l, *handlerConfig); err != nil {
 			logger.Error("sql proxy failed", zap.String("socket", socket.SocketID), zap.Error(err))
 		}
+	case os.Getenv("B0_VNC_PROXY_ENABLED") == "true" && socket.SocketType == service.ServiceTypeVnc:
+		pvp := proxy.VncProxy{
+			Listener: l,
+			Target: &proxy.Target{
+				Hostname: socket.Socket.TargetHostname,
+				Port:     uint16(socket.Socket.TargetPort),
+				Password: socket.Socket.ConnectorLocalData.UpstreamPassword,
+			},
+			RecordSession: os.Getenv("B0_VNC_RECORDING_ENABLED") == "true", // TODO: use socket.RecordingEnabled
+			RecordingDir:  os.Getenv("B0_VNC_RECORDING_DIR"),
+		}
+		if err := pvp.Serve(socket.GetContext(), logger); err != nil {
+			logger.Error("vnc service failed", zap.String("socket", socket.SocketID), zap.Error(err))
+		}
 	case socket.SocketType == service.ServiceTypeVpn:
 		// options defined locally (not in socket config).
 		// these may move to socket config gradually.
 		localServerOpts := []vpnlib.ServerOption{
-			vpnlib.WithServerVerboseLogs(os.Getenv("VPN_VERBOSE_LOGS") == "true"),
+			vpnlib.WithServerVerboseLogs(os.Getenv("B0_VPN_VERBOSE_LOGS") == "true"),
 		}
 
 		if err := vpnlib.RunServer(
