@@ -1,8 +1,6 @@
 module github.com/borderzero/border0-cli
 
-go 1.22
-
-toolchain go1.22.0
+go 1.22.0
 
 require (
 	cloud.google.com/go/cloudsqlconn v1.2.4
@@ -25,9 +23,10 @@ require (
 	github.com/aws/session-manager-plugin v0.0.0-20230808183647-dbfa0bfdb04b
 	github.com/aws/smithy-go v1.19.0
 	github.com/bluele/factory-go v0.0.1
-	github.com/borderzero/border0-go v1.4.24
+	github.com/borderzero/border0-go v1.4.25
 	github.com/borderzero/border0-proto v1.0.19
 	github.com/borderzero/discovery v0.1.31
+	github.com/borderzero/vncproxy v0.0.5
 	github.com/borderzero/water v0.0.1
 	github.com/borderzero/wintundll-downloader-go v0.0.4
 	github.com/brianvoe/gofakeit v3.18.0+incompatible
@@ -60,9 +59,9 @@ require (
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/viper v1.15.0
 	github.com/stretchr/testify v1.8.4
-	go.uber.org/zap v1.24.0
+	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.21.0
-	golang.org/x/net v0.21.0
+	golang.org/x/net v0.22.0
 	golang.org/x/sync v0.5.0
 	golang.org/x/sys v0.18.0
 	golang.org/x/term v0.18.0

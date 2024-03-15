@@ -311,7 +311,7 @@ github.com/beorn7/perks/quantile
 # github.com/bluele/factory-go v0.0.1
 ## explicit; go 1.15
 github.com/bluele/factory-go/factory
-# github.com/borderzero/border0-go v1.4.24
+# github.com/borderzero/border0-go v1.4.25
 ## explicit; go 1.22
 github.com/borderzero/border0-go/lib/types/maps
 github.com/borderzero/border0-go/lib/types/netaddr
@@ -332,6 +332,14 @@ github.com/borderzero/discovery
 github.com/borderzero/discovery/discoverers
 github.com/borderzero/discovery/engines
 github.com/borderzero/discovery/utils
+# github.com/borderzero/vncproxy v0.0.5
+## explicit; go 1.22.0
+github.com/borderzero/vncproxy/client
+github.com/borderzero/vncproxy/common
+github.com/borderzero/vncproxy/encodings
+github.com/borderzero/vncproxy/proxy
+github.com/borderzero/vncproxy/recorder
+github.com/borderzero/vncproxy/server
 # github.com/borderzero/water v0.0.1
 ## explicit; go 1.21.6
 github.com/borderzero/water
@@ -919,7 +927,7 @@ go.uber.org/atomic
 # go.uber.org/multierr v1.11.0
 ## explicit; go 1.19
 go.uber.org/multierr
-# go.uber.org/zap v1.24.0
+# go.uber.org/zap v1.27.0
 ## explicit; go 1.19
 go.uber.org/zap
 go.uber.org/zap/buffer
@@ -927,6 +935,8 @@ go.uber.org/zap/internal
 go.uber.org/zap/internal/bufferpool
 go.uber.org/zap/internal/color
 go.uber.org/zap/internal/exit
+go.uber.org/zap/internal/pool
+go.uber.org/zap/internal/stacktrace
 go.uber.org/zap/zapcore
 # golang.org/x/crypto v0.21.0
 ## explicit; go 1.18
@@ -952,7 +962,7 @@ golang.org/x/exp/constraints
 # golang.org/x/mod v0.14.0
 ## explicit; go 1.18
 golang.org/x/mod/semver
-# golang.org/x/net v0.21.0
+# golang.org/x/net v0.22.0
 ## explicit; go 1.18
 golang.org/x/net/bpf
 golang.org/x/net/html
