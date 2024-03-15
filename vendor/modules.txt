@@ -94,6 +94,16 @@ github.com/Microsoft/go-winio/pkg/guid
 # github.com/TylerBrock/colorjson v0.0.0-20200706003622-8a50f05110d2
 ## explicit
 github.com/TylerBrock/colorjson
+# github.com/adrianosela/vncproxy v0.0.2
+## explicit; go 1.22.0
+github.com/adrianosela/vncproxy/client
+github.com/adrianosela/vncproxy/common
+github.com/adrianosela/vncproxy/encodings
+github.com/adrianosela/vncproxy/logger
+github.com/adrianosela/vncproxy/player
+github.com/adrianosela/vncproxy/proxy
+github.com/adrianosela/vncproxy/recorder
+github.com/adrianosela/vncproxy/server
 # github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be
 ## explicit; go 1.13
 github.com/anmitsu/go-shlex
@@ -970,6 +980,7 @@ golang.org/x/net/ipv4
 golang.org/x/net/ipv6
 golang.org/x/net/proxy
 golang.org/x/net/trace
+golang.org/x/net/websocket
 # golang.org/x/oauth2 v0.15.0
 ## explicit; go 1.18
 golang.org/x/oauth2

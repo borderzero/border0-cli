@@ -1,8 +1,6 @@
 module github.com/borderzero/border0-cli
 
-go 1.22
-
-toolchain go1.22.0
+go 1.22.0
 
 require (
 	cloud.google.com/go/cloudsqlconn v1.2.4
@@ -10,6 +8,7 @@ require (
 	github.com/AlecAivazis/survey/v2 v2.3.6
 	github.com/Code-Hex/go-generics-cache v1.3.1
 	github.com/TylerBrock/colorjson v0.0.0-20200706003622-8a50f05110d2
+	github.com/adrianosela/vncproxy v0.0.2
 	github.com/aws/aws-sdk-go v1.44.332
 	github.com/aws/aws-sdk-go-v2 v1.24.0
 	github.com/aws/aws-sdk-go-v2/config v1.25.2
