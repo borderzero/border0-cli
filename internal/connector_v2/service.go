@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/adrianosela/vncproxy/proxy"
 	"github.com/borderzero/border0-cli/internal/api/models"
 	"github.com/borderzero/border0-cli/internal/border0"
 	"github.com/borderzero/border0-cli/internal/connector_v2/cmds"
@@ -837,6 +838,28 @@ func (c *ConnectorService) Listen(socket *border0.Socket) {
 		if err := sqlauthproxy.Serve(l, *handlerConfig); err != nil {
 			logger.Error("sql proxy failed", zap.String("socket", socket.SocketID), zap.Error(err))
 		}
+	case socket.SocketType == service.ServiceTypeVnc:
+		vncp := &proxy.VncProxy{
+			NetListener:      l,
+			ProxyVncPassword: "", // no password - that's what we have an identity aware proxy for :D
+			SingleSession: &proxy.VncSession{
+				TargetHostname: socket.Socket.TargetHostname,
+				TargetPort:     fmt.Sprintf("%d", socket.Socket.TargetPort),
+				TargetPassword: socket.Socket.ConnectorLocalData.UpstreamPassword,
+				ID:             fmt.Sprintf("%s-%d", socket.SocketID, time.Now().Unix()),
+				Status:         proxy.SessionStatusInit,
+				Type:           proxy.SessionTypeProxyPass,
+			},
+			UsingSessions: false,
+		}
+
+		if vncRecordingPath := os.Getenv("VNC_RECORDING_PATH"); vncRecordingPath != "" {
+			vncp.RecordingDir = vncRecordingPath
+			vncp.SingleSession.Type = proxy.SessionTypeRecordingProxy
+		}
+
+		vncp.StartListening()
+		return
 	case socket.SocketType == service.ServiceTypeVpn:
 		// options defined locally (not in socket config).
 		// these may move to socket config gradually.
